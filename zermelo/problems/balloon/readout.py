@@ -1,0 +1,94 @@
+"""What a balloon sees: where it is, what it has left, the wind it measures, and the forecast it was given
+
+s = (lat, lon, p, b, W)     where it is, which pressure level, what ballast is left, the true wind
+W(lat, lon, p) = (u, v)     metres per second, u eastward and v northward
+F                           the forecast, known everywhere from the start
+"""
+
+import dataclasses
+from abc import abstractmethod
+from dataclasses import dataclass
+from typing import Any
+
+import jax.numpy as jnp
+from jaxtyping import Array, Float, Int, PRNGKeyArray
+
+from zermelo.interface import BoxDomain, Domain, ProductDomain, Readout
+from zermelo.problems.balloon.grid import SphereGrid
+
+
+@dataclass(frozen=True)
+class BalloonReadout(Readout):
+    """Where the balloon is and what it measures of W, with F carried alongside"""
+
+    grid: SphereGrid
+    n_alt: int
+    forecast: Float[Array, "alt pos uv"]
+    """F at every level and cell, handed over whole at every step"""
+
+    @property
+    @abstractmethod
+    def wind_shape(self) -> tuple[int, ...]:
+        """The shape of one measurement of W"""
+
+    @abstractmethod
+    def measure(self, state: dict[str, Any]) -> Float[Array, "*wind"]:
+        """What W reads where the balloon is"""
+
+    @property
+    def readings(self) -> Domain:
+        """Position, level, ballast, one measurement of W, and F"""
+        return ProductDomain(
+            {
+                "position": self.grid,
+                "altitude": BoxDomain(()),
+                "ballast": BoxDomain(()),
+                "wind": BoxDomain(self.wind_shape),
+                "forecast": BoxDomain(self.forecast.shape),
+            }
+        )
+
+    def see(self, state: dict[str, Any]) -> dict[str, Any]:
+        """One reading of `state`"""
+        return {
+            "position": state["position"],
+            "altitude": state["altitude"].astype(jnp.float32),
+            "ballast": state["ballast"].astype(jnp.float32),
+            "wind": self.measure(state),
+            "forecast": self.forecast,
+        }
+
+    def reset(self, key: PRNGKeyArray, state: dict[str, Any]) -> dict[str, Any]:
+        """The reading before acting"""
+        return self.see(state)
+
+    def step(self, key: PRNGKeyArray, state: dict[str, Any], action: Any, next_state: dict[str, Any]) -> dict[str, Any]:
+        """The reading after acting"""
+        return self.see(next_state)
+
+
+@dataclass(frozen=True)
+class PointWind(BalloonReadout):
+    """W at the state itself: what a balloon carrying one anemometer reads"""
+
+    @property
+    def wind_shape(self) -> tuple[int, ...]:
+        return (2,)
+
+    def measure(self, state: dict[str, Any]) -> Float[Array, " uv"]:
+        """W(lat, lon, p)"""
+        return state["field"](state)
+
+
+@dataclass(frozen=True)
+class ColumnWind(BalloonReadout):
+    """W at every level above and below the balloon: what a sounding of the whole column reads"""
+
+    @property
+    def wind_shape(self) -> tuple[int, ...]:
+        return (self.n_alt, 2)
+
+    def measure(self, state: dict[str, Any]) -> Float[Array, "alt uv"]:
+        """W(lat, lon, p') at every p'"""
+        column = {**state, "altitude": jnp.arange(self.n_alt), "position": jnp.broadcast_to(state["position"], (self.n_alt, 2))}
+        return state["field"](column)
