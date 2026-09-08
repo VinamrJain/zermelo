@@ -4,6 +4,13 @@ s = (lat, lon, p, b, W)     where it is, which pressure level, what ballast is l
 a in {0, 1, 2}              down a level, hold, up a level
 W(lat, lon, p) = (u, v)     the wind there, metres per second, u eastward and v northward
 h                           hours in one step
+(i, j)                      the grid cell of (lat, lon): i the row, j the column
+
+The three parts of s' are written by three factors:
+
+    (i, j)' = round((i, j) + d),  d = the wind's displacement in cells      Advection
+    p'      = p + a - 1           where b > 0 and 0 <= p' < n_levels        Ascent
+    b'      = b - |p' - p|                                                  Expenditure
 """
 
 import dataclasses
@@ -28,30 +35,29 @@ HOLD = 1
 
 
 class Factor[Action](ABC):
-    """One part of s' given the whole of s, as a sampler and as a law over that part's values"""
+    """One part of s' sampled from the whole of s"""
 
     @property
     @abstractmethod
     def part(self) -> str:
         """Which part of s this writes"""
 
-    @property
-    @abstractmethod
-    def values(self) -> int:
-        """How many values that part takes"""
-
     @abstractmethod
     def sample(self, key: PRNGKeyArray, state: dict[str, Any], action: Action) -> Any:
         """One draw of part'"""
 
-    @abstractmethod
-    def law(self, states: dict[str, Any], action: Action) -> Float[Array, "states values"]:
-        """P(part' | s, a) at every s in `states`, whose field is whatever those states carry"""
-
 
 @dataclass(frozen=True)
 class Advection(Factor[Act]):
-    """(lat, lon)' = round((lat, lon) + W(s) * h), landing split between the cells it falls between"""
+    """The wind carries the balloon, each axis rounding down or up on its own.
+
+        exact = (i, j) + d,   d the wind's step in cells
+        f = floor(exact),     u = exact - f in [0, 1)
+
+        P(i' = clip(f_lat + m), j' = clip(f_lon + n)) = (m ? u_lat : 1 - u_lat) * (n ? u_lon : 1 - u_lon)
+
+    for m, n in {0, 1}, clipping onto [0, n_lat - 1] and [0, n_lon - 1]. Zero at every other cell.
+    """
 
     grid: SphereGrid
     step_hours: float
@@ -60,10 +66,6 @@ class Advection(Factor[Act]):
     def part(self) -> str:
         return "position"
 
-    @property
-    def values(self) -> int:
-        return self.grid.size()
-
     def offset(self, state: dict[str, Any]) -> Float[Array, "*batch 2"]:  # states batch along a leading axis
         """The step in cells: (v, u) * h * 3.6 km / km_per_degree(lat) / degrees_per_cell"""
         wind = state["field"](state)  # (..., 2) as (u, v)
@@ -71,28 +73,21 @@ class Advection(Factor[Act]):
         return km / self.grid.km_per_degree(state["position"][..., 0]) / self.grid.steps
 
     def sample(self, key: PRNGKeyArray, state: dict[str, Any], action: Act) -> Float[Array, "*batch 2"]:
-        """Each axis lands on floor(c + d) + 1 with probability frac(d), else floor(c + d)"""
+        """One draw of (i, j)': each axis takes f + 1 with probability u and f otherwise, then clips onto the grid"""
         exact = self.grid.cell_of(state["position"]) + self.offset(state)
         rounded = jnp.floor(exact) + (jax.random.uniform(key, exact.shape) < exact - jnp.floor(exact))
         return self.grid.coords_of(jnp.clip(rounded, 0, self.grid.shape - 1).astype(jnp.int32))
 
-    def law(self, states: dict[str, Any], action: Act) -> Float[Array, "states pos"]:
-        """Mass on the four cells the landing point falls between, one factor per axis"""
-        exact = self.grid.cell_of(states["position"]) + self.offset(states)  # (states, 2)
-        low = jnp.clip(jnp.floor(exact), 0, self.grid.shape - 1).astype(jnp.int32)
-        high = jnp.clip(low + 1, 0, self.grid.shape - 1)
-        up = jnp.clip(exact - jnp.floor(exact), 0.0, 1.0)  # (states, 2): the mass going to `high`
-        rows = jnp.arange(exact.shape[0])
-        out = jnp.zeros((exact.shape[0], self.grid.size()))
-        for lat_at, lat_mass in ((low[:, 0], 1.0 - up[:, 0]), (high[:, 0], up[:, 0])):
-            for lon_at, lon_mass in ((low[:, 1], 1.0 - up[:, 1]), (high[:, 1], up[:, 1])):
-                out = out.at[rows, lat_at * self.grid.n_lon + lon_at].add(lat_mass * lon_mass)
-        return out
-
 
 @dataclass(frozen=True)
 class Ascent(Factor[Act]):
-    """p' = p + a - 1 where b > 0 and that stays in range, else p"""
+    """The action moves the balloon a level, if it can afford it and the ladder goes that way:
+
+        p' = p + (a - 1)   where b > 0 and 0 <= p + (a - 1) < n_levels
+           = p             otherwise
+
+    Deterministic given (p, b, a)
+    """
 
     n_levels: int
 
@@ -100,28 +95,25 @@ class Ascent(Factor[Act]):
     def part(self) -> str:
         return "altitude"
 
-    @property
-    def values(self) -> int:
-        return self.n_levels
-
     def moved(self, state: dict[str, Any], action: Act) -> Int[Array, "*batch"]:
-        """a - 1 where affordable and in range, else 0"""
+        """p' - p, one of -1, 0, +1: the wanted a - 1 where b > 0 and the landing level is in range, else 0"""
         wanted = action - HOLD
         landing = state["altitude"] + wanted
         return jnp.where((state["ballast"] > 0) & (landing >= 0) & (landing < self.n_levels), wanted, 0)
 
     def sample(self, key: PRNGKeyArray, state: dict[str, Any], action: Act) -> Int[Array, ""]:
-        """p + moved"""
+        """p' = p + (p' - p)"""
         return state["altitude"] + self.moved(state, action)
-
-    def law(self, states: dict[str, Any], action: Act) -> Float[Array, "states alt"]:
-        """One at p + moved"""
-        return jax.nn.one_hot(states["altitude"] + self.moved(states, action), self.n_levels)
 
 
 @dataclass(frozen=True)
 class Expenditure(Factor[Act]):
-    """b' = b - 1 where the level moved, else b"""
+    """A level change spends one unit of ballast, holding spends none:
+
+        b' = b - |p' - p|   which is b - 1 on a move and b on a hold
+
+    Deterministic given (p, b, a), and b' >= 0 because a move needs b > 0.
+    """
 
     ascent: Ascent
     ballast_values: int
@@ -130,17 +122,9 @@ class Expenditure(Factor[Act]):
     def part(self) -> str:
         return "ballast"
 
-    @property
-    def values(self) -> int:
-        return self.ballast_values
-
     def sample(self, key: PRNGKeyArray, state: dict[str, Any], action: Act) -> Int[Array, ""]:
-        """b - |moved|"""
+        """b' = b - |p' - p|"""
         return state["ballast"] - jnp.abs(self.ascent.moved(state, action))
-
-    def law(self, states: dict[str, Any], action: Act) -> Float[Array, "states ballast"]:
-        """One at b - |moved|"""
-        return jax.nn.one_hot(states["ballast"] - jnp.abs(self.ascent.moved(states, action)), self.ballast_values)
 
 
 @dataclass(frozen=True)
@@ -176,45 +160,84 @@ class BalloonTransition(Transition[Act]):
         out = {f.part: f.sample(k, state, action) for f, k in zip(self.factors, keys, strict=True)}
         return {**out, "field": state["field"]}
 
+    def wind_step(self, hypothesis: WindField) -> tuple[Int[Array, "pos_alt 4"], Float[Array, "pos_alt 4"]]:
+        """The four cells the wind may carry (lat, lon) to from each (lat, lon, p), and their probabilities.
+
+        (pos_alt, 4) each, pos_alt = pos * alt: W reads neither b nor a, so one row serves both.
+        """
+        grid, pos, n_alt = self.advection.grid, self.advection.grid.size(), self.ascent.n_levels
+        cells = jnp.repeat(grid.elements(), n_alt, axis=0)  # (pos_alt, 2), altitude varying fastest
+        under = {"position": cells, "altitude": jnp.tile(jnp.arange(n_alt), pos), "field": hypothesis}
+        exact = grid.cell_of(cells) + self.advection.offset(under)  # (pos_alt, 2) in cells
+        floor = jnp.floor(exact)  # both ends clip off this, so a landing beyond the edge puts all its mass on the edge
+        low = jnp.clip(floor, 0, grid.shape - 1).astype(jnp.int32)
+        high = jnp.clip(floor + 1, 0, grid.shape - 1).astype(jnp.int32)
+        up = jnp.clip(exact - floor, 0.0, 1.0)  # (pos_alt, 2): u per axis, the probability of rounding up
+        lat_at, lat_prob = jnp.stack([low[:, 0], high[:, 0]], -1), jnp.stack([1.0 - up[:, 0], up[:, 0]], -1)
+        lon_at, lon_prob = jnp.stack([low[:, 1], high[:, 1]], -1), jnp.stack([1.0 - up[:, 1], up[:, 1]], -1)
+        at = (lat_at[:, :, None] * grid.n_lon + lon_at[:, None, :]).reshape(-1, 4)  # (pos_alt, 4) flat cells
+        return at, (lat_prob[:, :, None] * lon_prob[:, None, :]).reshape(-1, 4)
+
     def kernel(self, hypothesis: WindField) -> "BalloonKernel":
         """The law at every enumerated state, with `hypothesis` in place of the wind an episode drew"""
-        under = {**self.state_domain.elements(), "field": hypothesis}
-        laws = tuple(
-            jnp.stack([f.law(under, jnp.asarray(a)) for a in range(3)])  # (actions, states, values)
-            for f in self.factors
-        )
-        return BalloonKernel(laws[0], laws[1], laws[2])
+        n_alt, n_ball = self.ascent.n_levels, self.expenditure.ballast_values
+        next_pos, prob = self.wind_step(hypothesis)
+        alt = jnp.arange(n_alt)[None, :, None]  # (1, alt, 1), broadcasting over actions and ballast
+        ball = jnp.arange(n_ball)[None, None, :]
+        under = {"altitude": jnp.broadcast_to(alt, (3, n_alt, n_ball)), "ballast": jnp.broadcast_to(ball, (3, n_alt, n_ball))}
+        moved = jnp.stack([self.ascent.moved(under, jnp.asarray(a))[a] for a in range(3)])  # (actions, alt, ballast)
+        return BalloonKernel(self.state_domain, next_pos, prob, alt + moved, ball - jnp.abs(moved))
 
 
 @register_dataclass
 @dataclass(frozen=True)
 class BalloonKernel(TransitionKernel[Act]):
-    """The one-step law at every state, one dense factor per part of s"""
+    """The one-step law at every state, as four reachable cells and the deterministic landing of p and b.
 
-    position_law: Float[Array, "actions states pos"]
-    """P((lat, lon)' | s, a)"""
+    s = (lat, lon, p, b)                    indexed (pos * n_alt + p) * n_ball + b
+    w = pos * n_alt + p                     s without b, which is all the wind reads
 
-    altitude_law: Float[Array, "actions states alt"]
-    """P(p' | s, a)"""
+    P(s' | s, a) = prob[w, k]               s' = (next_pos[w, k], altitude_at[a, p, b], ballast_at[a, p, b])
+                 = 0                        otherwise
+    """
 
-    ballast_law: Float[Array, "actions states ballast"]
-    """P(b' | s, a)"""
+    domain: Domain = dataclasses.field(metadata=dict(static=True))
+    """What `values` is indexed by, in its own index order"""
+
+    next_pos: Int[Array, "pos_alt 4"]
+    """The four cells the wind may carry (lat, lon) to, as flat positions"""
+
+    prob: Float[Array, "pos_alt 4"]
+    """P of each, summing to one along the last axis"""
+
+    altitude_at: Int[Array, "actions alt ballast"]
+    """p' = p + a - 1 where that is affordable and in range, else p"""
+
+    ballast_at: Int[Array, "actions alt ballast"]
+    """A level change spends one unit of ballast, holding spends none:
+
+        b' = b - |p' - p|   which is b - 1 on a move and b on a hold
+
+    Deterministic given (p, b, a), and b' >= 0 because a move needs b > 0.
+    """
 
     def expectation(self, values: Float[Array, " states"], action: Act) -> Float[Array, " states"]:
-        """out[s] = sum over (q, l, c) of position_law[s, q] altitude_law[s, l] ballast_law[s, c] values[q, l, c],
-        contracted one part at a time: (states, pos, alt, ballast) -> (states, pos, alt) -> (states, pos) -> (states,)
+        """out[pos, p, b] = sum over k in 0..3 of prob[w, k] * values[next_pos[w, k], p', b'], w = pos * alt,
+        for (p', b') = (altitude_at[a, p, b], ballast_at[a, p, b]). Time O(states * 4), memory O(states * 4)
         """
-        n_pos, n_alt, n_ball = self.position_law.shape[2], self.altitude_law.shape[2], self.ballast_law.shape[2]
-        table = values.reshape(n_pos, n_alt, n_ball)
-        over_ballast = jnp.tensordot(self.ballast_law[action], table, axes=(1, 2))  # (states, pos, alt)
-        over_altitude = jnp.einsum("sl,spl->sp", self.altitude_law[action], over_ballast)
-        return jnp.einsum("sq,sq->s", self.position_law[action], over_altitude)
+        n_alt, n_ball = self.altitude_at.shape[1], self.altitude_at.shape[2]
+        table = values.reshape(-1, n_alt, n_ball)  # (pos, alt, ballast)
+        landed = table[:, self.altitude_at[action], self.ballast_at[action]]  # (pos, alt, ballast): p' and b' applied
+        at = self.next_pos.reshape(-1, n_alt, 4)  # (pos, alt, 4): the flat cells the wind may reach
+        alt = jnp.arange(n_alt)[None, :, None]  # (1, alt, 1), pairing each cell with the level it was read at
+        reached = landed[at, alt]  # (pos, alt, 4, ballast)
+        return jnp.einsum("pak,pakb->pab", self.prob.reshape(-1, n_alt, 4), reached).reshape(-1)
 
     def sample(self, key: PRNGKeyArray, index: Int[Array, ""], action: Act) -> Int[Array, ""]:
-        """One draw from P(. | s, a) at `index`, as this domain's own flat index"""
-        n_alt, n_ball = self.altitude_law.shape[2], self.ballast_law.shape[2]
-        k_pos, k_alt, k_ball = jax.random.split(key, 3)
-        q = jax.random.categorical(k_pos, jnp.log(self.position_law[action, index]))
-        l = jax.random.categorical(k_alt, jnp.log(self.altitude_law[action, index]))
-        c = jax.random.categorical(k_ball, jnp.log(self.ballast_law[action, index]))
-        return (q * n_alt + l) * n_ball + c
+        """One draw from P(. | s, a) at `index`: one of the four cells by `prob`, then p' and b' read off"""
+        n_alt, n_ball = self.altitude_at.shape[1], self.altitude_at.shape[2]
+        rest, b = index // n_ball, index % n_ball
+        pos, p = rest // n_alt, rest % n_alt
+        w = pos * n_alt + p
+        q = self.next_pos[w, jax.random.categorical(key, jnp.log(self.prob[w]))]
+        return (q * n_alt + self.altitude_at[action, p, b]) * n_ball + self.ballast_at[action, p, b]
