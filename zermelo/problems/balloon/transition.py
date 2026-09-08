@@ -183,16 +183,13 @@ class BalloonTransition(Transition[Act]):
             jnp.stack([f.law(under, jnp.asarray(a)) for a in range(3)])  # (actions, states, values)
             for f in self.factors
         )
-        return BalloonKernel(self.state_domain, laws[0], laws[1], laws[2])
+        return BalloonKernel(laws[0], laws[1], laws[2])
 
 
 @register_dataclass
 @dataclass(frozen=True)
 class BalloonKernel(TransitionKernel[Act]):
     """The one-step law at every state, one dense factor per part of s"""
-
-    domain: Domain = dataclasses.field(metadata=dict(static=True))
-    """What every array here is indexed by, in its own index order"""
 
     position_law: Float[Array, "actions states pos"]
     """P((lat, lon)' | s, a)"""
@@ -204,9 +201,8 @@ class BalloonKernel(TransitionKernel[Act]):
     """P(b' | s, a)"""
 
     def expectation(self, values: Float[Array, " states"], action: Act) -> Float[Array, " states"]:
-        """sum over s' of P(s' | s, a) values(s'), at every s. The parts being disjoint, the sum factors:
-
-        out[s] = sum over (q, l, c) of position_law[s, q] altitude_law[s, l] ballast_law[s, c] values[q, l, c]
+        """out[s] = sum over (q, l, c) of position_law[s, q] altitude_law[s, l] ballast_law[s, c] values[q, l, c],
+        contracted one part at a time: (states, pos, alt, ballast) -> (states, pos, alt) -> (states, pos) -> (states,)
         """
         n_pos, n_alt, n_ball = self.position_law.shape[2], self.altitude_law.shape[2], self.ballast_law.shape[2]
         table = values.reshape(n_pos, n_alt, n_ball)

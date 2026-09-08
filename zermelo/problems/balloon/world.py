@@ -27,8 +27,8 @@ class Highest(Prior[Any]):
 
 
 @dataclass(frozen=True)
-class Recording:
-    """One wind record read off disk: W over time, level and cell, on the grid it was sampled on"""
+class WindRecord:
+    """W(lat, lon, p, t) as (t, alt, pos, uv), beside the hours, altitudes and grid it was sampled on"""
 
     wind: Float[Array, "t alt pos uv"]
     hours: Float[Array, " t"]
@@ -45,7 +45,7 @@ class Recording:
         return self.wind[frame]
 
 
-def load(path: Path) -> Recording:
+def load_wind(path: Path) -> WindRecord:
     """The wind record stored at `path`, laid out for the grid it was sampled on"""
     raw = np.load(path)
     lat, lon = raw["latitude"], raw["longitude"]
@@ -58,11 +58,11 @@ def load(path: Path) -> Recording:
         lon_step=float(lon[1] - lon[0]),
     )
     wind = np.stack([raw["u"], raw["v"]], axis=-1).reshape(raw["u"].shape[0], raw["u"].shape[1], grid.size(), 2)
-    return Recording(jnp.asarray(wind), jnp.asarray(raw["hours"]), jnp.asarray(raw["altitude_km"]), grid)
+    return WindRecord(jnp.asarray(wind), jnp.asarray(raw["hours"]), jnp.asarray(raw["altitude_km"]), grid)
 
 
 def balloon_world(
-    recording: Recording, frame: int, ballast_units: int, step_hours: float, error: WindError, readout: type[BalloonReadout]
+    recording: WindRecord, frame: int, ballast_units: int, step_hours: float, error: WindError, readout: type[BalloonReadout]
 ) -> World:
     """The problem a recorded field poses: the balloon starts anywhere, and the wind is the record plus an error"""
     grid, n_alt = recording.grid, recording.n_alt
@@ -79,6 +79,6 @@ def balloon_world(
     )
 
 
-def balloon_objective(recording: Recording, target: Target, margin_lat: int, margin_lon: int, step_cost: float) -> StormSearch:
-    """What the episode is scored on: the peak of `target` over the grid's interior"""
-    return StormSearch(recording.grid, recording.n_alt, target, balloon_candidates(recording.grid, margin_lat, margin_lon), step_cost)
+def balloon_objective(recording: WindRecord, target: Target, margin_lat: int, margin_lon: int) -> StormSearch:
+    """What the episode is scored on: `target` predicted over the grid's interior"""
+    return StormSearch(recording.grid, target, balloon_candidates(recording.grid, margin_lat, margin_lon))
