@@ -13,7 +13,7 @@ from zermelo.problems.balloon.grid import SphereGrid, balloon_states
 from zermelo.problems.balloon.objective import ColumnPeakSpeed, SpeedAt, StormSearch, Target, balloon_candidates
 from zermelo.problems.balloon.readout import BalloonReadout, ColumnWind, PointWind
 from zermelo.problems.balloon.transition import Act, Advection, Ascent, BalloonKernel, BalloonTransition, Expenditure, Factor
-from zermelo.problems.balloon.world import Highest, Recording, balloon_objective, balloon_world, load
+from zermelo.problems.balloon.world import Highest, WindRecord, balloon_objective, balloon_world, load_wind
 
 __all__ = [
     "Act",
@@ -32,16 +32,16 @@ __all__ = [
     "GriddedWind",
     "Highest",
     "PointWind",
-    "Recording",
     "SpeedAt",
     "SphereGrid",
     "StormSearch",
     "Target",
     "WindError",
     "WindField",
+    "WindRecord",
     "balloon_candidates",
     "balloon_objective",
     "balloon_states",
     "balloon_world",
-    "load",
+    "load_wind",
 ]
