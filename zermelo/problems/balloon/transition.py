@@ -139,19 +139,13 @@ class BalloonTransition(Transition[Act]):
 
     @property
     def action_domain(self) -> Domain:
-        """Three actions, always the same three"""
+        """Three actions, legal at every state: one the balloon cannot afford moves it nowhere"""
         return DiscreteDomain(3)
 
     @property
     def factors(self) -> tuple[Factor[Act], ...]:
         """The factors in the order their parts are written"""
         return (self.advection, self.ascent, self.expenditure)
-
-    def legal_actions(self, state: dict[str, Any]) -> Domain:
-        """Hold always; up and down only where b > 0 and the altitude stays in range"""
-        p, spare = state["altitude"], state["ballast"] > 0
-        live = jnp.stack([spare & (p > 0), jnp.bool_(True), spare & (p < self.ascent.n_altitudes - 1)])
-        return self.action_domain.narrow(live)
 
     def __call__(self, key: PRNGKeyArray, state: dict[str, Any], action: Act) -> dict[str, Any]:
         """One sampled step, the field carried through unchanged"""

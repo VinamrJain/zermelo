@@ -5,10 +5,10 @@ from zermelo.experiments.balloon_waypoint.schema import BeliefConfig, MethodConf
 from zermelo.experiments.balloon_waypoint.setup import (
     Implementation,
     arm,
-    expected_improvement,
     max_magnitude,
     speed_at,
     sweep,
+    upper_confidence,
     value_iteration,
 )
 
@@ -62,7 +62,7 @@ for name, resources in (
         arms=[
             arm("mean", _method(max_magnitude(), improvement=True, n_fields=0, n_walks=0), _belief(oracle=False)),
             arm("oracle", _method(max_magnitude(), improvement=True, n_fields=0, n_walks=0), _belief(oracle=True)),
-            arm("ei", _method(expected_improvement(), improvement=False, n_fields=0, n_walks=0), _belief(oracle=False)),
+            arm("ucb", _method(upper_confidence(c=2.0), improvement=False, n_fields=0, n_walks=0), _belief(oracle=False)),
             arm("random", None, _belief(oracle=False)),  # no rule at all
         ],
     )
