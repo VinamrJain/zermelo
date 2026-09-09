@@ -187,7 +187,10 @@ def _conjugate(
 @register_dataclass
 @dataclass(frozen=True)
 class GPBelief(Belief):
-    """`m` zero-mean Gaussian processes over the field's components, independent and sharing one kernel"""
+    """`m` Gaussian processes over the field's components, independent, sharing one kernel, about a given prior mean:
+
+    f = prior_mean + e,   e ~ GP(0, k)
+    """
 
     positions: Domain = dataclasses.field(metadata=dict(static=True))
     data: Dataset
@@ -210,6 +213,9 @@ class GPBelief(Belief):
 
     refit_steps: int = dataclasses.field(metadata=dict(static=True))
 
+    prior_mean: Function | None = dataclasses.field(metadata=dict(static=True))
+    """Prior assumption of the field mean (None is zero everywhere)"""
+
     @classmethod
     def empty(cls, positions: Domain, rows: int, m: int, **config: Any) -> "GPBelief":
         """Seen nothing, over a buffer of `rows` rows"""
@@ -219,6 +225,13 @@ class GPBelief(Belief):
     def coords(self) -> Float[Array, "n_states k"]:
         """Every cell's coordinates, in the position domain's own index order"""
         return coordinates(self.positions)
+
+    @property
+    def offset(self) -> Float[Array, "n_states m"]:
+        """`prior_mean` at every cell if given, or zeros when none"""
+        if self.prior_mean is None:
+            return jnp.zeros((self.coords.shape[0], self.data.r.shape[-1]))
+        return jnp.broadcast_to(self.prior_mean(elements(self.positions)), (self.coords.shape[0], self.data.r.shape[-1]))
 
     def _conditioning(self) -> tuple[Float[Array, "rows dim"], Float[Array, "rows m"], Bool[Array, " rows"], Float[Array, " rows"]]:
         """Per buffer row: coordinates, its cell's mean reading, whether it is the first live row there, and `noise^2 / c` at `c` reads"""
@@ -230,7 +243,8 @@ class GPBelief(Belief):
         first = jnp.full(n_states, rows).at[z].min(jnp.where(self.data.live, jnp.arange(rows), rows))
         at = jnp.maximum(c[z], 1.0)  # (rows,): readings at this row's cell, floored to 1
         # rows kept: live and the first at its cell, so a cell appears once
-        return self.coords[z], total[z] / at[:, None], self.data.live & (jnp.arange(rows) == first[z]), self.noise**2 / at
+        residual = total[z] / at[:, None] - self.offset[z]  # (rows, m): r - prior_mean
+        return self.coords[z], residual, self.data.live & (jnp.arange(rows) == first[z]), self.noise**2 / at
 
     def _posterior(self, width: int, n: int) -> Any:
         """The conjugate posterior over one output component of a `width`-wide field seen at `n` points"""
@@ -280,13 +294,13 @@ class GPBelief(Belief):
 
     def predict(self, z: Int[Array, "*batch n"]) -> tuple[Float[Array, "*batch n m"], Float[Array, "*batch n m"]]:
         mean, var = self._moments(self.coords)  # (n_states, m) each: solved at every cell, then gathered
-        return mean[z], var[z]
+        return mean[z] + self.offset[z], var[z]
 
     def mean(self) -> Function:
-        return lookup(self.positions, self._moments(self.coords)[0])
+        return lookup(self.positions, self._moments(self.coords)[0] + self.offset)
 
     def draw(self, key: PRNGKeyArray, n_fields: int) -> list[Function]:
-        """`n_fields` fields drawn from the posterior, a shorter draw being the opening of a longer one
+        """`n_fields` fields drawn from the posterior, a shorter draw being a subset of a longer one
 
         Time O(n_read^3 + n_fields (n_states n_features + n_read n_states)).
         """
@@ -294,7 +308,7 @@ class GPBelief(Belief):
         x, y = x[keep], y[keep]  # (n_read, dim), (n_read, m): the distinct cells read
         width = self.data.r.shape[-1]
         drawn = [self._paths(jax.random.split(key, width)[j], x, y[:, j], n_fields) for j in range(width)]
-        table = jnp.stack(drawn, axis=-1)  # (n_fields, n_states, m)
+        table = jnp.stack(drawn, axis=-1) + self.offset  # (n_fields, n_states, m): the mean plus a draw of e
         return [lookup(self.positions, table[s]) for s in range(n_fields)]
 
     def _paths(

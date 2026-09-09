@@ -77,6 +77,7 @@ def assemble(cfg: RunConfig) -> Episode:
             n_features=cfg.belief.n_features,
             refit=cfg.belief.refit,
             refit_steps=cfg.belief.refit_steps,
+            prior_mean=None,
         )
     )
     agent: Agent[Any]
