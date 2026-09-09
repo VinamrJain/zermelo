@@ -70,7 +70,7 @@ def assemble(cfg: RunConfig) -> Episode:
             positions,
             cfg.horizon,  # one row per move, the readings an episode folds in
             ambient.n_axes,
-            lengthscale=jnp.asarray(cfg.belief.lengthscale),
+            lengthscale=jnp.full(positions.dim(), cfg.belief.lengthscale),  # one per embedded coordinate, isotropic here
             amplitude=jnp.asarray(cfg.belief.amplitude),
             noise=jnp.asarray(cfg.belief.noise),
             kernel_family=get_class(cfg.belief.kernel),

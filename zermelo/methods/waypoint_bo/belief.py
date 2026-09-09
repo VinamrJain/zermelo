@@ -192,7 +192,9 @@ class GPBelief(Belief):
     positions: Domain = dataclasses.field(metadata=dict(static=True))
     data: Dataset
 
-    lengthscale: Float[Array, ""]
+    lengthscale: Float[Array, " dim"]
+    """One lengthscale per coordinate the position domain embeds to"""
+
     amplitude: Float[Array, ""]
     noise: Float[Array, ""]
     """The observation noise standard deviation"""
@@ -261,7 +263,7 @@ class GPBelief(Belief):
         )
         return dataclasses.replace(
             held,
-            lengthscale=jnp.asarray(tuned.prior.kernel.lengthscale.value).reshape(()),
+            lengthscale=jnp.asarray(tuned.prior.kernel.lengthscale.value).reshape(-1),
             amplitude=jnp.sqrt(jnp.asarray(tuned.prior.kernel.variance.value).reshape(())),
             noise=jnp.asarray(tuned.likelihood.obs_stddev.value).reshape(()),
         )
