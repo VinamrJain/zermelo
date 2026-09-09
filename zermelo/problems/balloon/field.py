@@ -2,7 +2,7 @@
 
 W(lat, lon, p) = (u, v)     u: eastward, v: northward, both metres per second
 lat, lon                    degrees, on the grid's own cells
-p                           which pressure level, an index into the ladder
+p                           which altitude, an index into the ones the record holds
 t                           hours since the episode began
 """
 
@@ -31,10 +31,10 @@ class WindField(ABC):
 @register_dataclass
 @dataclass(frozen=True)
 class GriddedWind(WindField):
-    """W(lat, lon, p), held per level and cell, read at the nearest cell"""
+    """W(lat, lon, p), held per altitude and cell, read at the nearest cell"""
 
     wind: Float[Array, "alt pos uv"]
-    """(u, v) at every level and cell, in the grid's index order"""
+    """(u, v) at every altitude and cell, in the grid's index order"""
 
     grid: SphereGrid = dataclasses.field(metadata=dict(static=True))
     """What `pos` is indexed by"""
@@ -50,7 +50,7 @@ class DriftingWind(WindField):
     """W(lat, lon, p, t), read at the nearest cell and the nearest recorded hour"""
 
     wind: Float[Array, "t alt pos uv"]
-    """(u, v) at every recorded hour, level and cell"""
+    """(u, v) at every recorded hour, altitude and cell"""
 
     hours: Float[Array, " t"]
     """The t each record stands for"""
@@ -67,13 +67,13 @@ class WindError(ABC):
     """The law e is drawn by, for a truth W = forecast + e"""
 
     @abstractmethod
-    def sample(self, key: PRNGKeyArray, grid: SphereGrid, n_levels: int) -> Float[Array, "alt pos uv"]:
-        """One draw of e at every level and cell"""
+    def sample(self, key: PRNGKeyArray, grid: SphereGrid, n_altitudes: int) -> Float[Array, "alt pos uv"]:
+        """One draw of e at every altitude and cell"""
 
 
 @dataclass(frozen=True)
 class GaussianError(WindError):
-    """e ~ N(0, K), independently per level and per component of (u, v), with
+    """e ~ N(0, K), independently per altitude and per component of (u, v), with
 
     K(a, b) = amplitude_ms^2 * exp(-||embed(a) - embed(b)||^2 / (2 * length_scale_km^2))
     """
@@ -84,7 +84,7 @@ class GaussianError(WindError):
     jitter: float
     """Added to K's diagonal relative to amplitude_ms^2, so the factorisation succeeds"""
 
-    def sample(self, key: PRNGKeyArray, grid: SphereGrid, n_levels: int) -> Float[Array, "alt pos uv"]:
+    def sample(self, key: PRNGKeyArray, grid: SphereGrid, n_altitudes: int) -> Float[Array, "alt pos uv"]:
         """L @ white, for L the Cholesky factor of K. Time O(pos^3), memory O(pos^2)"""
         points = grid.embed(grid.elements())  # (pos, 3)
         gap = jnp.sum((points[:, None, :] - points[None, :, :]) ** 2, axis=-1)  # (pos, pos)
@@ -92,7 +92,7 @@ class GaussianError(WindError):
         factor = self.amplitude_ms * jnp.linalg.cholesky(correlation)
         if jnp.isnan(factor).any():  # a singular K returns NaN rather than raising
             raise ValueError(f"K over {grid.size()} cells at {self.length_scale_km} km does not factorise at jitter {self.jitter}")
-        white = jax.random.normal(key, (grid.size(), n_levels, 2))
+        white = jax.random.normal(key, (grid.size(), n_altitudes, 2))
         return jnp.moveaxis(jnp.tensordot(factor, white, axes=(1, 0)), 0, 1)  # (alt, pos, uv)
 
 
@@ -101,7 +101,7 @@ class ForecastPrior(Prior[WindField]):
     """W = forecast + e, the forecast fixed and e drawn once per episode"""
 
     forecast: Float[Array, "alt pos uv"]
-    """(u, v) predicted at every level and cell, and what the agent is told"""
+    """(u, v) predicted at every altitude and cell, and what the agent is told"""
 
     error: WindError
     """The law e is drawn by"""
