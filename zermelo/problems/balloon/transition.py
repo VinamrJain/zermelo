@@ -1,7 +1,7 @@
-"""One step of a balloon: the wind carries it, the action moves it between levels, and that costs ballast
+"""One step of a balloon: the wind carries it, the action moves it between altitudes, and that costs ballast
 
-s = (lat, lon, p, b, W)     where it is, which pressure level, what ballast is left, the wind it moves in
-a in {0, 1, 2}              down a level, hold, up a level
+s = (lat, lon, p, b, W)     where it is, which altitude, what ballast is left, the wind it moves in
+a in {0, 1, 2}              down one, hold, up one
 W(lat, lon, p) = (u, v)     the wind there, metres per second, u eastward and v northward
 h                           hours in one step
 (i, j)                      the grid cell of (lat, lon): i the row, j the column
@@ -9,7 +9,7 @@ h                           hours in one step
 The three parts of s' are written by three factors:
 
     (i, j)' = round((i, j) + d),  d = the wind's displacement in cells      Advection
-    p'      = p + a - 1           where b > 0 and 0 <= p' < n_levels        Ascent
+    p'      = p + a - 1           where b > 0 and 0 <= p' < n_altitudes     Ascent
     b'      = b - |p' - p|                                                  Expenditure
 """
 
@@ -23,15 +23,14 @@ import jax.numpy as jnp
 from jax.tree_util import register_dataclass
 from jaxtyping import Array, Bool, Float, Int, PRNGKeyArray
 
-from zermelo.interface import DiscreteDomain, Domain, ProductDomain, Transition, TransitionKernel
-from zermelo.problems.balloon.field import WindField
+from zermelo.interface import DiscreteDomain, Domain, Function, ProductDomain, Transition, TransitionKernel
 from zermelo.problems.balloon.grid import SphereGrid
 
 type Act = Int[Array, ""]
-"""0 down a level, 1 hold, 2 up a level"""
+"""0 down one altitude, 1 hold, 2 up one"""
 
 HOLD = 1
-"""The action that changes no level and spends no ballast"""
+"""The action that changes no altitude and spends no ballast"""
 
 
 class Factor[Action](ABC):
@@ -68,7 +67,7 @@ class Advection(Factor[Act]):
 
     def offset(self, state: dict[str, Any]) -> Float[Array, "*batch 2"]:  # states batch along a leading axis
         """The step in cells: (v, u) * h * 3.6 km / km_per_degree(lat) / degrees_per_cell"""
-        wind = state["field"](state)  # (..., 2) as (u, v)
+        wind = state["field"]({part: state[part] for part in state if part != "field"})  # (..., 2) as (u, v)
         km = jnp.stack([wind[..., 1], wind[..., 0]], axis=-1) * self.step_hours * 3.6  # (..., 2) as (lat, lon)
         return km / self.grid.km_per_degree(state["position"][..., 0]) / self.grid.steps
 
@@ -81,25 +80,25 @@ class Advection(Factor[Act]):
 
 @dataclass(frozen=True)
 class Ascent(Factor[Act]):
-    """The action moves the balloon a level, if it can afford it and the ladder goes that way:
+    """The action moves the balloon one altitude, if it can afford it and there is one that way:
 
-        p' = p + (a - 1)   where b > 0 and 0 <= p + (a - 1) < n_levels
+        p' = p + (a - 1)   where b > 0 and 0 <= p + (a - 1) < n_altitudes
            = p             otherwise
 
     Deterministic given (p, b, a)
     """
 
-    n_levels: int
+    n_altitudes: int
 
     @property
     def part(self) -> str:
         return "altitude"
 
     def moved(self, state: dict[str, Any], action: Act) -> Int[Array, "*batch"]:
-        """p' - p, one of -1, 0, +1: the wanted a - 1 where b > 0 and the landing level is in range, else 0"""
+        """p' - p, one of -1, 0, +1: the wanted a - 1 where b > 0 and the altitude landed on is in range, else 0"""
         wanted = action - HOLD
         landing = state["altitude"] + wanted
-        return jnp.where((state["ballast"] > 0) & (landing >= 0) & (landing < self.n_levels), wanted, 0)
+        return jnp.where((state["ballast"] > 0) & (landing >= 0) & (landing < self.n_altitudes), wanted, 0)
 
     def sample(self, key: PRNGKeyArray, state: dict[str, Any], action: Act) -> Int[Array, ""]:
         """p' = p + (p' - p)"""
@@ -108,7 +107,7 @@ class Ascent(Factor[Act]):
 
 @dataclass(frozen=True)
 class Expenditure(Factor[Act]):
-    """A level change spends one unit of ballast, holding spends none:
+    """An altitude change spends one unit of ballast, holding spends none:
 
         b' = b - |p' - p|   which is b - 1 on a move and b on a hold
 
@@ -149,9 +148,9 @@ class BalloonTransition(Transition[Act]):
         return (self.advection, self.ascent, self.expenditure)
 
     def legal_actions(self, state: dict[str, Any]) -> Domain:
-        """Hold always; up and down only where b > 0 and the level stays in range"""
+        """Hold always; up and down only where b > 0 and the altitude stays in range"""
         p, spare = state["altitude"], state["ballast"] > 0
-        live = jnp.stack([spare & (p > 0), jnp.bool_(True), spare & (p < self.ascent.n_levels - 1)])
+        live = jnp.stack([spare & (p > 0), jnp.bool_(True), spare & (p < self.ascent.n_altitudes - 1)])
         return self.action_domain.narrow(live)
 
     def __call__(self, key: PRNGKeyArray, state: dict[str, Any], action: Act) -> dict[str, Any]:
@@ -160,14 +159,20 @@ class BalloonTransition(Transition[Act]):
         out = {f.part: f.sample(k, state, action) for f, k in zip(self.factors, keys, strict=True)}
         return {**out, "field": state["field"]}
 
-    def wind_step(self, hypothesis: WindField) -> tuple[Int[Array, "pos_alt 4"], Float[Array, "pos_alt 4"]]:
+    def wind_step(self, hypothesis: Function) -> tuple[Int[Array, "pos_alt 4"], Float[Array, "pos_alt 4"]]:
         """The four cells the wind may carry (lat, lon) to from each (lat, lon, p), and their probabilities.
 
         (pos_alt, 4) each, pos_alt = pos * alt: W reads neither b nor a, so one row serves both.
         """
-        grid, pos, n_alt = self.advection.grid, self.advection.grid.size(), self.ascent.n_levels
+        grid, pos, n_alt = self.advection.grid, self.advection.grid.size(), self.ascent.n_altitudes
         cells = jnp.repeat(grid.elements(), n_alt, axis=0)  # (pos_alt, 2), altitude varying fastest
-        under = {"position": cells, "altitude": jnp.tile(jnp.arange(n_alt), pos), "field": hypothesis}
+        # b is read by neither W nor this step, so every row states the same one
+        under = {
+            "position": cells,
+            "altitude": jnp.tile(jnp.arange(n_alt), pos),
+            "ballast": jnp.zeros(pos * n_alt, jnp.int32),
+            "field": hypothesis,
+        }
         exact = grid.cell_of(cells) + self.advection.offset(under)  # (pos_alt, 2) in cells
         floor = jnp.floor(exact)  # both ends clip off this, so a landing beyond the edge puts all its mass on the edge
         low = jnp.clip(floor, 0, grid.shape - 1).astype(jnp.int32)
@@ -178,9 +183,9 @@ class BalloonTransition(Transition[Act]):
         at = (lat_at[:, :, None] * grid.n_lon + lon_at[:, None, :]).reshape(-1, 4)  # (pos_alt, 4) flat cells
         return at, (lat_prob[:, :, None] * lon_prob[:, None, :]).reshape(-1, 4)
 
-    def kernel(self, hypothesis: WindField) -> "BalloonKernel":
+    def kernel(self, hypothesis: Function) -> "BalloonKernel":
         """The law at every enumerated state, with `hypothesis` in place of the wind an episode drew"""
-        n_alt, n_ball = self.ascent.n_levels, self.expenditure.ballast_values
+        n_alt, n_ball = self.ascent.n_altitudes, self.expenditure.ballast_values
         next_pos, prob = self.wind_step(hypothesis)
         alt = jnp.arange(n_alt)[None, :, None]  # (1, alt, 1), broadcasting over actions and ballast
         ball = jnp.arange(n_ball)[None, None, :]
@@ -214,7 +219,7 @@ class BalloonKernel(TransitionKernel[Act]):
     """p' = p + a - 1 where that is affordable and in range, else p"""
 
     ballast_at: Int[Array, "actions alt ballast"]
-    """A level change spends one unit of ballast, holding spends none:
+    """An altitude change spends one unit of ballast, holding spends none:
 
         b' = b - |p' - p|   which is b - 1 on a move and b on a hold
 
@@ -229,7 +234,7 @@ class BalloonKernel(TransitionKernel[Act]):
         table = values.reshape(-1, n_alt, n_ball)  # (pos, alt, ballast)
         landed = table[:, self.altitude_at[action], self.ballast_at[action]]  # (pos, alt, ballast): p' and b' applied
         at = self.next_pos.reshape(-1, n_alt, 4)  # (pos, alt, 4): the flat cells the wind may reach
-        alt = jnp.arange(n_alt)[None, :, None]  # (1, alt, 1), pairing each cell with the level it was read at
+        alt = jnp.arange(n_alt)[None, :, None]  # (1, alt, 1), pairing each cell with the altitude it was read at
         reached = landed[at, alt]  # (pos, alt, 4, ballast)
         return jnp.einsum("pak,pakb->pab", self.prob.reshape(-1, n_alt, 4), reached).reshape(-1)
 

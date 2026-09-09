@@ -37,7 +37,7 @@ class WindRecord:
 
     @property
     def n_alt(self) -> int:
-        """How many levels the ladder has"""
+        """How many altitudes the record holds"""
         return self.wind.shape[1]
 
     def at(self, frame: int) -> Float[Array, "alt pos uv"]:
@@ -61,24 +61,27 @@ def load_wind(path: Path) -> WindRecord:
     return WindRecord(jnp.asarray(wind), jnp.asarray(raw["hours"]), jnp.asarray(raw["altitude_km"]), grid)
 
 
+def balloon_transition(recording: WindRecord, states: ProductDomain, ballast_units: int, step_hours: float) -> BalloonTransition:
+    """One step of the balloon over `states`: the wind carries it, the action moves it an altitude, that costs ballast"""
+    ascent = Ascent(recording.n_alt)
+    return BalloonTransition(Advection(recording.grid, step_hours), ascent, Expenditure(ascent, ballast_units + 1), states)
+
+
 def balloon_world(
-    recording: WindRecord, frame: int, ballast_units: int, step_hours: float, error: WindError, readout: type[BalloonReadout]
+    recording: WindRecord, states: ProductDomain, frame: int, error: WindError, transition: BalloonTransition, readout: type[BalloonReadout]
 ) -> World:
     """The problem a recorded field poses: the balloon starts anywhere, and the wind is the record plus an error"""
-    grid, n_alt = recording.grid, recording.n_alt
-    forecast = recording.at(frame)
-    ascent = Ascent(n_alt)
-    state_domain = balloon_states(grid, n_alt, ballast_units)
+    grid, forecast = recording.grid, recording.at(frame)
     return World(
-        state_domain=ProductDomain({**state_domain.parts, "field": FunctionDomain(grid, BoxDomain((2,)))}),
+        state_domain=ProductDomain({**states.parts, "field": FunctionDomain(grid, BoxDomain((2,)))}),
         prior=ProductPrior(
             {"position": Uniform(), "altitude": Uniform(), "ballast": Highest(), "field": ForecastPrior(forecast, error, grid)}
         ),
-        transition=BalloonTransition(Advection(grid, step_hours), ascent, Expenditure(ascent, ballast_units + 1), state_domain),
-        readout=readout(grid, n_alt, forecast),
+        transition=transition,
+        readout=readout(grid, recording.n_alt, forecast, states),
     )
 
 
-def balloon_objective(recording: WindRecord, target: Target, margin_lat: int, margin_lon: int) -> StormSearch:
-    """What the episode is scored on: `target` predicted over the grid's interior"""
-    return StormSearch(recording.grid, target, balloon_candidates(recording.grid, margin_lat, margin_lon))
+def balloon_objective(recording: WindRecord, states: ProductDomain, target: Target, margin_lat: int, margin_lon: int) -> StormSearch:
+    """What the episode is scored on: `target` predicted over the states above the grid's interior"""
+    return StormSearch(recording.grid, target, balloon_candidates(states, recording.grid, margin_lat, margin_lon))

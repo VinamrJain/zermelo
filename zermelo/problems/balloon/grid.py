@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import jax.numpy as jnp
 from jaxtyping import Array, Bool, Float, Int
 
-from zermelo.interface import DiscreteDomain, Domain, Embeddable, Enumerable, ProductDomain, Subset
+from zermelo.interface import Domain, Embeddable, Enumerable, ProductDomain, Subset
 
 EARTH_RADIUS_KM = 6371.0
 """The sphere embedded coordinates are measured on"""
@@ -108,6 +108,51 @@ class SphereGrid(Domain[Float[Array, " 2"]], Enumerable[Float[Array, " 2"]], Emb
         return jnp.stack([jnp.full_like(lat, per_degree), per_degree * jnp.cos(jnp.radians(lat))], axis=-1)
 
 
-def balloon_states(grid: SphereGrid, n_levels: int, ballast_units: int) -> ProductDomain:
-    """The state domain: where the balloon is, which level it flies at, and what it has left to spend"""
-    return ProductDomain({"position": grid, "altitude": DiscreteDomain(n_levels), "ballast": DiscreteDomain(ballast_units + 1)})
+@dataclass(frozen=True)
+class Steps(Domain[Int[Array, ""]], Enumerable[Int[Array, ""]], Embeddable[Int[Array, ""]]):
+    """The integers `0` to `len(coordinate) - 1`, step `i` embedding to `coordinate[i]`"""
+
+    coordinate: tuple[float, ...]
+    """Where each step sits, in the units distance between states is measured in"""
+
+    def contains(self, x: Int[Array, ""]) -> Bool[Array, ""]:
+        return (0 <= x) & (x < len(self.coordinate))
+
+    def project(self, x: Int[Array, ""]) -> Int[Array, ""]:
+        return jnp.clip(x, 0, len(self.coordinate) - 1)
+
+    def narrow(self, witness: Bool[Array, " n"]) -> Subset[Int[Array, ""]]:
+        """`witness` marks which steps are live now"""
+        return Subset(self, witness)
+
+    def size(self) -> int:
+        return len(self.coordinate)
+
+    def index_of(self, x: Int[Array, ""]) -> Int[Array, ""]:
+        return jnp.asarray(x, jnp.int32)
+
+    def from_index(self, i: Int[Array, ""]) -> Int[Array, ""]:
+        return i
+
+    def elements(self) -> Int[Array, " n"]:
+        return jnp.arange(len(self.coordinate))
+
+    def dim(self) -> int:
+        """1"""
+        return 1
+
+    def embed(self, x: Int[Array, "*batch"]) -> Float[Array, "*batch 1"]:
+        """coordinate[x]"""
+        return jnp.asarray(self.coordinate)[jnp.asarray(x, jnp.int32)][..., None]
+
+    def unembed(self, v: Float[Array, "*batch 1"]) -> Int[Array, "*batch"]:
+        """The step nearest `v`"""
+        return jnp.argmin(jnp.abs(jnp.asarray(self.coordinate) - v[..., :1]), axis=-1)
+
+
+def balloon_states(grid: SphereGrid, altitude_km: tuple[float, ...], ballast_units: int) -> ProductDomain:
+    """The state domain: where the balloon is, which altitude it flies at, and what it has left to spend.
+
+    Altitude embeds to kilometres; ballast to a constant, since no distance should read it.
+    """
+    return ProductDomain({"position": grid, "altitude": Steps(altitude_km), "ballast": Steps((0.0,) * (ballast_units + 1))})

@@ -1,6 +1,6 @@
 """What a balloon sees: where it is, what it has left, the wind it measures, and the forecast it was given
 
-s = (lat, lon, p, b, W)     where it is, which pressure level, what ballast is left, the true wind
+s = (lat, lon, p, b, W)     where it is, which altitude, what ballast is left, the true wind
 W(lat, lon, p) = (u, v)     metres per second, u eastward and v northward
 F                           the forecast, known everywhere from the start
 """
@@ -24,7 +24,10 @@ class BalloonReadout(Readout):
     grid: SphereGrid
     n_alt: int
     forecast: Float[Array, "alt pos uv"]
-    """F at every level and cell, handed over whole at every step"""
+    """F at every altitude and cell, handed over whole at every step"""
+
+    states: ProductDomain
+    """Where the balloon is, as the domain a belief over the wind is written on"""
 
     @property
     @abstractmethod
@@ -37,34 +40,16 @@ class BalloonReadout(Readout):
 
     @property
     def readings(self) -> Domain:
-        """Position, level, ballast, one measurement of W, and F"""
-        return ProductDomain(
-            {
-                "position": self.grid,
-                "altitude": BoxDomain(()),
-                "ballast": BoxDomain(()),
-                "wind": BoxDomain(self.wind_shape),
-                "forecast": BoxDomain(self.forecast.shape),
-            }
-        )
-
-    def see(self, state: dict[str, Any]) -> dict[str, Any]:
-        """One reading of `state`"""
-        return {
-            "position": state["position"],
-            "altitude": state["altitude"].astype(jnp.float32),
-            "ballast": state["ballast"].astype(jnp.float32),
-            "wind": self.measure(state),
-            "forecast": self.forecast,
-        }
+        """Where the balloon is, one measurement of W, and F"""
+        return ProductDomain({"position": self.states, "wind": BoxDomain(self.wind_shape), "forecast": BoxDomain(self.forecast.shape)})
 
     def reset(self, key: PRNGKeyArray, state: dict[str, Any]) -> dict[str, Any]:
         """The reading before acting"""
-        return self.see(state)
+        return {"position": {part: state[part] for part in self.states.parts}, "wind": self.measure(state), "forecast": self.forecast}
 
     def step(self, key: PRNGKeyArray, state: dict[str, Any], action: Any, next_state: dict[str, Any]) -> dict[str, Any]:
         """The reading after acting"""
-        return self.see(next_state)
+        return self.reset(key, next_state)
 
 
 @dataclass(frozen=True)
@@ -82,7 +67,7 @@ class PointWind(BalloonReadout):
 
 @dataclass(frozen=True)
 class ColumnWind(BalloonReadout):
-    """W at every level above and below the balloon: what a sounding of the whole column reads"""
+    """W at every altitude above and below the balloon: what a sounding of the whole column reads"""
 
     @property
     def wind_shape(self) -> tuple[int, ...]:
