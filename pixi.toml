@@ -8,7 +8,7 @@ version = "0.1.0"
 
 check = "ruff format --check && ruff check && mypy && lint-imports && python -c 'import zermelo.experiments.ambient_waypoint.sweeps'"
 format = "ruff format && ruff check --fix"
-smoke = "python -m zermelo.experiments.ambient_waypoint +sweep=smoke && python -m zermelo.experiments.ambient_waypoint.metrics results/smoke"
+smoke = "python -m zermelo.experiments.ambient_waypoint +sweep=smoke && python -m zermelo.experiments.ambient_waypoint.metrics results/ambient_waypoint/smoke"
 
 [tasks.crosscheck]
 args = ["name"]

@@ -61,7 +61,7 @@ def sweep(
                     "params": {"+arm": ",".join(f"{name}_{one.name}" for one in arms), "seed": ",".join(str(seed) for seed in seeds)}
                 },
                 "sweep": {
-                    "dir": f"results/{name}/${{now:%Y-%m-%d_%H-%M-%S}}",  # sorts lexicographically, holds no colon
+                    "dir": f"results/balloon_waypoint/{name}/${{now:%Y-%m-%d_%H-%M-%S}}",  # sorts lexicographically, holds no colon
                     "subdir": "arm=${hydra:runtime.choices.arm},seed=${seed}",
                 },
                 "job": {"name": name},
