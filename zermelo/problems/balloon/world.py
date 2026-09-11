@@ -84,4 +84,4 @@ def balloon_world(
 
 def balloon_objective(recording: WindRecord, states: ProductDomain, target: Target, margin_lat: int, margin_lon: int) -> StormSearch:
     """What the episode is scored on: `target` predicted over the states above the grid's interior"""
-    return StormSearch(recording.grid, target, balloon_candidates(states, recording.grid, margin_lat, margin_lon))
+    return StormSearch(target, balloon_candidates(states, recording.grid, margin_lat, margin_lon))

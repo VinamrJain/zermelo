@@ -3,10 +3,7 @@
 import dataclasses
 
 from zermelo.experiments.balloon_waypoint.schema import BeliefConfig, ProblemConfig, Resources
-from zermelo.experiments.balloon_waypoint.setup import column_peak_speed
-
-N_ALTITUDES = 5
-"""Altitudes the record holds, spanning 1.5 to 14.2 kilometres"""
+from zermelo.experiments.balloon_waypoint.setup import point_speed
 
 IRMA_JOSE = ProblemConfig(
     wind_path="zermelo/problems/balloon/data/irma_jose.npz",
@@ -17,7 +14,7 @@ IRMA_JOSE = ProblemConfig(
     error_lengthscale_km=400.0,  # about three and a half cells
     error_jitter=1e-4,
     readout="zermelo.problems.balloon.readout.ColumnWind",
-    target=column_peak_speed(n_alt=N_ALTITUDES),
+    target=point_speed(),
     margin_lat=2,
     margin_lon=2,
 )

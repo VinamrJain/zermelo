@@ -23,37 +23,32 @@ class Target(ABC):
     """The scalar g an episode is scored on predicting"""
 
     @abstractmethod
-    def __call__(self, field: WindField, grid: SphereGrid) -> Float[Array, " pos"]:
-        """g at every cell of `grid`"""
+    def __call__(self, field: WindField, candidates: dict[str, Any]) -> Float[Array, " n_candidates"]:
+        """g at every candidate state"""
 
 
 @dataclass(frozen=True)
-class SpeedAt(Target):
-    """g(W; lat, lon) = ||W(lat, lon, p_ref)||"""
+class PointSpeed(Target):
+    """g(W; lat, lon, p) = ||W(lat, lon, p)||"""
 
-    altitude: int
-    """The p every cell is read at"""
-
-    def __call__(self, field: WindField, grid: SphereGrid) -> Float[Array, " pos"]:
-        """Wind speed at `altitude`, at every cell"""
-        cells = grid.elements()  # (pos, 2)
-        wind = field({"position": cells, "altitude": jnp.full(cells.shape[0], self.altitude)})
-        return jnp.linalg.norm(wind, axis=-1)
+    def __call__(self, field: WindField, candidates: dict[str, Any]) -> Float[Array, " n_candidates"]:
+        """Wind speed at each candidate's own altitude and cell"""
+        return jnp.linalg.norm(field(candidates), axis=-1)
 
 
 @dataclass(frozen=True)
 class ColumnPeakSpeed(Target):
-    """g(W; lat, lon) = max over p of ||W(lat, lon, p)||"""
+    """g(W; lat, lon, p) = max over p' of ||W(lat, lon, p')||, one value shared down a column"""
 
     n_alt: int
     """How many altitudes the column spans"""
 
-    def __call__(self, field: WindField, grid: SphereGrid) -> Float[Array, " pos"]:
-        """The fastest wind anywhere in each cell's column"""
-        cells = grid.elements()  # (pos, 2)
+    def __call__(self, field: WindField, candidates: dict[str, Any]) -> Float[Array, " n_candidates"]:
+        """The fastest wind anywhere in each candidate's column"""
+        cells = candidates["position"]  # (n_candidates, 2)
         per_altitude = jnp.stack(
             [jnp.linalg.norm(field({"position": cells, "altitude": jnp.full(cells.shape[0], p)}), axis=-1) for p in range(self.n_alt)]
-        )  # (alt, pos)
+        )  # (alt, n_candidates)
         return jnp.max(per_altitude, axis=0)
 
 
@@ -61,7 +56,6 @@ class ColumnPeakSpeed(Target):
 class StormSearch(Objective[dict[str, Float[Array, "..."]]]):
     """Reward is the increment in the largest g the balloon has flown through, with the claim recorded beside it"""
 
-    grid: SphereGrid
     target: Target
 
     candidates: Subset[dict[str, Any]]
@@ -85,8 +79,8 @@ class StormSearch(Objective[dict[str, Float[Array, "..."]]]):
         return FunctionDomain(self.candidates, BoxDomain((4,)))
 
     def truth(self, state: dict[str, Any]) -> Float[Array, " n_candidates"]:
-        """g at the cell of every candidate"""
-        return self.target(state["field"], self.grid)[self.grid.flat_index(self.candidate_states["position"])]
+        """g at every candidate"""
+        return self.target(state["field"], self.candidate_states)
 
     def wind_speed_at(self, state: dict[str, Any]) -> Float[Array, ""]:
         """||W|| where the balloon stands"""

@@ -6,7 +6,7 @@ from zermelo.experiments.balloon_waypoint.setup import (
     Implementation,
     arm,
     max_magnitude,
-    speed_at,
+    point_speed,
     sweep,
     upper_confidence,
     value_iteration,
@@ -17,7 +17,7 @@ WORLD = dataclasses.replace(
     ballast_units=2,
     error_scale=1.0,
     error_lengthscale_km=600.0,  # wide, so a handful of readings say something about the whole box
-    target=speed_at(altitude=0),
+    target=point_speed(),
     margin_lat=8,
     margin_lon=20,  # a narrow band of candidates, so a decision scores tens of states rather than thousands
 )

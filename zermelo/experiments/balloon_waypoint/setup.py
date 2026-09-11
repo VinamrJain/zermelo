@@ -115,13 +115,13 @@ def uniform() -> Implementation:
 # --- targets: which scalar of the wind an episode is scored on predicting -------------------------------------------
 
 
-def speed_at(altitude: int) -> Implementation:
-    """`g(W; lat, lon) = ||W(lat, lon, altitude)||`"""
-    return _built("zermelo.problems.balloon.objective.SpeedAt", altitude=altitude)
+def point_speed() -> Implementation:
+    """`g(W; lat, lon, p) = ||W(lat, lon, p)||`"""
+    return _built("zermelo.problems.balloon.objective.PointSpeed")
 
 
 def column_peak_speed(n_alt: int) -> Implementation:
-    """`g(W; lat, lon) = max over p of ||W(lat, lon, p)||`"""
+    """`g(W; lat, lon, p) = max over p' of ||W(lat, lon, p')||`"""
     return _built("zermelo.problems.balloon.objective.ColumnPeakSpeed", n_alt=n_alt)
 
 
