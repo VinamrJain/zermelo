@@ -1,3 +1,3 @@
-"""The pipeline checks, registered on import"""
+"""Every sweep, registered on import"""
 
-from zermelo.experiments.balloon_waypoint.sweeps import smoke  # noqa: F401
+from zermelo.experiments.balloon_waypoint.sweeps import acquisitions_oracle, acquisitions_real, smoke, utilities  # noqa: F401
