@@ -15,6 +15,7 @@ from zermelo.experiments.balloon_waypoint.setup import (
 WORLD = dataclasses.replace(
     IRMA_JOSE,
     ballast_units=2,
+    error_scale=1.0,
     error_lengthscale_km=600.0,  # wide, so a handful of readings say something about the whole box
     target=speed_at(altitude=0),
     margin_lat=8,
@@ -44,11 +45,11 @@ def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walk
     )
 
 
-# One entry per device the cells can run on; `balloon_smoke_gpu` asks for an accelerator and a gpu-high node
+# One entry per device the cells can run on; `smoke_gpu` asks for an accelerator and a gpu-high node
 for name, resources in (
-    ("balloon_smoke", Resources(cpus=1, mem_gb=8, timeout_min=20, gres=None, partition="dean", constraint="avx2", array_parallelism=10)),
+    ("smoke", Resources(cpus=1, mem_gb=8, timeout_min=20, gres=None, partition="dean", constraint="avx2", array_parallelism=10)),
     (
-        "balloon_smoke_gpu",
+        "smoke_gpu",
         Resources(cpus=1, mem_gb=8, timeout_min=20, gres="gpu:1", partition="dean", constraint="avx2&gpu-high", array_parallelism=10),
     ),
 ):
