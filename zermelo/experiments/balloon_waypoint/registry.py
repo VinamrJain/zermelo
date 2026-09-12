@@ -8,7 +8,7 @@ from zermelo.experiments.balloon_waypoint.setup import point_speed
 IRMA_JOSE = ProblemConfig(
     wind_path="zermelo/problems/balloon/data/irma_jose.npz",
     frame=0,
-    ballast_units=1000,
+    resource_units=500,
     step_hours=3.0,  # one cell per step at the record's mean speed of ten metres per second
     error_scale=0.0,
     error_lengthscale_km=400.0,  # about three and a half cells
@@ -31,7 +31,6 @@ def matched_belief(world: ProblemConfig) -> BeliefConfig:
         kernel="gpjax.kernels.Matern52",
         lengthscale_km=world.error_lengthscale_km,
         lengthscale_altitude_km=3.0,  # the record's altitudes sit 1.8 to 4.3 kilometres apart
-        lengthscale_ballast=1e6,  # ballast is observed, so set large enough that it doesn't matter
         amplitude=world.error_scale,
         noise=1e-2,
         forecast_prior=True,

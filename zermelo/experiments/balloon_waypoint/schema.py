@@ -16,8 +16,8 @@ class ProblemConfig:
     frame: int = MISSING
     """Which recorded hour the episode's forecast is taken at"""
 
-    ballast_units: int = MISSING
-    """`b_0`: altitude changes the balloon can afford over the whole episode"""
+    resource_units: int = MISSING
+    """`r_0`: altitude changes the balloon can afford over the whole episode"""
 
     step_hours: float = MISSING
     """`h`: hours the wind carries the balloon for in one step"""
@@ -59,9 +59,6 @@ class BeliefConfig:
 
     lengthscale_altitude_km: float = MISSING
     """The same, vertically"""
-
-    lengthscale_ballast: float = MISSING
-    """The same along ballast, it's observed so is set large enough that it doesn't matter"""
 
     amplitude: float = MISSING
     """How wrong the method assumes the forecast is, as a standard deviation"""
