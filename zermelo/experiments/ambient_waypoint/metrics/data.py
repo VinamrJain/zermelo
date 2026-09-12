@@ -36,7 +36,6 @@ CURVES = {
     "cumulative_regret": ("cumulative regret", "linear"),
     "reconstruction_error": ("reconstruction error", "log"),
     "posterior_uncertainty": ("posterior uncertainty", "log"),
-    "predictive_log_likelihood": ("predictive log-likelihood", "linear"),
     "level_set_error": (f"level-set error at |f| > {LEVEL_SET_THRESHOLD:g}", "linear"),
 }
 """What an arm achieved, a value per move, as the words naming it and the scale it is drawn on"""
@@ -108,10 +107,6 @@ def episode_curves(held: dict[str, Any]) -> dict[str, Any]:
         "cumulative_regret": np.cumsum(regret),
         "reconstruction_error": np.sqrt(np.mean(residual**2, axis=(1, 2))),  # over cells and axes, per move
         "posterior_uncertainty": np.mean(np.exp(0.5 * log_variance), axis=(1, 2)),  # a deviation, in the field's units
-        # a Gaussian log density per axis, summed over one cell's axes and then averaged over the cells
-        "predictive_log_likelihood": np.mean(
-            np.sum(-0.5 * (np.log(2 * np.pi) + log_variance + residual**2 / np.exp(log_variance)), axis=-1), axis=-1
-        ),
         # share of cells the claim puts on the wrong side of the threshold
         "level_set_error": np.mean(above != (np.linalg.norm(mean, axis=-1) > LEVEL_SET_THRESHOLD), axis=-1),
     }

@@ -23,8 +23,6 @@ NOTATION = (
     (r"$f^\star(x)$", r"the field at $x$"),
     (r"$\mu_t(x)$, $v_t(x)$", rf"the mean and the log-variance claimed for $f^\star(x)$ after move $t$; $v_t \geq {LOG_VARIANCE_FLOOR:g}$"),
     (r"$s_t(x)$", r"$e^{v_t(x) / 2}$"),
-    (r"$\Sigma_t(x)$", r"$\mathrm{diag}\big(e^{v_t(x)}\big)$"),
-    (r"$\mathcal{N}(u; m, \Sigma)$", r"the Gaussian density at $u$"),
     (r"$\ell(u)$", rf"$\mathbf{{1}}[\|u\| > {LEVEL_SET_THRESHOLD:g}]$"),
     (r"$g$", r"$\max_{x \in X} \|f^\star(x)\|$"),
     (r"$b_t$", r"$\max_{u \leq t} \|f^\star(z_u)\|$"),
@@ -45,13 +43,6 @@ OUTCOME = (
     ("cumulative_regret", "cumulative regret", r"\sum_{t = 1}^{T} (g - b_t)", 0, "min"),
     ("reconstruction_error", "reconstruction error", r"\sqrt{\frac{1}{Cd} \sum_{x \in X} \|f^\star(x) - \mu_T(x)\|^2}", 3, "min"),
     ("posterior_uncertainty", "posterior uncertainty", r"\frac{1}{Cd} \sum_{x \in X, \, i \leq d} s_T(x)_i", 3, "min"),
-    (
-        "predictive_log_likelihood",
-        "predictive log-likelihood",
-        r"\frac{1}{C} \sum_{x \in X} \log \mathcal{N}\big(f^\star(x); \, \mu_T(x), \, \Sigma_T(x)\big)",
-        3,
-        "max",
-    ),
     ("level_set_error", "level-set error", r"\frac{1}{C} \big|\{ x \in X : \ell(f^\star(x)) \neq \ell(\mu_T(x)) \}\big|", 4, "min"),
 )
 """What an arm achieved, as its column of the per-move table, its name, its formula, its digits, and which end is better"""
