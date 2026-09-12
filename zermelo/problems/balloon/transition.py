@@ -202,3 +202,9 @@ class BalloonKernel(TransitionKernel[Act]):
         p = index % n_alt
         q = self.next_pos[index, jax.random.categorical(key, jnp.log(self.prob[index]))]
         return q * n_alt + self.altitude_at[action, p]
+
+    def step_cost(self, action: Act) -> Float[Array, " states"]:
+        """The resource one step spends: `c(s, a) = |altitude_at[a, p] - p|`"""
+        n_alt = self.altitude_at.shape[1]
+        per_altitude = jnp.abs(self.altitude_at[action] - jnp.arange(n_alt)).astype(jnp.float32)  # (alt,)
+        return jnp.tile(per_altitude, self.next_pos.shape[0] // n_alt)  # (states,), altitude varying fastest

@@ -39,6 +39,10 @@ class TransitionKernel[Action](ABC):
     def sample(self, key: PRNGKeyArray, index: Int[Array, ""], action: Action) -> Int[Array, ""]:
         """One step drawn from the same law, as an index into `domain`"""
 
+    def step_cost(self, action: Action) -> Float[Array, " n"] | None:
+        """What one step under `action` costs beyond the step itself, at every element of `domain`"""
+        return None
+
 
 @runtime_checkable
 class Analytic[Action, Hypothesis](Protocol):

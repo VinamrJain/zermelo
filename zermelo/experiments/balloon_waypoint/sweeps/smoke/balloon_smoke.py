@@ -14,7 +14,7 @@ from zermelo.experiments.balloon_waypoint.setup import (
 
 WORLD = dataclasses.replace(
     IRMA_JOSE,
-    ballast_units=2,
+    resource_units=2,
     error_scale=1.0,
     error_lengthscale_km=600.0,  # wide, so a handful of readings say something about the whole box
     target=point_speed(),
@@ -29,11 +29,11 @@ def _belief(oracle: bool) -> BeliefConfig:
     return dataclasses.replace(matched_belief(WORLD), oracle=oracle, n_features=32, refit_steps=20)
 
 
-def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int) -> MethodConfig:
+def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, cost_weight: float) -> MethodConfig:
     """One rule on a value-iteration planner, at the settings the arms differ in"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(max_steps=3, radius=120.0, target_chunk=None),
+        planner=value_iteration(max_steps=3, radius=120.0, target_chunk=None, cost_weight=cost_weight),
         improvement=improvement,
         n_fields=n_fields,
         n_walks=n_walks,
@@ -61,9 +61,10 @@ for name, resources in (
         seeds=[0],
         resources=resources,
         arms=[
-            arm("mean", _method(max_magnitude(), improvement=True, n_fields=0, n_walks=0), _belief(oracle=False)),
-            arm("oracle", _method(max_magnitude(), improvement=True, n_fields=0, n_walks=0), _belief(oracle=True)),
-            arm("ucb", _method(upper_confidence(c=2.0), improvement=False, n_fields=0, n_walks=0), _belief(oracle=False)),
+            # the priced arm, so a smoke run walks both the charged plan and the unpriced one
+            arm("mean", _method(max_magnitude(), improvement=True, n_fields=0, n_walks=0, cost_weight=0.25), _belief(oracle=False)),
+            arm("oracle", _method(max_magnitude(), improvement=True, n_fields=0, n_walks=0, cost_weight=0.0), _belief(oracle=True)),
+            arm("ucb", _method(upper_confidence(c=2.0), improvement=False, n_fields=0, n_walks=0, cost_weight=0.0), _belief(oracle=False)),
             arm("random", None, _belief(oracle=False)),  # no rule at all
         ],
     )

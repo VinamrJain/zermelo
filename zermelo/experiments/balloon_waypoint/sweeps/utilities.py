@@ -29,11 +29,13 @@ BELIEF = oracle_belief(IRMA_JOSE)
 """The true field on every arm, so a rule reading a spread reads zero"""
 
 
-def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, step_rate: float) -> MethodConfig:
+def _method(
+    utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, step_rate: float, cost_weight: float
+) -> MethodConfig:
     """This sweep's held values"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(max_steps=PLANNING_BUDGET, radius=ARRIVAL_RADIUS_KM, target_chunk=None),
+        planner=value_iteration(max_steps=PLANNING_BUDGET, radius=ARRIVAL_RADIUS_KM, target_chunk=None, cost_weight=cost_weight),
         improvement=improvement,
         n_fields=n_fields,
         n_walks=n_walks,
@@ -47,7 +49,7 @@ def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walk
 
 def _sampled(utility: Implementation, *, improvement: bool) -> MethodConfig:
     """`utility` at this sweep's draw counts and charge"""
-    return _method(utility, improvement=improvement, n_fields=16, n_walks=16, step_rate=0.5)
+    return _method(utility, improvement=improvement, n_fields=16, n_walks=16, step_rate=0.5, cost_weight=0.25)
 
 
 sweep(
@@ -64,6 +66,6 @@ sweep(
         arm("ucb2", _sampled(upper_confidence(2.0), improvement=False), BELIEF),
         arm("ei", _sampled(expected_improvement(), improvement=False), BELIEF),
         # a charge would bias a uniform draw, which spans [0, 1] whatever the field
-        arm("random_search", _method(uniform(), improvement=False, n_fields=0, n_walks=0, step_rate=0.0), BELIEF),
+        arm("random_search", _method(uniform(), improvement=False, n_fields=0, n_walks=0, step_rate=0.0, cost_weight=0.0), BELIEF),
     ],
 )

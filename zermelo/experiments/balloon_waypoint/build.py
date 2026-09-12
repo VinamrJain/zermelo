@@ -40,18 +40,24 @@ def assemble(cfg: RunConfig) -> Episode:
     error = GaussianError(
         length_scale_km=cfg.problem.error_lengthscale_km, amplitude_ms=cfg.problem.error_scale, jitter=cfg.problem.error_jitter
     )
-    states = balloon_states(grid, tuple(float(h) for h in recording.altitude_km), cfg.problem.ballast_units)
-    transition = balloon_transition(recording, states, cfg.problem.ballast_units, cfg.problem.step_hours)
+    states = balloon_states(grid, tuple(float(h) for h in recording.altitude_km))
+    transition = balloon_transition(recording, states, cfg.problem.step_hours)
     world = balloon_world(
-        recording, states, frame=cfg.problem.frame, error=error, transition=transition, readout=get_class(cfg.problem.readout)
+        recording,
+        states,
+        frame=cfg.problem.frame,
+        error=error,
+        transition=transition,
+        readout=get_class(cfg.problem.readout),
+        resource_units=cfg.problem.resource_units,
     )
     objective = balloon_objective(
         recording, states, instantiate(cfg.problem.target, _target_whitelist_=WHITELIST), cfg.problem.margin_lat, cfg.problem.margin_lon
     )
     candidates = objective.candidates
     forecast = GriddedWind(recording.at(cfg.problem.frame), grid)
-    # three horizontal coordinates in km, then altitude in km, then ballast
-    lengthscale = jnp.asarray([cfg.belief.lengthscale_km] * 3 + [cfg.belief.lengthscale_altitude_km, cfg.belief.lengthscale_ballast])
+    # three horizontal coordinates in km, then altitude in km
+    lengthscale = jnp.asarray([cfg.belief.lengthscale_km] * 3 + [cfg.belief.lengthscale_altitude_km])
     belief = (
         # the wind of the world the episode runs in, drawn on its key
         OracleBelief.empty(states, cfg.horizon, WIND_COMPONENTS, world.reset(k_world)[0]["field"])
