@@ -55,7 +55,7 @@ TABLE_CHANNELS = CURVE_CHANNELS + (
     "state/ambient",
     "state/controllable",
     "agent_state/steps_since_waypoint",
-    "agent_state/scores.predicted_steps",
+    "agent_state/scores.predicted_step_cost",
     "agent_state/scores.frac_zero_value_candidates",
     "agent_state/scores.frac_reachable_candidates",
     "reward",
@@ -133,7 +133,7 @@ def episode_legs(held: dict[str, Any], config: dict[str, Any]) -> dict[str, np.n
     return {
         "ended": ends.astype(float),
         "walked": walked,
-        "predicted": held["agent_state/scores.predicted_steps"][ends],
+        "predicted": held["agent_state/scores.predicted_step_cost"][ends],
         "arrived": (walked < budget).astype(float),  # a waypoint leg ends on arrival or on the budget: short means arrived
     }
 
