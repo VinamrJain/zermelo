@@ -283,16 +283,18 @@ class GPBelief(Belief):
         return lookup(self.positions, self._moments(self.coords)[0])
 
     def draw(self, key: PRNGKeyArray, n_fields: int) -> list[Function]:
-        """`n_fields` fields drawn from the posterior, one sampler call per component"""
+        """`n_fields` fields drawn from the posterior, field `s` keyed by `s` alone so a shorter draw is a prefix of a longer one"""
         x, y, keep, _ = self._conditioning()
         x, y = x[keep], y[keep]  # (k, dim), (k, m): gpjax takes the rows themselves, at one scalar noise
         width = self.data.r.shape[-1]
         posterior = self._posterior(self.coords.shape[-1], x.shape[0])
-        drawn = []
-        for j, k in enumerate(jax.random.split(key, width)):
-            if x.shape[0] == 0:  # gpjax's pathwise sampler needs a dataset; with none, the draw is from the prior
-                drawn.append(posterior.prior.sample_approx(n_fields, k, self.n_features)(self.coords))
-            else:
-                drawn.append(posterior.sample_approx(n_fields, gpx.Dataset(x, y[:, j : j + 1]), k, self.n_features)(self.coords))
-        table = jnp.stack(drawn, axis=-1)  # (n_states, n_fields, m)
-        return [lookup(self.positions, table[:, s]) for s in range(n_fields)]
+        fields = []
+        for s in range(n_fields):
+            drawn = []
+            for j, k in enumerate(jax.random.split(jax.random.fold_in(key, s), width)):
+                if x.shape[0] == 0:  # gpjax's pathwise sampler needs a dataset; with none, the draw is from the prior
+                    drawn.append(posterior.prior.sample_approx(1, k, self.n_features)(self.coords))
+                else:
+                    drawn.append(posterior.sample_approx(1, gpx.Dataset(x, y[:, j : j + 1]), k, self.n_features)(self.coords))
+            fields.append(lookup(self.positions, jnp.stack(drawn, axis=-1)[:, 0]))  # (n_states, m), the one path drawn
+        return fields

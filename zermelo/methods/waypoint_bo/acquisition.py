@@ -97,8 +97,10 @@ class Acquisition:
         k_indices, k_field, k_plan, k_walk, k_utility = jax.random.split(key, 5)
         candidate_indices = jnp.flatnonzero(candidates.live)
         if self.n_candidates is not None:
-            candidate_indices = jax.random.choice(k_indices, candidate_indices, (self.n_candidates,), replace=False)
-        walk_keys = jax.random.split(k_walk, max(self.n_walks, 1))
+            # a prefix of one permutation, so a shorter shortlist is a subset of every longer one
+            candidate_indices = jax.random.permutation(k_indices, candidate_indices)[: self.n_candidates]
+        # keyed by index, so the draws of a smaller n_walks are a subset of a larger one
+        walk_keys = jax.vmap(jax.random.fold_in, in_axes=(None, 0))(k_walk, jnp.arange(max(self.n_walks, 1)))
         held, n_scored = belief.data, candidate_indices.shape[0]
         # pi[mu_n], solved once and reused
         mean_policy = self.planner.plan(k_plan, transition.kernel(belief.mean()), candidate_indices, actions)
@@ -106,7 +108,8 @@ class Acquisition:
 
         # f-hat^(1..S)
         fields = [belief.mean()] if self.n_fields == 0 else belief.draw(k_field, self.n_fields)
-        for k_score, field in zip(jax.random.split(k_utility, len(fields)), fields, strict=True):
+        score_keys = jax.vmap(jax.random.fold_in, in_axes=(None, 0))(k_utility, jnp.arange(len(fields)))  # keyed by index
+        for k_score, field in zip(score_keys, fields, strict=True):
             kernel = transition.kernel(field)  # p(.|f-hat)
             values = field(elements(kernel.domain))  # f-hat(z), one row per cell of the position domain
             held_under_field = Dataset(held.z, values[held.z], held.live)  # D_n, its readings re-taken from f-hat
