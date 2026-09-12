@@ -1,6 +1,6 @@
 """What a balloon sees: where it is, what it has left, the wind it measures, and the forecast it was given
 
-s = (lat, lon, p, b, W)     where it is, which altitude, what ballast is left, the true wind
+s = (lat, lon, p, r, W)     where it is, which altitude, what resource is left, the true wind
 W(lat, lon, p) = (u, v)     metres per second, u eastward and v northward
 F                           the forecast, known everywhere from the start
 """
@@ -40,12 +40,24 @@ class BalloonReadout(Readout):
 
     @property
     def readings(self) -> Domain:
-        """Where the balloon is, one measurement of W, and F"""
-        return ProductDomain({"position": self.states, "wind": BoxDomain(self.wind_shape), "forecast": BoxDomain(self.forecast.shape)})
+        """Where the balloon is, what it has left, one measurement of W, and F"""
+        return ProductDomain(
+            {
+                "position": self.states,
+                "balloon_resource": BoxDomain(()),
+                "wind": BoxDomain(self.wind_shape),
+                "forecast": BoxDomain(self.forecast.shape),
+            }
+        )
 
     def reset(self, key: PRNGKeyArray, state: dict[str, Any]) -> dict[str, Any]:
         """The reading before acting"""
-        return {"position": {part: state[part] for part in self.states.parts}, "wind": self.measure(state), "forecast": self.forecast}
+        return {
+            "position": {part: state[part] for part in self.states.parts},
+            "balloon_resource": state["balloon_resource"],
+            "wind": self.measure(state),
+            "forecast": self.forecast,
+        }
 
     def step(self, key: PRNGKeyArray, state: dict[str, Any], action: Any, next_state: dict[str, Any]) -> dict[str, Any]:
         """The reading after acting"""

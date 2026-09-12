@@ -150,9 +150,6 @@ class Steps(Domain[Int[Array, ""]], Enumerable[Int[Array, ""]], Embeddable[Int[A
         return jnp.argmin(jnp.abs(jnp.asarray(self.coordinate) - v[..., :1]), axis=-1)
 
 
-def balloon_states(grid: SphereGrid, altitude_km: tuple[float, ...], ballast_units: int) -> ProductDomain:
-    """The state domain: where the balloon is, which altitude it flies at, and what it has left to spend.
-
-    Altitude embeds to kilometres; ballast to a constant, since no distance should read it.
-    """
-    return ProductDomain({"position": grid, "altitude": Steps(altitude_km), "ballast": Steps((0.0,) * (ballast_units + 1))})
+def balloon_states(grid: SphereGrid, altitude_km: tuple[float, ...]) -> ProductDomain:
+    """The state domain: where the balloon is, and which altitude it flies at."""
+    return ProductDomain({"position": grid, "altitude": Steps(altitude_km)})

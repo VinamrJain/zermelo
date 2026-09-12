@@ -10,10 +10,10 @@ from jaxtyping import Array, Float, PRNGKeyArray
 
 from zermelo.interface import BoxDomain, Domain, Enumerable, FunctionDomain, Prior, ProductDomain, ProductPrior, Uniform, World
 from zermelo.problems.balloon.field import ForecastPrior, WindError
-from zermelo.problems.balloon.grid import SphereGrid, balloon_states
+from zermelo.problems.balloon.grid import SphereGrid, Steps
 from zermelo.problems.balloon.objective import StormSearch, Target, balloon_candidates
 from zermelo.problems.balloon.readout import BalloonReadout
-from zermelo.problems.balloon.transition import Advection, Ascent, BalloonTransition, Expenditure
+from zermelo.problems.balloon.transition import Advection, Ascent, BalloonTransition
 
 
 class Highest(Prior[Any]):
@@ -61,21 +61,28 @@ def load_wind(path: Path) -> WindRecord:
     return WindRecord(jnp.asarray(wind), jnp.asarray(raw["hours"]), jnp.asarray(raw["altitude_km"]), grid)
 
 
-def balloon_transition(recording: WindRecord, states: ProductDomain, ballast_units: int, step_hours: float) -> BalloonTransition:
-    """One step of the balloon over `states`: the wind carries it, the action moves it an altitude, that costs ballast"""
-    ascent = Ascent(recording.n_alt)
-    return BalloonTransition(Advection(recording.grid, step_hours), ascent, Expenditure(ascent, ballast_units + 1), states)
+def balloon_transition(recording: WindRecord, states: ProductDomain, step_hours: float) -> BalloonTransition:
+    """One step of the balloon over `states`: the wind carries it, and the action moves it an altitude"""
+    return BalloonTransition(Advection(recording.grid, step_hours), Ascent(recording.n_alt), states)
 
 
 def balloon_world(
-    recording: WindRecord, states: ProductDomain, frame: int, error: WindError, transition: BalloonTransition, readout: type[BalloonReadout]
+    recording: WindRecord,
+    states: ProductDomain,
+    frame: int,
+    error: WindError,
+    transition: BalloonTransition,
+    readout: type[BalloonReadout],
+    resource_units: int,
 ) -> World:
     """The problem a recorded field poses: the balloon starts anywhere, and the wind is the record plus an error"""
     grid, forecast = recording.grid, recording.at(frame)
     return World(
-        state_domain=ProductDomain({**states.parts, "field": FunctionDomain(grid, BoxDomain((2,)))}),
+        state_domain=ProductDomain(
+            {**states.parts, "balloon_resource": Steps((0.0,) * (resource_units + 1)), "field": FunctionDomain(grid, BoxDomain((2,)))}
+        ),
         prior=ProductPrior(
-            {"position": Uniform(), "altitude": Uniform(), "ballast": Highest(), "field": ForecastPrior(forecast, error, grid)}
+            {"position": Uniform(), "altitude": Uniform(), "balloon_resource": Highest(), "field": ForecastPrior(forecast, error, grid)}
         ),
         transition=transition,
         readout=readout(grid, recording.n_alt, forecast, states),
