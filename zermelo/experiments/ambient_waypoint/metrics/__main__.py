@@ -15,8 +15,8 @@ from zermelo.experiments.ambient_waypoint.metrics.data import (
 )
 from zermelo.experiments.ambient_waypoint.render.style import Style
 
-SWEEPS = Path("results")
-"""Where a sweep named rather than pointed at is looked for"""
+SWEEPS = Path("results") / __package__.split(".")[-2]
+"""Where a sweep named rather than pointed at is looked for: this experiment's own results"""
 
 asked = Path(sys.argv[1])
 where = asked if asked.exists() else SWEEPS / asked

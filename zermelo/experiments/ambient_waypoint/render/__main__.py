@@ -21,8 +21,8 @@ from zermelo.experiments.ambient_waypoint.render.replay import cells, read  # no
 from zermelo.experiments.ambient_waypoint.render.style import Style  # noqa: E402
 from zermelo.experiments.ambient_waypoint.render.submit import send  # noqa: E402
 
-SWEEPS = Path("results")
-"""Where a sweep named rather than pointed at is looked for"""
+SWEEPS = Path("results") / __package__.split(".")[-2]
+"""Where a sweep named rather than pointed at is looked for: this experiment's own results"""
 
 
 def arms_of(launch: Path) -> list[str]:
