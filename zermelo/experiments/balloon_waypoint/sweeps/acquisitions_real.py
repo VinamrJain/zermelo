@@ -16,7 +16,6 @@ from zermelo.experiments.balloon_waypoint.schema import MethodConfig
 from zermelo.experiments.balloon_waypoint.setup import (
     Implementation,
     arm,
-    expected_improvement,
     max_magnitude,
     posterior_spread,
     sweep,
@@ -53,13 +52,12 @@ sweep(
     horizon=HORIZON_LENGTH,
     claim_every=CLAIM_EVERY_STEPS,
     seeds=range(N_SEEDS),
-    resources=dataclasses.replace(RESOURCES, mem_gb=16, timeout_min=480, array_parallelism=40),
+    resources=RESOURCES,
     arms=[
         arm("random_act", None, BELIEF),  # no rule at all: acts uniformly and claims the prior
         arm("random_search", _method(uniform(), improvement=False, n_fields=0, n_walks=0, step_rate=0.0, cost_weight=0.0), BELIEF),
         arm("max_variance", _method(posterior_spread(), improvement=False, n_fields=0, n_walks=0, step_rate=0.0, cost_weight=0.0), BELIEF),
         arm("ucb2", _method(upper_confidence(2.0), improvement=False, n_fields=0, n_walks=0, step_rate=0.0, cost_weight=0.0), BELIEF),
-        arm("ei", _method(expected_improvement(), improvement=False, n_fields=0, n_walks=0, step_rate=0.0, cost_weight=0.0), BELIEF),
         arm("mc_ei16", _method(max_magnitude(), improvement=True, n_fields=16, n_walks=0, step_rate=0.0, cost_weight=0.0), BELIEF),
         arm("thompson", _method(max_magnitude(), improvement=False, n_fields=1, n_walks=0, step_rate=0.0, cost_weight=0.0), BELIEF),
         # the rule this study proposes: a step costs 1 + 0.25 * the resource it spends
