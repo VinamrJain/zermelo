@@ -8,9 +8,9 @@ h                           hours in one step
 
 Two factors write (lat, lon, p), and the resource follows from what they did:
 
-    (i, j)' = round((i, j) + d),  d = the wind's displacement in cells      Advection
-    p'      = p + a - 1           where r > 0 and 0 <= p' < n_altitudes     Ascent
-    r'      = r - |p' - p|                                                  Resource spent per move
+    (i, j)' ~ (i, j) + d           d the wind's step in cells, each axis rounded   Advection
+    p'      = p + a - 1            where r > 0 and 0 <= p' < n_altitudes           Ascent
+    r'      = r - |p' - p|                                                         Resource
 """
 
 import dataclasses
@@ -48,14 +48,13 @@ class Factor[Action](ABC):
 
 @dataclass(frozen=True)
 class Advection(Factor[Act]):
-    """The wind carries the balloon, each axis rounding down or up on its own.
+    """One advected step, each axis rounded independently:
 
-        exact = (i, j) + d,   d the wind's step in cells
-        f = floor(exact),     u = exact - f in [0, 1)
+        (a, b) = (i, j) + d                       d the wind's step in cells
+        i' = floor(a) + Bernoulli(a - floor(a))
+        j' = floor(b) + Bernoulli(b - floor(b))
 
-        P(i' = clip(f_lat + m), j' = clip(f_lon + n)) = (m ? u_lat : 1 - u_lat) * (n ? u_lon : 1 - u_lon)
-
-    for m, n in {0, 1}, clipping onto [0, n_lat - 1] and [0, n_lon - 1]. Zero at every other cell.
+    then clipped onto the grid.
     """
 
     grid: SphereGrid
@@ -66,13 +65,13 @@ class Advection(Factor[Act]):
         return "position"
 
     def offset(self, state: dict[str, Any]) -> Float[Array, "*batch 2"]:  # states batch along a leading axis
-        """The step in cells: (v, u) * h * 3.6 km / km_per_degree(lat) / degrees_per_cell"""
+        """d = (v, u) * h * 3.6 / km_per_degree(lat) / degrees_per_cell, the wind's step in cells"""
         wind = state["field"]({part: state[part] for part in state if part != "field"})  # (..., 2) as (u, v)
         km = jnp.stack([wind[..., 1], wind[..., 0]], axis=-1) * self.step_hours * 3.6  # (..., 2) as (lat, lon)
         return km / self.grid.km_per_degree(state["position"][..., 0]) / self.grid.steps
 
     def sample(self, key: PRNGKeyArray, state: dict[str, Any], action: Act) -> Float[Array, "*batch 2"]:
-        """One draw of (i, j)': each axis takes f + 1 with probability u and f otherwise, then clips onto the grid"""
+        """One draw of (i, j)'"""
         exact = self.grid.cell_of(state["position"]) + self.offset(state)
         rounded = jnp.floor(exact) + (jax.random.uniform(key, exact.shape) < exact - jnp.floor(exact))
         return self.grid.coords_of(jnp.clip(rounded, 0, self.grid.shape - 1).astype(jnp.int32))
@@ -133,9 +132,16 @@ class BalloonTransition(Transition[Act]):
         return {**out, "balloon_resource": state["balloon_resource"] - spent, "field": state["field"]}
 
     def wind_step(self, hypothesis: Function) -> tuple[Int[Array, "pos_alt 4"], Float[Array, "pos_alt 4"]]:
-        """The four cells the wind may carry (lat, lon) to from each (lat, lon, p), and their probabilities.
+        """The four cells one advected step may land on, and their probabilities:
 
-        (pos_alt, 4) each, pos_alt = pos * alt: W reads neither the resource nor a, so one row serves both.
+            (a, b) = (i, j) + d                  d the wind's step in cells under `hypothesis`
+            m = floor(a),  w = a - m
+            n = floor(b),  u = b - n
+
+            P(m,     n)     = (1 - w)(1 - u)     P(m,     n + 1) = (1 - w) u
+            P(m + 1, n)     =      w (1 - u)     P(m + 1, n + 1) =      w  u
+
+        each cell clipped onto the grid. Both (pos_alt, 4), altitude varying fastest.
         """
         grid, pos, n_alt = self.advection.grid, self.advection.grid.size(), self.ascent.n_altitudes
         cells = jnp.repeat(grid.elements(), n_alt, axis=0)  # (pos_alt, 2), altitude varying fastest
