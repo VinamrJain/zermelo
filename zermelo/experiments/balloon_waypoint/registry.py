@@ -66,7 +66,7 @@ N_CANDIDATES = None
 N_SEEDS = 1
 """Instances every arm is run on, seeded `0` to `N_SEEDS - 1`"""
 
-RESOURCES = Resources(cpus=2, mem_gb=16, timeout_min=360, gres="gpu:1", partition="gpu", constraint="avx2&gpu-high", array_parallelism=64)
+RESOURCES = Resources(cpus=2, mem_gb=16, timeout_min=30, gres="gpu:1", partition="gpu", constraint="avx2&gpu-high", array_parallelism=64)
 """What one cell of a sweep is given. A sweep wanting more states its own with `dataclasses.replace`.
 
 `avx2` and `gpu-high` are node features. Dropping either lands cells on nodes where jaxlib fails to
