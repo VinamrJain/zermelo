@@ -13,32 +13,39 @@ across seeds on a cluster.
 
 ## Install and check
 
-    pixi install                      # https://pixi.sh
-    pixi run check                    # ruff, mypy, import-linter. Static: runs no episode
-    pixi run smoke                    # runs a sweep end to end and draws it. The only thing that verifies a plot
-    pixi run -e cuda smoke-gpu        # the same cells as one Slurm array on a gpu node
-    pixi run crosscheck               # our acquisitions against botorch's, on a problem both can express
+    pixi install                              # https://pixi.sh
+    pixi run check                            # ruff, mypy, import-linter. Static: runs no episode
+    pixi run smoke <experiment>               # a sweep end to end and its figures. The only thing that verifies a plot
+    pixi run -e cuda smoke-gpu <experiment>   # the same cells as one Slurm array on a gpu node
+    pixi run crosscheck <name>                # compare our implementation against standard libraries
 
 Python 3.14 or newer (uses PEP 695 generics)
 
 ## Run
 
-    pixi run sweep <name>             # Lauches a sweep locally
-    pixi run submit <name>            # Launches a sweep as one Slurm array
-    pixi run draw <directory>         # draw the figures for the launch
-    pixi run render <cell>            # Snapshot of an episode at a particular time
-    pixi run film <cell>              # the video of the entire episode (per run individually or per seed or even across the sweep)
+    pixi run sweep  <experiment> <name>       # every cell of one sweep, serially, in this process
+    pixi run submit <experiment> <name>       # the same cells as one Slurm array
+    pixi run draw   <experiment> <target>     # the figures and tables for one sweep
+    pixi run render <experiment> <target>     # one recorded episode as a still
+    pixi run film   <experiment> <target>     # the same sheets as video, submitted rather than drawn here
 
-`pixi task list` names every task, and every sweep is one module under
-`zermelo/experiments/ambient_waypoint/sweeps/`. Put `--` before any override; 
 
-    pixi run submit acquisitions -- resources.partition=<partition> resources.cpus=2
-    pixi run -e cuda submit acquisitions -- resources.gres=gpu:1
+    pixi run draw   balloon_waypoint acquisitions_oracle
+    pixi run render balloon_waypoint acquisitions_oracle -- --arm all
+
+`pixi task list` names every task. Put `--` before any override or flag:
+
+    pixi run submit balloon_waypoint acquisitions_oracle -- resources.partition=<partition> resources.cpus=2
+    pixi run -e cuda submit ambient_waypoint acquisitions -- resources.gres=gpu:1
+    pixi run film balloon_waypoint acquisitions_oracle -- --arm <arm> --stride 5 --fps 2
+
+Sweep output is written under `results/<experiment>/<sweep>/<launch timestamp>/`
 
 ## Layout
 
-    zermelo/interface/     The contracts. Imports stdlib, jax and jaxtyping.
+    zermelo/interface/     the contracts. Imports stdlib, jax and jaxtyping
     zermelo/problems/      one package per problem, its modules mirroring the contracts they implement
-    zermelo/methods/       one directory per method family;
+    zermelo/methods/       one directory per method family, an ABC above its own concretes
     zermelo/run/           the driver, the record and the cluster settings. Generic in problem and in method
-    zermelo/experiments/   one package per pairing of a problem with a method family.
+    zermelo/experiments/   one package per pairing of a problem with a method family, holding its settings,
+                           its `sweeps/`, its `metrics/` and its `render/`
