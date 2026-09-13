@@ -63,6 +63,8 @@ pandas-stubs = ">=2.0"
 [feature.viz.dependencies]
 matplotlib = ">=3.7.0"
 ffmpeg = ">=6"  # the binary `matplotlib.animation.FFMpegWriter` shells out to
+cmocean = ">=4"
+cartopy = ">=0.24"  # for coastlines
 tectonic = ">=0.17.0,<0.18"
 
 [feature.gp.pypi-dependencies]
