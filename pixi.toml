@@ -13,7 +13,7 @@ smoke = "python -m zermelo.experiments.ambient_waypoint +sweep=smoke && python -
 [tasks.crosscheck]
 args = ["name"]
 cmd = "python -m checks.{{ name }}"
-description = "Validate one of our implementations against the library it is checked against: botorch_acquisitions"
+description = "Validate one of our implementations against the library it is checked against: botorch_acquisitions, pathwise_sampling"
 
 # Put `--` before any override or flag: `pixi run film acquisitions -- --arm all --dpi medium`
 [tasks.sweep]
