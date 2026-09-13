@@ -115,8 +115,10 @@ def draw_curves(
     """Every curve of `drawn` on one sheet under one key, two panels across"""
     columns = 2
     figure, panels = _sheet(int(np.ceil(len(drawn) / columns)), columns, style)
-    for panel, curve in zip(panels.flat, drawn, strict=True):
+    for panel, curve in zip(panels.flat, drawn, strict=False):
         _lines(panel, data, curve, colours, names, opening, style)
+    for spare in list(panels.flat)[len(drawn) :]:  # an odd count leaves the last cell of the grid empty
+        spare.set_axis_off()
     figure.suptitle(title, fontsize=style.title_size, color=style.ink, x=0.012, ha="left")
     _key(figure, panels.flat[0], _band(tuple(drawn), data["seed"].nunique(), opening), style)
     figure.savefig(into, dpi=style.dpi, facecolor=style.paper)
@@ -158,7 +160,9 @@ def draw_cost(
     columns = 2
     figure, panels = _sheet(int(np.ceil(len(CURVES) / columns)), columns, style)
     ended = data.sort_values("step").groupby(["arm", "seed"]).last()
-    for panel, curve in zip(panels.flat, CURVES, strict=True):
+    for spare in list(panels.flat)[len(CURVES) :]:  # an odd count leaves the last cell of the grid empty
+        spare.set_axis_off()
+    for panel, curve in zip(panels.flat, CURVES, strict=False):
         for arm in sorted(names):
             reached, seconds = ended[curve].loc[arm], spent.loc[spent["arm"] == arm, "seconds_per_move"]
             middle, sideways = float(reached.median()), float(seconds.mean())
