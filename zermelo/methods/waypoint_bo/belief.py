@@ -10,6 +10,7 @@ from typing import Any, Self
 import gpjax as gpx
 import jax
 import jax.numpy as jnp
+from gpjax.kernels import RFF
 from gpjax.kernels.stationary.base import StationaryKernel
 from jax.scipy.linalg import solve_triangular
 from jax.tree_util import register_dataclass
@@ -283,18 +284,35 @@ class GPBelief(Belief):
         return lookup(self.positions, self._moments(self.coords)[0])
 
     def draw(self, key: PRNGKeyArray, n_fields: int) -> list[Function]:
-        """`n_fields` fields drawn from the posterior, field `s` keyed by `s` alone so a shorter draw is a prefix of a longer one"""
+        """`n_fields` fields drawn from the posterior, a shorter draw being the opening of a longer one
+
+        Time O(n_read^3 + n_fields (n_states n_features + n_read n_states)).
+        """
         x, y, keep, _ = self._conditioning()
-        x, y = x[keep], y[keep]  # (k, dim), (k, m): gpjax takes the rows themselves, at one scalar noise
+        x, y = x[keep], y[keep]  # (n_read, dim), (n_read, m): the distinct cells read
         width = self.data.r.shape[-1]
-        posterior = self._posterior(self.coords.shape[-1], x.shape[0])
-        fields = []
-        for s in range(n_fields):
-            drawn = []
-            for j, k in enumerate(jax.random.split(jax.random.fold_in(key, s), width)):
-                if x.shape[0] == 0:  # gpjax's pathwise sampler needs a dataset; with none, the draw is from the prior
-                    drawn.append(posterior.prior.sample_approx(1, k, self.n_features)(self.coords))
-                else:
-                    drawn.append(posterior.sample_approx(1, gpx.Dataset(x, y[:, j : j + 1]), k, self.n_features)(self.coords))
-            fields.append(lookup(self.positions, jnp.stack(drawn, axis=-1)[:, 0]))  # (n_states, m), the one path drawn
-        return fields
+        drawn = [self._paths(jax.random.split(key, width)[j], x, y[:, j], n_fields) for j in range(width)]
+        table = jnp.stack(drawn, axis=-1)  # (n_fields, n_states, m)
+        return [lookup(self.positions, table[s]) for s in range(n_fields)]
+
+    def _paths(
+        self, key: PRNGKeyArray, x: Float[Array, "n_read dim"], y: Float[Array, " n_read"], n_fields: int
+    ) -> Float[Array, "n_fields n_states"]:
+        """`n_fields` draws of one field component at every cell:
+
+        f_s(z) = Phi(z) theta_s + k(z, x) v_s,   v_s = (K + noise^2 I)^-1 (y + eps_s - Phi(x) theta_s)
+        """
+        kernel = self.kernel_family(lengthscale=self.lengthscale, variance=self.amplitude**2, n_dims=x.shape[-1])
+        basis = RFF(base_kernel=kernel, num_basis_fns=self.n_features, key=key)
+        scale = jnp.sqrt(self.amplitude**2 / self.n_features)
+        theta = jax.random.normal(key, (n_fields, 2 * self.n_features))  # (n_fields, 2 n_features): row s is path s
+        features = basis.compute_features(self.coords) * scale  # (n_states, 2 n_features)
+        prior_part = theta @ features.T  # (n_fields, n_states)
+        if x.shape[0] == 0:  # nothing read: the draw is from the prior
+            return prior_part
+        # drawn (n_fields, n_read) then turned: filling the other way round would change path s with n_fields
+        eps = self.noise * jax.random.normal(key, (n_fields, x.shape[0])).T  # (n_read, n_fields)
+        gram = kernel.gram(x).to_dense() + (self.noise**2 + 1e-6) * jnp.eye(x.shape[0])  # (n_read, n_read)
+        residual = y[:, None] + eps - (basis.compute_features(x) * scale) @ theta.T  # (n_read, n_fields)
+        canonical = jnp.linalg.solve(gram, residual)  # (n_read, n_fields): one factorization, a column per field
+        return prior_part + (kernel.cross_covariance(self.coords, x) @ canonical).T
