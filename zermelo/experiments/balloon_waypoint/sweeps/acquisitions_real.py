@@ -68,7 +68,7 @@ sweep(
         ),
         # the same rule charging the step alone, isolating what the resource term buys
         arm(
-            "eui_fields16_walks16_rate0p5_steps",
+            "eui_fields16_walks16_rate0p5_no_resource",
             _method(max_magnitude(), improvement=True, n_fields=16, n_walks=16, step_rate=0.5, cost_weight=0.0),
             BELIEF,
         ),
