@@ -2,7 +2,7 @@
 
 s = (lat, lon, p, r, W)     where it is, which altitude, what resource is left, the wind it moves in
 a in {0, 1, 2}              down one, hold, up one
-W(lat, lon, p) = (u, v)     the wind there, metres per second, u eastward and v northward
+W(lat, lon, p) = (u, v)     the wind there (m/s), u eastward and v northward
 h                           hours in one step
 (i, j)                      the grid cell of (lat, lon): i the row, j the column
 

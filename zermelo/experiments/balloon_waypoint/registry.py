@@ -53,7 +53,7 @@ OPENING_LEGS = 1
 """Waypoint legs of uniform random walking taken before the rule starts"""
 
 HORIZON_LENGTH = 1000
-"""`T`: moves an episode makes, at three hours a move"""
+"""`T`: moves an episode makes, at 3 hours a move"""
 
 CLAIM_EVERY_STEPS = 1
 """Moves between re-readings of the claim off a belief"""

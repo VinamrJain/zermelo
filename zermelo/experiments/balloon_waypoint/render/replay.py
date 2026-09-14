@@ -66,10 +66,10 @@ class Replay:
     """Height one degree of latitude is drawn at, per degree of longitude, at the box's own middle"""
 
     altitude_km: tuple[float, ...]
-    """What each altitude index stands for, in kilometres"""
+    """What each altitude index stands for, in km"""
 
     wind: Float[np.ndarray, "alt lat lon uv"]
-    """W at every altitude and cell, as (u, v) in metres per second"""
+    """W at every altitude and cell, as (u, v) in m/s"""
 
     speed: Float[np.ndarray, "alt lat lon"]
     """||W|| there"""

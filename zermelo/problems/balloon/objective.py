@@ -1,6 +1,6 @@
 """What a balloon is scored on: predicting where a chosen reading of the wind is largest
 
-W(lat, lon, p) = (u, v)     the wind, metres per second, u eastward and v northward
+W(lat, lon, p) = (u, v)     the wind (m/s), u eastward and v northward
 g(W; lat, lon)              the scalar g reads off W at one cell
 claim                       g predicted at every candidate cell, as a mean and a log-variance
 """

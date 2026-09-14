@@ -1,7 +1,7 @@
 """What a balloon sees: where it is, what it has left, the wind it measures, and the forecast it was given
 
 s = (lat, lon, p, r, W)     where it is, which altitude, what resource is left, the true wind
-W(lat, lon, p) = (u, v)     metres per second, u eastward and v northward
+W(lat, lon, p) = (u, v)     wind in m/s, u eastward and v northward
 F                           the forecast, known everywhere from the start
 """
 

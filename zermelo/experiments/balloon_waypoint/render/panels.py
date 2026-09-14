@@ -134,7 +134,7 @@ def raster(ax: Axes, replay: Replay, name: str, move: int, style: Style, *, crop
 
 
 def ladder(ax: Axes, replay: Replay, move: int, style: Style) -> None:
-    """The altitudes as rungs, the one being flown filled, each named in kilometres"""
+    """The altitudes as rungs, the one being flown filled, each named in km"""
     here = int(replay.flown[min(move, replay.flown.size - 1)])
     ax.set_xlim(0.0, 1.0)
     ax.set_ylim(-0.6, len(replay.altitude_km) - 0.4)

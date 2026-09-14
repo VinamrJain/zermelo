@@ -15,7 +15,7 @@ from zermelo.experiments.balloon_waypoint.metrics.data import LEVEL_SET_THRESHOL
 NOTATION = (
     (r"$Z$, $N$", r"states of the grid and its altitudes; $N = |Z|$"),
     (r"$X \subset Z$, $C$", r"the candidates a claim is made at; $C = |X|$"),
-    (r"$W(x)$", r"the wind at $x$, as $(u, v)$ in metres per second"),
+    (r"$W(x)$", r"the wind at $x$, as $(u, v)$ in m/s"),
     (r"$\|u\|$", r"$(u_1^2 + u_2^2)^{1/2}$"),
     (r"$T$, $t$, $S$", r"moves one episode makes, $t = 1 \ldots T$; $S$ seeds per arm"),
     (r"$T_0$", r"$L \times (\text{opening legs})$, walked at random before any waypoint exists"),
@@ -23,7 +23,7 @@ NOTATION = (
     (r"$g(x)$", r"the scalar the target reads off $W$ at $x$"),
     (r"$\mu_t(x)$, $v_t(x)$", rf"the mean and the log-variances claimed for $W(x)$ after move $t$; $v_t \geq {LOG_VARIANCE_FLOOR:g}$"),
     (r"$s_t(x)$", r"$\big(\sum_{i \leq 2} e^{v_t(x)_i}\big)^{1/2}$"),
-    (r"$\ell(a)$", rf"$\mathbf{{1}}[a > {LEVEL_SET_THRESHOLD:g}]$, at a speed in metres per second"),
+    (r"$\ell(a)$", rf"$\mathbf{{1}}[a > {LEVEL_SET_THRESHOLD:g}]$, at a speed in m/s"),
     (r"$g^\star$", r"$\max_{x \in X} g(x)$"),
     (r"$b_t$", r"$\max_{u \leq t} \|W(z_u, p_u)\|$"),
     (r"$L$, $\rho$", r"the planner's truncation; how close to a waypoint counts as arrival"),

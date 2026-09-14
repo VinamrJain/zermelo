@@ -1,6 +1,6 @@
 """Every number one sweep run is read by, off its records
 
-W(lat, lon, p) = (u, v)     the wind, metres per second
+W(lat, lon, p) = (u, v)     the wind (m/s)
 g                           the scalar the target reads off W at one candidate
 claim                       (mu_u, mu_v, log var_u, log var_v) at every candidate
 """
@@ -18,7 +18,7 @@ LOG_VARIANCE_FLOOR = -12.0
 """Smallest log-variance a claim is read at"""
 
 LEVEL_SET_THRESHOLD = 30.0
-"""Wind speed in metres per second the level-set error is measured at"""
+"""Wind speed (m/s) the level-set error is measured at"""
 
 RULES = {
     "random": "uniform random actions",
@@ -118,7 +118,7 @@ def episode_curves(held: dict[str, Any]) -> dict[str, Any]:
         "simple_regret": regret,
         "cumulative_regret": np.cumsum(regret),
         "reconstruction_error": np.sqrt(np.mean((speed - truth) ** 2, axis=-1)),  # over candidates, per move
-        "posterior_uncertainty": np.mean(spread, axis=-1),  # a deviation, in metres per second
+        "posterior_uncertainty": np.mean(spread, axis=-1),  # a deviation (m/s)
         # share of candidates the claim puts on the wrong side of the threshold
         "level_set_error": np.mean((truth > LEVEL_SET_THRESHOLD) != (speed > LEVEL_SET_THRESHOLD), axis=-1),
     }
