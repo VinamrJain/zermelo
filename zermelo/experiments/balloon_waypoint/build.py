@@ -59,6 +59,8 @@ def assemble(cfg: RunConfig) -> Episode:
         transition=transition,
         readout=get_class(cfg.problem.readout),
         resource_units=cfg.problem.resource_units,
+        margin_lat=cfg.problem.margin_lat,
+        margin_lon=cfg.problem.margin_lon,
     )
     objective = balloon_objective(
         recording, states, instantiate(cfg.problem.target, _target_whitelist_=WHITELIST), cfg.problem.margin_lat, cfg.problem.margin_lon

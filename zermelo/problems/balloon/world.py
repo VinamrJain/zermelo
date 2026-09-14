@@ -11,7 +11,7 @@ from jaxtyping import Array, Float, PRNGKeyArray
 from zermelo.interface import BoxDomain, Domain, Enumerable, FunctionDomain, Prior, ProductDomain, ProductPrior, Uniform, World
 from zermelo.problems.balloon.field import ForecastPrior, WindError
 from zermelo.problems.balloon.grid import SphereGrid, Steps
-from zermelo.problems.balloon.objective import StormSearch, Target, balloon_candidates
+from zermelo.problems.balloon.objective import StormSearch, Target, balloon_candidates, balloon_interior
 from zermelo.problems.balloon.readout import BalloonReadout
 from zermelo.problems.balloon.transition import Advection, Ascent, BalloonTransition
 
@@ -85,12 +85,19 @@ def balloon_world(
     transition: BalloonTransition,
     readout: type[BalloonReadout],
     resource_units: int,
+    margin_lat: int,
+    margin_lon: int,
 ) -> World:
-    """The problem a forecast poses: the balloon starts anywhere, and the wind is that forecast plus an error"""
+    """The problem a forecast poses: the balloon starts over the grid's interior, and the wind is that forecast plus an error"""
     grid = recording.grid
     return World(
         state_domain=ProductDomain(
-            {**states.parts, "balloon_resource": Steps((0.0,) * (resource_units + 1)), "field": FunctionDomain(grid, BoxDomain((2,)))}
+            {
+                **states.parts,
+                "position": grid.narrow(balloon_interior(grid, margin_lat, margin_lon)),
+                "balloon_resource": Steps((0.0,) * (resource_units + 1)),
+                "field": FunctionDomain(grid, BoxDomain((2,))),
+            }
         ),
         prior=ProductPrior(
             {"position": Uniform(), "altitude": Uniform(), "balloon_resource": Highest(), "field": ForecastPrior(forecast, error, grid)}

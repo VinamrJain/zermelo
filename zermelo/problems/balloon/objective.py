@@ -12,7 +12,7 @@ from typing import Any
 
 import jax
 import jax.numpy as jnp
-from jaxtyping import Array, Float, Int
+from jaxtyping import Array, Bool, Float, Int
 
 from zermelo.interface import BoxDomain, Decision, Domain, FunctionDomain, Objective, ProductDomain, Subset
 from zermelo.problems.balloon.field import WindField
@@ -108,13 +108,18 @@ class StormSearch(Objective[dict[str, Float[Array, "..."]]]):
         return carried, jnp.maximum(magnitude - incumbent, 0.0)
 
 
-def balloon_candidates(states: ProductDomain, grid: SphereGrid, margin_lat: int, margin_lon: int) -> Subset[dict[str, Any]]:
-    """`states` without the band `margin_lat` rows and `margin_lon` columns deep on every side of the grid"""
-    cells = grid.cell_of(states.elements()["position"])  # (n_states, 2)
-    inside = (
+def balloon_interior(grid: SphereGrid, margin_lat: int, margin_lon: int) -> Bool[Array, " pos"]:
+    """The grid without the band `margin_lat` rows and `margin_lon` columns deep on every side"""
+    cells = grid.cell_of(grid.elements())  # (pos, 2)
+    return (
         (cells[:, 0] >= margin_lat)
         & (cells[:, 0] < grid.n_lat - margin_lat)
         & (cells[:, 1] >= margin_lon)
         & (cells[:, 1] < grid.n_lon - margin_lon)
     )
-    return states.narrow(inside)
+
+
+def balloon_candidates(states: ProductDomain, grid: SphereGrid, margin_lat: int, margin_lon: int) -> Subset[dict[str, Any]]:
+    """`states` over the grid's interior, at every altitude"""
+    interior = balloon_interior(grid, margin_lat, margin_lon)  # (pos,)
+    return states.narrow(interior[grid.flat_index(states.elements()["position"])])
