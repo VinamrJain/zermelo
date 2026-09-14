@@ -55,11 +55,11 @@ sweep(
     resources=RESOURCES,
     arms=[
         arm("random_act", None, BELIEF),  # no rule at all: acts uniformly and claims the prior
-        arm("random_search", _method(uniform(), improvement=False, n_fields=0, n_walks=0, step_rate=0.0, cost_weight=0.0), BELIEF),
-        arm("max_variance", _method(posterior_spread(), improvement=False, n_fields=0, n_walks=0, step_rate=0.0, cost_weight=0.0), BELIEF),
-        arm("ucb2", _method(upper_confidence(2.0), improvement=False, n_fields=0, n_walks=0, step_rate=0.0, cost_weight=0.0), BELIEF),
-        arm("mc_ei16", _method(max_magnitude(), improvement=True, n_fields=16, n_walks=0, step_rate=0.0, cost_weight=0.0), BELIEF),
-        arm("thompson", _method(max_magnitude(), improvement=False, n_fields=1, n_walks=0, step_rate=0.0, cost_weight=0.0), BELIEF),
+        arm("random_search", _method(uniform(), improvement=False, n_fields=0, n_walks=0, step_rate=0.0, cost_weight=0.25), BELIEF),
+        arm("max_variance", _method(posterior_spread(), improvement=False, n_fields=0, n_walks=0, step_rate=0.0, cost_weight=0.25), BELIEF),
+        arm("ucb2", _method(upper_confidence(2.0), improvement=False, n_fields=0, n_walks=0, step_rate=0.0, cost_weight=0.25), BELIEF),
+        arm("mc_ei16", _method(max_magnitude(), improvement=True, n_fields=16, n_walks=0, step_rate=0.0, cost_weight=0.25), BELIEF),
+        arm("thompson", _method(max_magnitude(), improvement=False, n_fields=1, n_walks=0, step_rate=0.0, cost_weight=0.25), BELIEF),
         # the rule this study proposes: a step costs 1 + 0.25 * the resource it spends
         arm(
             "eui_fields16_walks16_rate0p5",
