@@ -107,12 +107,18 @@ def claimed_speed(claim: Any) -> tuple[Any, Any]:
     return np.linalg.norm(mean, axis=-1), np.sqrt(np.sum(np.exp(log_variance), axis=-1))
 
 
-def episode_curves(held: dict[str, Any]) -> dict[str, Any]:
+def at_each_snapshot(claim: Any, snapshots: int, claim_every: int) -> Any:
+    """A claim stored every `claim_every` moves, spread back over `snapshots` by carrying each reading forward"""
+    return claim[np.minimum(np.arange(snapshots) // claim_every, claim.shape[0] - 1)]
+
+
+def episode_curves(held: dict[str, Any], claim_every: int) -> dict[str, Any]:
     """What one episode achieved, a value per move"""
     oracle = held["objective_state/oracle"][1:]  # (moves,) constant: the best g on offer
     incumbent = held["objective_state/incumbent"][1:]  # (moves,) the fastest wind stood in
     truth = held["objective_state/truth"][1:]  # (moves, candidates) g at each candidate
-    speed, spread = claimed_speed(held["objective_state/claim"][1:])  # (moves, candidates) each
+    claim = at_each_snapshot(held["objective_state/claim"], oracle.size + 1, claim_every)
+    speed, spread = claimed_speed(claim[1:])  # (moves, candidates) each
     regret = oracle - incumbent
     return {
         "simple_regret": regret,
@@ -215,7 +221,7 @@ def tables(cells: list[tuple[str, int, Path, dict[str, Any]]]) -> tuple[pd.DataF
                     "arm": arm,
                     "seed": seed,
                     "step": np.arange(1, held["reward"].shape[0] + 1),
-                    **episode_curves(held),
+                    **episode_curves(held, int(config["claim_every"])),
                     **episode_diagnostics(held, config),
                 }
             )

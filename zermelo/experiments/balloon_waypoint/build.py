@@ -114,4 +114,4 @@ def assemble(cfg: RunConfig) -> Episode:
             claim_every=cfg.claim_every,
         )
     # the settings as plain data, carried onto the record
-    return Episode(world, objective, agent, cfg.horizon, asdict(cfg), k_world, k_agent, k_steps)
+    return Episode(world, objective, agent, cfg.horizon, dict(cfg.recorded), asdict(cfg), k_world, k_agent, k_steps)

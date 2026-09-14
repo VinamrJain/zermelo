@@ -14,15 +14,19 @@ from zermelo.interface import Agent, Decision, FunctionDomain, Objective, Observ
 from zermelo.run.record import Record
 
 
-def _channels(instants: list[Any]) -> dict[str, Any]:
-    """One pytree per instant into one array per leaf, named by that leaf's dotted path at an instant"""
+def _channels(instants: list[Any], under: str, recorded: dict[str, int]) -> dict[str, Any]:
+    """One pytree per instant into one array per leaf, named by its dotted path, for the leaves `recorded` stores under `under`"""
     named = [{keystr(path, simple=True, separator=".") or "value": leaf for path, leaf in tree_flatten_with_path(x)[0]} for x in instants]
     stacked = {}
-    for channel in named[0]:
+    for name in named[0]:
+        every = recorded.get(f"{under}/{name}")
+        if every is None:  # nothing downstream reads it
+            continue
+        at = sorted({*range(0, len(named), every), len(named) - 1})  # the last instant always
         try:
-            stacked[channel] = jnp.stack([instant[channel] for instant in named])
+            stacked[name] = jnp.stack([named[i][name] for i in at])
         except (KeyError, TypeError, ValueError) as e:
-            raise ValueError(f"channel {channel!r} does not stack across the episode: {e}") from e
+            raise ValueError(f"{name!r} does not stack across the episode: {e}") from e
     return stacked
 
 
@@ -67,6 +71,9 @@ class Episode:
 
     horizon: int
     """How many moves an episode may make"""
+
+    recorded: dict[str, int]
+    """What the record stores, and the moves between the snapshots it keeps of each. A name absent is not stored"""
 
     config: dict[str, Any]
     """The fully resolved configuration"""
@@ -133,21 +140,25 @@ class Episode:
         return not self.terminated and len(self.moves) < self.horizon
 
     def record(self) -> Record:
-        """Freeze what was collected. A function-valued channel is skipped"""
+        """Freeze what `recorded` names. A function-valued channel is skipped"""
         stored = [n for n, p in self.world.state_domain.parts.items() if not isinstance(p, FunctionDomain)]
         keeps_claim = not isinstance(self.objective.claim_domain, FunctionDomain)
-        observation = _channels([s.observation.reading for s in self.snapshots])  # one channel per leaf of the reading
+        observation = _channels([s.observation.reading for s in self.snapshots], "observation", self.recorded)
         # only a narrowed domain carries an array; a plain one has nothing to store
         legal = (s.observation.legal_actions for s in self.snapshots)
         masks = [d.live for d in legal if isinstance(d, Subset)]
         if len(masks) == len(self.snapshots):  # a mask at every snapshot, so it stacks like any other channel
-            observation |= _channels([{"legal": m} for m in masks])
+            observation |= _channels([{"legal": m} for m in masks], "observation", self.recorded)
         return Record(
-            state=_channels([{name: s.state[name] for name in stored} for s in self.snapshots]),
+            state=_channels([{name: s.state[name] for name in stored} for s in self.snapshots], "state", self.recorded),
             observation=observation,
-            agent_state=_channels([s.agent_state for s in self.snapshots]),
-            objective_state=_channels([s.objective_state for s in self.snapshots]),
-            decision=_channels([{"action": m.decision.action} | ({"claim": m.decision.claim} if keeps_claim else {}) for m in self.moves]),
+            agent_state=_channels([s.agent_state for s in self.snapshots], "agent_state", self.recorded),
+            objective_state=_channels([s.objective_state for s in self.snapshots], "objective_state", self.recorded),
+            decision=_channels(
+                [{"action": m.decision.action} | ({"claim": m.decision.claim} if keeps_claim else {}) for m in self.moves],
+                "decision",
+                self.recorded,
+            ),
             reward=jnp.stack([m.reward for m in self.moves]),
             time_per_decision=jnp.asarray([m.seconds for m in self.moves]),
             memory_per_decision=jnp.asarray([m.live_bytes for m in self.moves]),

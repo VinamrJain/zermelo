@@ -58,6 +58,25 @@ HORIZON_LENGTH = 1000
 CLAIM_EVERY_STEPS = 1
 """Moves between re-readings of the claim off a belief"""
 
+RECORDED = {
+    "state/position": 1,
+    "state/altitude": 1,
+    "state/balloon_resource": 1,
+    "objective_state/oracle": 1,
+    "objective_state/incumbent": 1,
+    "objective_state/truth": 1,
+    "objective_state/claim": CLAIM_EVERY_STEPS,
+    "agent_state/steps_since_waypoint": 1,
+    "agent_state/scores.predicted_step_cost": 1,
+    "agent_state/scores.frac_zero_value_candidates": 1,
+    "agent_state/scores.frac_reachable_candidates": 1,
+    "agent_state/scores.waypoint": 1,
+    "agent_state/scores.imagined_walk_to_waypoint": 1,
+    "agent_state/scores.candidate_indices": 1,
+    "agent_state/scores.acquisition_value": 1,
+}
+"""What a record stores, and the moves between the snapshots it keeps of each. The forecast is read from `wind_path` instead"""
+
 N_CANDIDATES = None
 """Candidates scored per move (None scores every one the grid and its altitudes hold)"""
 

@@ -37,7 +37,15 @@ def arm(name: str, method: MethodConfig | None, belief: BeliefConfig) -> Arm:
 
 
 def sweep(
-    name: str, *, problem: ProblemConfig, horizon: int, claim_every: int, seeds: Sequence[int], resources: Resources, arms: Sequence[Arm]
+    name: str,
+    *,
+    problem: ProblemConfig,
+    horizon: int,
+    claim_every: int,
+    recorded: dict[str, int],
+    seeds: Sequence[int],
+    resources: Resources,
+    arms: Sequence[Arm],
 ) -> None:
     """Register one sweep: its arms crossed with its seeds, the world they share, and what a cell is given"""
     _check_unspecified(problem)
@@ -47,7 +55,14 @@ def sweep(
             group="arm",
             name=f"{name}_{one.name}",
             package="_global_",
-            node={"problem": problem, "belief": one.belief, "method": one.method, "horizon": horizon, "claim_every": claim_every},
+            node={
+                "problem": problem,
+                "belief": one.belief,
+                "method": one.method,
+                "horizon": horizon,
+                "claim_every": claim_every,
+                "recorded": recorded,
+            },
         )
     cs.store(
         group="sweep",

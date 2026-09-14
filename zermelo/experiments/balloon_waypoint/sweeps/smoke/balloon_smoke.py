@@ -1,6 +1,6 @@
 import dataclasses
 
-from zermelo.experiments.balloon_waypoint.registry import IRMA_JOSE, matched_belief
+from zermelo.experiments.balloon_waypoint.registry import IRMA_JOSE, RECORDED, matched_belief
 from zermelo.experiments.balloon_waypoint.schema import BeliefConfig, MethodConfig, Resources
 from zermelo.experiments.balloon_waypoint.setup import (
     Implementation,
@@ -59,6 +59,7 @@ for name, resources in (
         problem=WORLD,
         horizon=6,
         claim_every=1,
+        recorded={**RECORDED, "objective_state/claim": 1},
         seeds=[0],
         resources=resources,
         arms=[

@@ -158,6 +158,9 @@ class RunConfig:
     claim_every: int = MISSING
     """Moves between re-readings of the claim off a belief"""
 
+    recorded: dict[str, int] = MISSING
+    """What the record stores, and the moves between the snapshots it keeps of each"""
+
     resources: Resources = MISSING
     """What the cell was given, carried onto the record"""
 

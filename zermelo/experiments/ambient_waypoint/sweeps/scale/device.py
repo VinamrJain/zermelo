@@ -5,6 +5,7 @@ from zermelo.experiments.ambient_waypoint.registry import (
     CLAIM_EVERY_STEPS,
     OPENING_LEGS,
     PLANNING_BUDGET,
+    RECORDED,
     RESOURCES,
     matched_belief,
 )
@@ -40,6 +41,7 @@ for name, resources in (
         problem=AMBIENT1_CONTROL1,
         horizon=HORIZON,
         claim_every=CLAIM_EVERY_STEPS,
+        recorded=RECORDED,
         seeds=[0],
         resources=resources,
         arms=[

@@ -8,6 +8,7 @@ from jaxtyping import Bool, Float, Int
 
 from zermelo.experiments.balloon_waypoint.metrics.data import (
     CURVE_CHANNELS,
+    at_each_snapshot,
     channels,
     claimed_speed,
     episode_curves,
@@ -203,7 +204,8 @@ def read(path: Path) -> Replay:
     outside = np.ones((grid.n_lat, grid.n_lon), bool)
     outside[cell[:, 0], cell[:, 1]] = False  # every scored cell is inside the margin
 
-    claim = np.asarray(record.objective_state["claim"]).copy()
+    snapshots = int(record.reward.shape[0]) + 1
+    claim = at_each_snapshot(np.asarray(record.objective_state["claim"]), snapshots, int(record.config["claim_every"])).copy()
     claim[0] = np.nan  # the objective opens with zeros in the shape of a claim, which is not one
     flown = np.asarray(record.state["altitude"]).astype(int)
 
@@ -255,5 +257,5 @@ def read(path: Path) -> Replay:
         seconds=np.asarray(record.time_per_decision),
         bytes_held=np.asarray(record.memory_per_decision),
         plan=plan,
-        curves=episode_curves(channels(path, CURVE_CHANNELS)),
+        curves=episode_curves(channels(path, CURVE_CHANNELS), int(record.config["claim_every"])),
     )

@@ -7,6 +7,7 @@ from zermelo.experiments.ambient_waypoint.registry import (
     N_SEEDS,
     OPENING_LEGS,
     PLANNING_BUDGET,
+    RECORDED,
     RESOURCES,
     matched_belief,
 )
@@ -37,6 +38,7 @@ sweep(
     problem=AMBIENT1_CONTROL1,
     horizon=HORIZON_LENGTH,
     claim_every=CLAIM_EVERY_STEPS,
+    recorded=RECORDED,
     seeds=range(N_SEEDS),
     resources=dataclasses.replace(RESOURCES, timeout_min=720),
     arms=[arm(f"fields{s}_walks{m}", _method(n_fields=s, n_walks=m), BELIEF) for s in (0, 16) for m in (0, 16)],

@@ -1,3 +1,4 @@
+from zermelo.experiments.ambient_waypoint.registry import RECORDED
 from zermelo.experiments.ambient_waypoint.schema import BeliefConfig, MethodConfig, ProblemConfig, Resources
 from zermelo.experiments.ambient_waypoint.setup import Implementation, arm, expected_improvement, max_magnitude, sweep, value_iteration
 
@@ -61,6 +62,7 @@ for name, resources in (
         problem=WORLD,
         horizon=6,
         claim_every=1,
+        recorded={**RECORDED, "objective_state/claim": 1},
         seeds=[0],
         resources=resources,
         arms=[

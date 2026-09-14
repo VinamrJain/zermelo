@@ -9,6 +9,7 @@ from zermelo.experiments.balloon_waypoint.registry import (
     N_SEEDS,
     OPENING_LEGS,
     PLANNING_BUDGET,
+    RECORDED,
     RESOURCES,
     oracle_belief,
 )
@@ -56,6 +57,7 @@ sweep(
     problem=IRMA_JOSE,
     horizon=HORIZON_LENGTH,
     claim_every=CLAIM_EVERY_STEPS,
+    recorded=RECORDED,
     seeds=range(N_SEEDS),
     resources=RESOURCES,
     # an increment differs from a level only for `max_magnitude`, the one rule reading the imagined readings

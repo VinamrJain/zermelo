@@ -51,6 +51,26 @@ HORIZON_LENGTH = 2000
 CLAIM_EVERY_STEPS = 50
 """Moves between re-readings of the claim off a belief"""
 
+RECORDED = {
+    "state/ambient": 1,
+    "state/controllable": 1,
+    "decision/action": 1,
+    "objective_state/oracle": 1,
+    "objective_state/incumbent": 1,
+    "objective_state/truth": 1,
+    "objective_state/claim": CLAIM_EVERY_STEPS,
+    "agent_state/steps_since_waypoint": 1,
+    "agent_state/scores.predicted_step_cost": 1,
+    "agent_state/scores.frac_zero_value_candidates": 1,
+    "agent_state/scores.frac_reachable_candidates": 1,
+    "agent_state/scores.waypoint": 1,
+    "agent_state/scores.imagined_walk_to_waypoint": 1,
+    "agent_state/scores.candidate_indices": 1,
+    "agent_state/scores.acquisition_value": 1,
+    "agent_state/policy.act": 1,
+}
+"""What a record stores, and the moves between the snapshots it keeps of each"""
+
 N_SEEDS = 10
 """Instances every arm is run on, seeded `0` to `N_SEEDS - 1`"""
 

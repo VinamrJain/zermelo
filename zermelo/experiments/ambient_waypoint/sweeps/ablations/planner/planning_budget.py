@@ -4,6 +4,7 @@ from zermelo.experiments.ambient_waypoint.registry import (
     HORIZON_LENGTH,
     N_SEEDS,
     OPENING_LEGS,
+    RECORDED,
     RESOURCES,
     matched_belief,
 )
@@ -34,6 +35,7 @@ sweep(
     problem=AMBIENT1_CONTROL1,
     horizon=HORIZON_LENGTH,
     claim_every=CLAIM_EVERY_STEPS,
+    recorded=RECORDED,
     seeds=range(N_SEEDS),
     resources=RESOURCES,
     arms=[arm(f"steps{steps}", _method(steps), BELIEF) for steps in (25, 50, 100)],
