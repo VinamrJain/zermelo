@@ -4,10 +4,10 @@ from zermelo.experiments.balloon_waypoint.registry import (
     ARRIVAL_RADIUS_KM,
     CLAIM_EVERY_STEPS,
     HORIZON_LENGTH,
+    IRMA_JOSE,
     N_CANDIDATES,
     N_SEEDS,
     OPENING_LEGS,
-    PERTURBED,
     PLANNING_BUDGET,
     RESOURCES,
     matched_belief,
@@ -24,7 +24,7 @@ from zermelo.experiments.balloon_waypoint.setup import (
     value_iteration,
 )
 
-BELIEF = matched_belief(PERTURBED)
+BELIEF = matched_belief()
 """The same model on every arm, matched to the truth"""
 
 
@@ -48,7 +48,7 @@ def _method(
 
 sweep(
     "acquisitions_real",
-    problem=PERTURBED,
+    problem=IRMA_JOSE,
     horizon=HORIZON_LENGTH,
     claim_every=CLAIM_EVERY_STEPS,
     seeds=range(N_SEEDS),

@@ -7,32 +7,29 @@ from zermelo.experiments.balloon_waypoint.setup import point_speed
 
 IRMA_JOSE = ProblemConfig(
     wind_path="zermelo/problems/balloon/data/irma_jose.npz",
-    frame=0,
+    frame=23,  # 2017-09-09 00Z, +72h on the forecast
     forecast="GEFS",
     resource_units=500,
-    step_hours=3.0,  # one cell per step at the record's mean speed of ten metres per second
+    step_hours=3.0,  # one position per step at the record's mean 10 m/s
     error_scale=0.0,
-    error_lengthscale_km=400.0,  # about three and a half cells
+    error_lengthscale_km=400.0,
     error_jitter=1e-4,
     readout="zermelo.problems.balloon.readout.PointWind",
     target=point_speed(),
-    margin_lat=2,
-    margin_lon=2,
+    margin_lat=10,
+    margin_lon=10,
 )
-"""Two recorded hurricanes over the Atlantic, at the hour the forecast is issued, the forecast exact"""
-
-PERTURBED = dataclasses.replace(IRMA_JOSE, error_scale=1.0)
-"""The same world under a forecast wrong by a small error"""
+"""Two hurricanes over the Atlantic, under the forecast issued 72h before them"""
 
 
-def matched_belief(world: ProblemConfig) -> BeliefConfig:
-    """A belief holding the world's own error numbers, starting from the forecast it was handed"""
+def matched_belief() -> BeliefConfig:
+    """A belief the size and reach of the forecast's own error"""
     return BeliefConfig(
         oracle=False,
         kernel="gpjax.kernels.Matern52",
-        lengthscale_km=world.error_lengthscale_km,
-        lengthscale_altitude_km=3.0,  # the record's altitudes sit 1.8 to 4.3 kilometres apart
-        amplitude=world.error_scale,
+        lengthscale_km=300.0,  # error's horizontal correlation
+        lengthscale_altitude_km=3.0,
+        amplitude=4.8,  # m/s, the error's spread
         noise=1e-2,
         forecast_prior=True,
         n_features=256,
@@ -41,16 +38,16 @@ def matched_belief(world: ProblemConfig) -> BeliefConfig:
     )
 
 
-def oracle_belief(world: ProblemConfig) -> BeliefConfig:
+def oracle_belief() -> BeliefConfig:
     """The true field itself, the fitted settings stated and unread"""
-    return dataclasses.replace(matched_belief(world), oracle=True)
+    return dataclasses.replace(matched_belief(), oracle=True)
 
 
 PLANNING_BUDGET = 25
 """`L`: a replan fires every `L` moves, costs `L` backups, and truncates a hitting time at `L` steps"""
 
 ARRIVAL_RADIUS_KM = 60.0
-"""`rho`: how near a waypoint counts as arrived, inside cells about a hundred kilometres apart"""
+"""`rho`: how near a waypoint counts as arrived, inside positions about 100 km apart"""
 
 OPENING_LEGS = 1
 """Waypoint legs of uniform random walking taken before the rule starts"""

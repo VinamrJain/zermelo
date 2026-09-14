@@ -24,7 +24,7 @@ from zermelo.experiments.balloon_waypoint.setup import (
     value_iteration,
 )
 
-BELIEF = oracle_belief(IRMA_JOSE)
+BELIEF = oracle_belief()
 """The true field on every arm, so a rule reading a spread reads zero"""
 
 

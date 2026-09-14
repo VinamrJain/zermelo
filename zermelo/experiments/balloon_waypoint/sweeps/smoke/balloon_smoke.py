@@ -14,19 +14,20 @@ from zermelo.experiments.balloon_waypoint.setup import (
 
 WORLD = dataclasses.replace(
     IRMA_JOSE,
+    forecast="gaussian",  # the drawn error, so the smoke run exercises that path too
     resource_units=2,
     error_scale=1.0,
     error_lengthscale_km=600.0,  # wide, so a handful of readings say something about the whole box
     target=point_speed(),
-    margin_lat=8,
-    margin_lon=20,  # a narrow band of candidates, so a decision scores tens of states rather than thousands
+    margin_lat=15,
+    margin_lon=28,  # a narrow band of candidates, so a decision scores tens of states rather than thousands
 )
-"""The recorded world at a ballast budget of two, scored over a strip of it"""
+"""The world at a ballast budget of two, scored over a strip of it"""
 
 
 def _belief(oracle: bool) -> BeliefConfig:
     """The model an arm holds: matched to this world, or the true wind itself"""
-    return dataclasses.replace(matched_belief(WORLD), oracle=oracle, n_features=32, refit_steps=20)
+    return dataclasses.replace(matched_belief(), oracle=oracle, amplitude=WORLD.error_scale, n_features=32, refit_steps=20)
 
 
 def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, cost_weight: float) -> MethodConfig:
