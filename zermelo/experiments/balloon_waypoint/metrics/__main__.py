@@ -46,15 +46,6 @@ figures.draw_cost(spent, curves, colours, names, style, title, sweep / "cost.png
 
 record = load_wind(Path(described["problem"]["wind_path"]))
 grid = record.grid
-flow = np.asarray(record.at(int(described["problem"]["frame"]))).reshape(record.n_alt, grid.n_lat, grid.n_lon, 2)
-speed = np.linalg.norm(flow, axis=-1)  # (alt, lat, lon) the forecast's own magnitude, which the error only perturbs
-corners = (
-    grid.lon_first,
-    grid.lon_first + (grid.n_lon - 1) * grid.lon_step,
-    grid.lat_first,
-    grid.lat_first + (grid.n_lat - 1) * grid.lat_step,
-)
-altitude_km = tuple(float(km) for km in np.asarray(record.altitude_km))
 
 walked = 0
 for arm, seed, cell, _ in cells:
@@ -62,20 +53,7 @@ for arm, seed, cell, _ in cells:
     if not own.empty:  # an arm running no rule aims at nothing and finishes no waypoint leg
         figures.draw_legs(own, budget, colours[arm], style, f"{names[arm]}, seed {seed}", cell / "legs.png")
         walked += 1
-    held = channels(cell, ("state/position", "state/altitude"))
-    figures.draw_altitude(
-        speed,
-        flow,
-        corners,
-        altitude_km,
-        np.asarray(held["state/position"]),
-        np.asarray(held["state/altitude"]),
-        colours[arm],
-        style,
-        f"{names[arm]}, seed {seed}",
-        cell / "altitude.png",
-    )
-print(f"wrote curves.png, diagnostics.png and cost.png under {sweep}, legs.png under {walked} cells, and altitude.png under each")
+print(f"wrote curves.png, diagnostics.png and cost.png under {sweep}, and legs.png under {walked} cells")
 states = record.n_alt * grid.n_lat * grid.n_lon
 candidates = int(np.asarray(channels(cells[0][2], ("objective_state/truth",))["objective_state/truth"]).shape[-1])
 print(f"wrote the tables under {summary.write(sweep, curves, legs, spent, described, names, states, candidates)}")
