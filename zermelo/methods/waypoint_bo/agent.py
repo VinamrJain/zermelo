@@ -98,10 +98,8 @@ class WaypointAgent(Agent[WaypointAgentState]):
         return kernel
 
     def _fold_reading(self, state: WaypointAgentState, obs: Observation) -> tuple[Int[Array, ""], Belief]:
-        """Where the actor stands, and the belief with this step's reading folded in if the cell is a candidate"""
+        """Where the actor stands, and the belief with this step's reading folded in"""
         z = self.candidates.index_of(obs.reading[self.position_key])
-        if not bool(self.candidates.live[z]):  # read outside the set the objective scores: not conditioned on either
-            return z, state.belief
         row = int(jnp.sum(state.belief.data.live))  # rows written so far; concrete, an episode being a Python loop
         return z, state.belief.fit(state.belief.data.write(row, z, obs.reading[self.reading_key]))
 
