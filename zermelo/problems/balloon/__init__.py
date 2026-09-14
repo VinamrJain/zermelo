@@ -5,13 +5,13 @@ a in {0, 1, 2}                      down one altitude, hold, up one
 W(lat, lon, p) = (u, v)             metres per second, u eastward and v northward
 (lat, lon)' = (lat, lon) + W(s) h   the wind carries it, h hours to a step
 p' = p + a - 1, r' = r - |p' - p|   an altitude change spends one unit of resource, and needs r > 0
-W = F + e                           the truth is the forecast F the agent is given, plus a drawn error e
+W = F + e                           the truth is the forecast F the agent is given, plus the error it carries
 
 A plan and a belief are written over (lat, lon, p) alone; r is a scalar the world carries and the
 method prices
 """
 
-from zermelo.problems.balloon.field import DriftingWind, ForecastPrior, GaussianError, GridWind, WindError, WindField
+from zermelo.problems.balloon.field import DriftingWind, ForecastPrior, GaussianError, GEFSError, GridWind, WindError, WindField
 from zermelo.problems.balloon.grid import SphereGrid, Steps, balloon_states
 from zermelo.problems.balloon.objective import ColumnPeakSpeed, PointSpeed, StormSearch, Target, balloon_candidates
 from zermelo.problems.balloon.readout import BalloonReadout, ColumnWind, PointWind
@@ -30,6 +30,7 @@ __all__ = [
     "DriftingWind",
     "Factor",
     "ForecastPrior",
+    "GEFSError",
     "GaussianError",
     "GridWind",
     "Highest",

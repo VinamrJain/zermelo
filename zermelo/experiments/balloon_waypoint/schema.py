@@ -11,10 +11,13 @@ class ProblemConfig:
     """The world one episode runs in"""
 
     wind_path: str = MISSING
-    """Where the recorded wind is read from, relative to the package"""
+    """Where the wind is read from, relative to the package"""
 
     frame: int = MISSING
-    """Which recorded hour the episode's forecast is taken at"""
+    """Which hour of the record the episode runs at, taking W and F there"""
+
+    forecast: Literal["GEFS", "gaussian"] = MISSING
+    """F = the forecast the record holds, or W itself under a drawn error"""
 
     resource_units: int = MISSING
     """`r_0`: altitude changes the balloon can afford over the whole episode"""
@@ -23,13 +26,13 @@ class ProblemConfig:
     """`h`: hours the wind carries the balloon for in one step"""
 
     error_scale: float = MISSING
-    """Standard deviation of the error between the forecast and the truth, in metres per second"""
+    """Standard deviation of a drawn error (m/s)"""
 
     error_lengthscale_km: float = MISSING
-    """How far, in kilometres, that error stays correlated"""
+    """How far a drawn error stays correlated (km)"""
 
     error_jitter: float = MISSING
-    """Added to the error's correlation diagonal so it factorises"""
+    """Added to a drawn error's correlation diagonal so it factorises"""
 
     readout: str = MISSING
     """Dotted path to what the balloon measures of the wind"""

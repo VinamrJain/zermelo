@@ -8,6 +8,7 @@ from zermelo.experiments.balloon_waypoint.setup import point_speed
 IRMA_JOSE = ProblemConfig(
     wind_path="zermelo/problems/balloon/data/irma_jose.npz",
     frame=0,
+    forecast="GEFS",
     resource_units=500,
     step_hours=3.0,  # one cell per step at the record's mean speed of ten metres per second
     error_scale=0.0,

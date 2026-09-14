@@ -24,7 +24,7 @@ class BalloonReadout(Readout):
     grid: SphereGrid
     n_alt: int
     forecast: Float[Array, "alt pos uv"]
-    """F at every altitude and cell, handed over whole at every step"""
+    """F at every altitude and position, handed over whole at every step"""
 
     states: ProductDomain
     """Where the balloon is, as the domain a belief over the wind is written on"""

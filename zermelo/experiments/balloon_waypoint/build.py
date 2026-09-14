@@ -16,7 +16,9 @@ from zermelo.methods.waypoint_bo.agent import WaypointAgent, posterior_moments
 from zermelo.methods.waypoint_bo.belief import GPBelief, OracleBelief
 from zermelo.problems.balloon import (
     GaussianError,
+    GEFSError,
     GridWind,
+    WindError,
     balloon_objective,
     balloon_states,
     balloon_transition,
@@ -37,15 +39,22 @@ def assemble(cfg: RunConfig) -> Episode:
     k_world, k_agent, k_steps = jax.random.split(jax.random.key(cfg.seed), 3)
     recording = load_wind(Path(__file__).resolve().parents[3] / cfg.problem.wind_path)
     grid, n_alt = recording.grid, recording.n_alt
-    error = GaussianError(
-        length_scale_km=cfg.problem.error_lengthscale_km, amplitude_ms=cfg.problem.error_scale, jitter=cfg.problem.error_jitter
-    )
+    truth = recording.at(cfg.problem.frame)
+    error: WindError
+    if cfg.problem.forecast == "GEFS":
+        predicted = recording.forecast_at(cfg.problem.frame)
+        error = GEFSError(truth - predicted)
+    else:  # W is the forecast, so the drawn error is what makes them differ
+        predicted = truth
+        error = GaussianError(
+            length_scale_km=cfg.problem.error_lengthscale_km, amplitude_ms=cfg.problem.error_scale, jitter=cfg.problem.error_jitter
+        )
     states = balloon_states(grid, tuple(float(h) for h in recording.altitude_km))
     transition = balloon_transition(recording, states, cfg.problem.step_hours)
     world = balloon_world(
         recording,
         states,
-        frame=cfg.problem.frame,
+        forecast=predicted,
         error=error,
         transition=transition,
         readout=get_class(cfg.problem.readout),
@@ -55,7 +64,7 @@ def assemble(cfg: RunConfig) -> Episode:
         recording, states, instantiate(cfg.problem.target, _target_whitelist_=WHITELIST), cfg.problem.margin_lat, cfg.problem.margin_lon
     )
     candidates = objective.candidates
-    forecast = GridWind(recording.at(cfg.problem.frame), grid)
+    forecast = GridWind(predicted, grid)
     # three horizontal coordinates in km, then altitude in km
     lengthscale = jnp.asarray([cfg.belief.lengthscale_km] * 3 + [cfg.belief.lengthscale_altitude_km])
     belief = (

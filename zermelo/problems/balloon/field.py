@@ -1,6 +1,6 @@
 """The wind a balloon is carried by: how it is read, and the law an episode's own is drawn by
 
-W(lat, lon, p) = (u, v)     u: eastward, v: northward, both metres per second
+W(lat, lon, p) = (u, v)     u: eastward, v: northward, both (m/s)
 lat, lon                    degrees, on the grid's own positions
 p                           which altitude, an index into the ones the record holds
 t                           hours since the episode began
@@ -64,7 +64,7 @@ class DriftingWind(WindField):
 
 
 class WindError(ABC):
-    """The law e is drawn by, for a truth W = forecast + e"""
+    """Where e comes from, for a truth W = forecast + e"""
 
     @abstractmethod
     def sample(self, key: PRNGKeyArray, grid: SphereGrid, n_altitudes: int) -> Float[Array, "alt pos uv"]:
@@ -96,15 +96,28 @@ class GaussianError(WindError):
         return jnp.moveaxis(jnp.tensordot(factor, white, axes=(1, 0)), 0, 1)  # (alt, pos, uv)
 
 
+@register_dataclass
+@dataclass(frozen=True)
+class GEFSError(WindError):
+    """e = W - F, the same field at every draw"""
+
+    error: Float[Array, "alt pos uv"]
+    """W - F at every altitude and position"""
+
+    def sample(self, key: PRNGKeyArray, grid: SphereGrid, n_altitudes: int) -> Float[Array, "alt pos uv"]:
+        """e, whatever the key"""
+        return self.error
+
+
 @dataclass(frozen=True)
 class ForecastPrior(Prior[WindField]):
-    """W = forecast + e, the forecast fixed and e drawn once per episode"""
+    """W = forecast + e, the forecast fixed and e taken once per episode"""
 
     forecast: Float[Array, "alt pos uv"]
     """(u, v) predicted at every altitude and position, and what the agent is told"""
 
     error: WindError
-    """The law e is drawn by"""
+    """Where e comes from"""
 
     grid: SphereGrid
     """What `pos` is indexed by"""
