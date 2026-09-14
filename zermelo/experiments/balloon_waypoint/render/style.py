@@ -227,6 +227,13 @@ class Style:
     band_alpha: float = 0.18
     """Opacity of the band of an arm's spread over seeds, drawn behind its line"""
 
+    curve_marks: tuple[str, ...] = ("o", "s", "^", "D", "v", "P", "X", "*")
+    """One mark per arm in the order the arms sort, cycled where a sweep runs more arms than marks"""
+
+    curve_mark_size: float = 7.0
+    curve_marks_drawn: int = 8
+    """Marks spaced along a line, so a curve of many moves carries the mark its key names"""
+
     panel_width: float = 6.4
     panel_height: float = 4.2
     """One curve panel, in inches"""

@@ -54,7 +54,13 @@ def _dress(panel: Axes, curve: str, opening: int, style: Style) -> None:
 
 
 def _lines(panel: Axes, data: pd.DataFrame, curve: str, colours: dict[str, str], names: dict[str, str], opening: int, style: Style) -> None:
-    """One curve against move: a line for each arm, with the spread of its seeds as a band behind it"""
+    """One curve against move: a line for each arm under its own mark, with the spread of its seeds as a band behind it"""
+    ordered = sorted(map(str, data["arm"].unique()))
+    marks = {arm: style.curve_marks[i % len(style.curve_marks)] for i, arm in enumerate(ordered)}
+    moves = data["step"].nunique()
+    stride = max(1, moves // style.curve_marks_drawn)
+    # each arm's marks start a little further along, so marks at one move do not stack on each other
+    starts = {arm: (i * stride) // max(1, len(ordered)) for i, arm in enumerate(ordered)}
     for arm, rows in data.groupby("arm"):
         by_move = rows.groupby("step")[curve]
         if curve in DRAWN_AS_QUANTILES:
@@ -64,7 +70,18 @@ def _lines(panel: Axes, data: pd.DataFrame, curve: str, colours: dict[str, str],
             error = by_move.std().div(np.sqrt(by_move.count()))  # standard error of the mean over seeds
             low, high = middle - error, middle + error
         arm = str(arm)
-        panel.plot(middle.index, middle, color=colours[arm], lw=style.curve_width, label=names[arm], zorder=3)
+        panel.plot(
+            middle.index,
+            middle,
+            color=colours[arm],
+            lw=style.curve_width,
+            label=names[arm],
+            marker=marks[arm],
+            markersize=style.curve_mark_size,
+            markeredgewidth=0.0,
+            markevery=(starts[arm], stride),
+            zorder=3,
+        )
         panel.fill_between(middle.index, low, high, color=colours[arm], alpha=style.band_alpha, lw=0.0, zorder=2)
     _dress(panel, curve, opening, style)
 
