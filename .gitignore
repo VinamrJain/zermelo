@@ -13,3 +13,6 @@ __pycache__
 results/
 multirun/
 outputs/
+
+# the wind record: ERA5 truth and GEFS forecast, fetched rather than tracked
+zermelo/problems/balloon/data/*.npz
