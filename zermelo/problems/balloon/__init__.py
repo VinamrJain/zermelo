@@ -11,7 +11,7 @@ A plan and a belief are written over (lat, lon, p) alone; r is a scalar the worl
 method prices
 """
 
-from zermelo.problems.balloon.field import DriftingWind, ForecastPrior, GaussianError, GriddedWind, WindError, WindField
+from zermelo.problems.balloon.field import DriftingWind, ForecastPrior, GaussianError, GridWind, WindError, WindField
 from zermelo.problems.balloon.grid import SphereGrid, Steps, balloon_states
 from zermelo.problems.balloon.objective import ColumnPeakSpeed, PointSpeed, StormSearch, Target, balloon_candidates
 from zermelo.problems.balloon.readout import BalloonReadout, ColumnWind, PointWind
@@ -31,7 +31,7 @@ __all__ = [
     "Factor",
     "ForecastPrior",
     "GaussianError",
-    "GriddedWind",
+    "GridWind",
     "Highest",
     "PointSpeed",
     "PointWind",

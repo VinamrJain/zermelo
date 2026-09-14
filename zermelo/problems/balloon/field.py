@@ -1,7 +1,7 @@
 """The wind a balloon is carried by: how it is read, and the law an episode's own is drawn by
 
 W(lat, lon, p) = (u, v)     u: eastward, v: northward, both metres per second
-lat, lon                    degrees, on the grid's own cells
+lat, lon                    degrees, on the grid's own positions
 p                           which altitude, an index into the ones the record holds
 t                           hours since the episode began
 """
@@ -30,27 +30,27 @@ class WindField(ABC):
 
 @register_dataclass
 @dataclass(frozen=True)
-class GriddedWind(WindField):
-    """W(lat, lon, p), held per altitude and cell, read at the nearest cell"""
+class GridWind(WindField):
+    """W(lat, lon, p), held per altitude and position, read at the nearest one"""
 
     wind: Float[Array, "alt pos uv"]
-    """(u, v) at every altitude and cell, in the grid's index order"""
+    """(u, v) at every altitude and position, in the grid's index order"""
 
     grid: SphereGrid = dataclasses.field(metadata=dict(static=True))
     """What `pos` is indexed by"""
 
     def __call__(self, state: dict[str, Any]) -> Float[Array, "*batch uv"]:
-        """wind[p, cell]"""
+        """wind[p, pos]"""
         return self.wind[state["altitude"], self.grid.flat_index(state["position"])]
 
 
 @register_dataclass
 @dataclass(frozen=True)
 class DriftingWind(WindField):
-    """W(lat, lon, p, t), read at the nearest cell and the nearest recorded hour"""
+    """W(lat, lon, p, t), read at the nearest position and hour"""
 
     wind: Float[Array, "t alt pos uv"]
-    """(u, v) at every recorded hour, altitude and cell"""
+    """(u, v) at every hour, altitude and position"""
 
     hours: Float[Array, " t"]
     """The t each record stands for"""
@@ -59,7 +59,7 @@ class DriftingWind(WindField):
     """What `pos` is indexed by"""
 
     def __call__(self, state: dict[str, Any]) -> Float[Array, "*batch uv"]:
-        """wind[argmin |hours - t|, p, cell]"""
+        """wind[argmin |hours - t|, p, pos]"""
         return self.wind[jnp.argmin(jnp.abs(self.hours - state["hours"])), state["altitude"], self.grid.flat_index(state["position"])]
 
 
@@ -68,7 +68,7 @@ class WindError(ABC):
 
     @abstractmethod
     def sample(self, key: PRNGKeyArray, grid: SphereGrid, n_altitudes: int) -> Float[Array, "alt pos uv"]:
-        """One draw of e at every altitude and cell"""
+        """One draw of e at every altitude and position"""
 
 
 @dataclass(frozen=True)
@@ -91,7 +91,7 @@ class GaussianError(WindError):
         correlation = jnp.exp(-gap / (2.0 * self.length_scale_km**2)) + self.jitter * jnp.eye(grid.size())
         factor = self.amplitude_ms * jnp.linalg.cholesky(correlation)
         if jnp.isnan(factor).any():  # a singular K returns NaN rather than raising
-            raise ValueError(f"K over {grid.size()} cells at {self.length_scale_km} km does not factorise at jitter {self.jitter}")
+            raise ValueError(f"K over {grid.size()} positions at {self.length_scale_km} km does not factorise at jitter {self.jitter}")
         white = jax.random.normal(key, (grid.size(), n_altitudes, 2))
         return jnp.moveaxis(jnp.tensordot(factor, white, axes=(1, 0)), 0, 1)  # (alt, pos, uv)
 
@@ -101,7 +101,7 @@ class ForecastPrior(Prior[WindField]):
     """W = forecast + e, the forecast fixed and e drawn once per episode"""
 
     forecast: Float[Array, "alt pos uv"]
-    """(u, v) predicted at every altitude and cell, and what the agent is told"""
+    """(u, v) predicted at every altitude and position, and what the agent is told"""
 
     error: WindError
     """The law e is drawn by"""
@@ -113,4 +113,4 @@ class ForecastPrior(Prior[WindField]):
         """One episode's W"""
         if not isinstance(domain, FunctionDomain):
             raise TypeError(f"a {type(domain).__name__} holds no fields, so none can be drawn from it")
-        return GriddedWind(self.forecast + self.error.sample(key, self.grid, self.forecast.shape[0]), self.grid)
+        return GridWind(self.forecast + self.error.sample(key, self.grid, self.forecast.shape[0]), self.grid)

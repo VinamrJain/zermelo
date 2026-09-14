@@ -16,7 +16,7 @@ from zermelo.methods.waypoint_bo.agent import WaypointAgent, posterior_moments
 from zermelo.methods.waypoint_bo.belief import GPBelief, OracleBelief
 from zermelo.problems.balloon import (
     GaussianError,
-    GriddedWind,
+    GridWind,
     balloon_objective,
     balloon_states,
     balloon_transition,
@@ -55,7 +55,7 @@ def assemble(cfg: RunConfig) -> Episode:
         recording, states, instantiate(cfg.problem.target, _target_whitelist_=WHITELIST), cfg.problem.margin_lat, cfg.problem.margin_lon
     )
     candidates = objective.candidates
-    forecast = GriddedWind(recording.at(cfg.problem.frame), grid)
+    forecast = GridWind(recording.at(cfg.problem.frame), grid)
     # three horizontal coordinates in km, then altitude in km
     lengthscale = jnp.asarray([cfg.belief.lengthscale_km] * 3 + [cfg.belief.lengthscale_altitude_km])
     belief = (
