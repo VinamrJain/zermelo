@@ -8,8 +8,9 @@ from zermelo.experiments.balloon_waypoint.setup import point_speed
 IRMA_JOSE = ProblemConfig(
     wind_path="zermelo/problems/balloon/data/irma_jose.npz",
     frame=23,  # 2017-09-09 00Z, +72h on the forecast
+    frames=1,  # the record reaches 15 hours past the start
     forecast="GEFS",
-    resource_units=500,
+    resource_units=80,
     step_hours=3.0,  # one position per step at the record's mean 10 m/s
     error_scale=0.0,
     error_lengthscale_km=400.0,
@@ -52,10 +53,10 @@ ARRIVAL_RADIUS_KM = 60.0
 OPENING_LEGS = 1
 """Waypoint legs of uniform random walking taken before the rule starts"""
 
-HORIZON_LENGTH = 1000
+HORIZON_LENGTH = 250
 """`T`: moves an episode makes, at 3 hours a move"""
 
-CLAIM_EVERY_STEPS = 1
+CLAIM_EVERY_STEPS = PLANNING_BUDGET
 """Moves between re-readings of the claim off a belief"""
 
 RECORDED = {
@@ -80,7 +81,7 @@ RECORDED = {
 N_CANDIDATES = None
 """Candidates scored per move (None scores every one the grid and its altitudes hold)"""
 
-N_SEEDS = 1
+N_SEEDS = 10
 """Instances every arm is run on, seeded `0` to `N_SEEDS - 1`"""
 
 RESOURCES = Resources(cpus=2, mem_gb=12, timeout_min=30, gres="gpu:1", partition="gpu", constraint="avx2&gpu-high", array_parallelism=64)

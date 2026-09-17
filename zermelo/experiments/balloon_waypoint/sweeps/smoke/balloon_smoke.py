@@ -16,6 +16,7 @@ WORLD = dataclasses.replace(
     IRMA_JOSE,
     forecast="gaussian",  # the drawn error, so the smoke run exercises that path too
     resource_units=2,
+    frames=4,  # the wind moves under the balloon
     error_scale=1.0,
     error_lengthscale_km=600.0,  # wide, so a handful of readings say something about the whole box
     target=point_speed(),
