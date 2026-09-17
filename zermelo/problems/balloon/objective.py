@@ -79,8 +79,8 @@ class StormSearch(Objective[dict[str, Float[Array, "..."]]]):
         return FunctionDomain(self.candidates, BoxDomain((4,)))
 
     def truth(self, state: dict[str, Any]) -> Float[Array, " n_candidates"]:
-        """g at every candidate"""
-        return self.target(state["field"], self.candidate_states)
+        """g at every candidate, at the hour the state carries"""
+        return self.target(state["field"], self.candidate_states | {"hours": state["hours"]})
 
     def wind_speed_at(self, state: dict[str, Any]) -> Float[Array, ""]:
         """||W|| where the balloon stands"""

@@ -13,7 +13,7 @@ from zermelo.problems.balloon.field import ForecastPrior, WindError
 from zermelo.problems.balloon.grid import SphereGrid, Steps
 from zermelo.problems.balloon.objective import StormSearch, Target, balloon_candidates, balloon_interior
 from zermelo.problems.balloon.readout import BalloonReadout
-from zermelo.problems.balloon.transition import Advection, Ascent, BalloonTransition
+from zermelo.problems.balloon.transition import Advection, Ascent, BalloonTransition, Clock
 
 
 class Highest(Prior[Any]):
@@ -24,6 +24,14 @@ class Highest(Prior[Any]):
         if not isinstance(domain, Enumerable):
             raise TypeError(f"a {type(domain).__name__} has no largest element, so none can be drawn from it")
         return domain.from_index(jnp.asarray(domain.size() - 1))
+
+
+class Zero(Prior[Float[Array, ""]]):
+    """The scalar zero, drawn with probability one"""
+
+    def sample(self, domain: Domain[Float[Array, ""]], key: PRNGKeyArray) -> Float[Array, ""]:
+        """0.0"""
+        return jnp.zeros(())
 
 
 @dataclass(frozen=True)
@@ -53,6 +61,10 @@ class WindRecord:
         """F[frame,..,.]"""
         return self.forecast[frame]
 
+    def window(self, frames: slice) -> tuple[tuple[Float[Array, "t alt pos uv"], Float[Array, "t alt pos uv"]], Float[Array, " t"]]:
+        """(W, F) over `frames`, and the hours they stand for rebased so the episode starts at zero"""
+        return (self.wind[frames], self.forecast[frames]), self.hours[frames] - self.hours[frames][0]
+
 
 def load_wind(path: Path) -> WindRecord:
     """The wind record stored at `path`, laid out for the grid it sits on"""
@@ -73,37 +85,46 @@ def load_wind(path: Path) -> WindRecord:
 
 
 def balloon_transition(recording: WindRecord, states: ProductDomain, step_hours: float) -> BalloonTransition:
-    """One step of the balloon over `states`: the wind carries it, and the action moves it an altitude"""
-    return BalloonTransition(Advection(recording.grid, step_hours), Ascent(recording.n_alt), states)
+    """One step of the balloon over `states`: the wind carries it, the action moves it an altitude, and the clock updates"""
+    return BalloonTransition(Advection(recording.grid, step_hours), Ascent(recording.n_alt), Clock(step_hours), states)
 
 
 def balloon_world(
     recording: WindRecord,
     states: ProductDomain,
-    forecast: Float[Array, "alt pos uv"],
+    forecast: Float[Array, "alt pos uv"] | Float[Array, "t alt pos uv"],
     error: WindError,
     transition: BalloonTransition,
     readout: type[BalloonReadout],
     resource_units: int,
     margin_lat: int,
     margin_lon: int,
+    hours: Float[Array, " t"] | None,
 ) -> World:
     """The problem a forecast poses: the balloon starts over the grid's interior, and the wind is that forecast plus an error"""
     grid = recording.grid
+    initial_forecast = forecast if hours is None else forecast[0]  # what the agent is told at the hour it starts
     return World(
         state_domain=ProductDomain(
             {
                 **states.parts,
                 "position": grid.narrow(balloon_interior(grid, margin_lat, margin_lon)),
                 "balloon_resource": Steps((0.0,) * (resource_units + 1)),
+                "hours": BoxDomain(()),
                 "field": FunctionDomain(grid, BoxDomain((2,))),
             }
         ),
         prior=ProductPrior(
-            {"position": Uniform(), "altitude": Uniform(), "balloon_resource": Highest(), "field": ForecastPrior(forecast, error, grid)}
+            {
+                "position": Uniform(),
+                "altitude": Uniform(),
+                "balloon_resource": Highest(),
+                "hours": Zero(),
+                "field": ForecastPrior(forecast, error, grid, hours),
+            }
         ),
         transition=transition,
-        readout=readout(grid, recording.n_alt, forecast, states),
+        readout=readout(grid, recording.n_alt, initial_forecast, states),
     )
 
 

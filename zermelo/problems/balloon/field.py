@@ -14,7 +14,7 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 from jax.tree_util import register_dataclass
-from jaxtyping import Array, Float, PRNGKeyArray
+from jaxtyping import Array, Float, Int, PRNGKeyArray
 
 from zermelo.interface import Domain, FunctionDomain, Prior
 from zermelo.problems.balloon.grid import SphereGrid
@@ -60,14 +60,16 @@ class DriftingWind(WindField):
 
     def __call__(self, state: dict[str, Any]) -> Float[Array, "*batch uv"]:
         """wind[argmin |hours - t|, p, pos]"""
-        return self.wind[jnp.argmin(jnp.abs(self.hours - state["hours"])), state["altitude"], self.grid.flat_index(state["position"])]
+        hours = state["hours"]
+        frame = jnp.argmin(jnp.abs(self.hours[:, None] - jnp.atleast_1d(hours)[None, :]), axis=0).reshape(jnp.shape(hours))
+        return self.wind[frame, state["altitude"], self.grid.flat_index(state["position"])]
 
 
 class WindError(ABC):
     """Where e comes from, for a truth W = forecast + e"""
 
     @abstractmethod
-    def sample(self, key: PRNGKeyArray, grid: SphereGrid, n_altitudes: int) -> Float[Array, "alt pos uv"]:
+    def sample(self, key: PRNGKeyArray, grid: SphereGrid, n_altitudes: int) -> Float[Array, "*hours alt pos uv"]:
         """One draw of e at every altitude and position"""
 
 
@@ -101,10 +103,10 @@ class GaussianError(WindError):
 class GEFSError(WindError):
     """e = W - F, the same field at every draw"""
 
-    error: Float[Array, "alt pos uv"]
+    error: Float[Array, "*hours alt pos uv"]
     """W - F at every altitude and position"""
 
-    def sample(self, key: PRNGKeyArray, grid: SphereGrid, n_altitudes: int) -> Float[Array, "alt pos uv"]:
+    def sample(self, key: PRNGKeyArray, grid: SphereGrid, n_altitudes: int) -> Float[Array, "*hours alt pos uv"]:
         """e, whatever the key"""
         return self.error
 
@@ -113,7 +115,7 @@ class GEFSError(WindError):
 class ForecastPrior(Prior[WindField]):
     """W = forecast + e, the forecast fixed and e taken once per episode"""
 
-    forecast: Float[Array, "alt pos uv"]
+    forecast: Float[Array, "alt pos uv"] | Float[Array, "t alt pos uv"]
     """(u, v) predicted at every altitude and position, and what the agent is told"""
 
     error: WindError
@@ -122,8 +124,14 @@ class ForecastPrior(Prior[WindField]):
     grid: SphereGrid
     """What `pos` is indexed by"""
 
+    hours: Float[Array, " t"] | None
+    """The t each frame of a drifting forecast stands for, None for one frame that never moves"""
+
     def sample(self, domain: Domain[WindField], key: PRNGKeyArray) -> WindField:
         """One episode's W"""
         if not isinstance(domain, FunctionDomain):
             raise TypeError(f"a {type(domain).__name__} holds no fields, so none can be drawn from it")
-        return GridWind(self.forecast + self.error.sample(key, self.grid, self.forecast.shape[0]), self.grid)
+        if self.hours is None:
+            return GridWind(self.forecast + self.error.sample(key, self.grid, self.forecast.shape[0]), self.grid)
+        error = self.error.sample(key, self.grid, self.forecast.shape[1])  # (alt, pos, uv) or (t, alt, pos, uv)
+        return DriftingWind(self.forecast + (error if error.ndim == self.forecast.ndim else error[None]), self.hours, self.grid)
