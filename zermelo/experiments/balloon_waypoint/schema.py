@@ -14,7 +14,10 @@ class ProblemConfig:
     """Where the wind is read from, relative to the package"""
 
     frame: int = MISSING
-    """Which hour of the record the episode runs at, taking W and F there"""
+    """Which hour of the record the episode starts at, taking W and F from there"""
+
+    frames: int = MISSING
+    """How many hours of the record the episode runs over, one holding W and F still"""
 
     forecast: Literal["GEFS", "gaussian"] = MISSING
     """F = the forecast the record holds, or W itself under a drawn error"""

@@ -7,6 +7,7 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 from hydra.utils import get_class, instantiate
+from jaxtyping import Array, Float
 
 from zermelo.experiments.balloon_waypoint.schema import RunConfig
 from zermelo.interface import Agent
@@ -39,11 +40,13 @@ def assemble(cfg: RunConfig) -> Episode:
     k_world, k_agent, k_steps = jax.random.split(jax.random.key(cfg.seed), 3)
     recording = load_wind(Path(__file__).resolve().parents[3] / cfg.problem.wind_path)
     grid, n_alt = recording.grid, recording.n_alt
-    truth = recording.at(cfg.problem.frame)
+    is_drifting = cfg.problem.frames > 1
+    over, held_at = recording.window(slice(cfg.problem.frame, cfg.problem.frame + cfg.problem.frames))
+    truth, predicted = over if is_drifting else tuple(window[0] for window in over)  # (t, alt, pos, uv), or one frame held still
+    hours: Float[Array, " t"] | None = held_at if is_drifting else None
     error: WindError
     if cfg.problem.forecast == "GEFS":
-        predicted = recording.forecast_at(cfg.problem.frame)
-        error = GEFSError(truth - predicted)
+        error = GEFSError(truth - predicted)  # W - F at every hour the window holds
     else:  # W is the forecast, so the drawn error is what makes them differ
         predicted = truth
         error = GaussianError(
@@ -61,12 +64,13 @@ def assemble(cfg: RunConfig) -> Episode:
         resource_units=cfg.problem.resource_units,
         margin_lat=cfg.problem.margin_lat,
         margin_lon=cfg.problem.margin_lon,
+        hours=hours,
     )
     objective = balloon_objective(
         recording, states, instantiate(cfg.problem.target, _target_whitelist_=WHITELIST), cfg.problem.margin_lat, cfg.problem.margin_lon
     )
     candidates = objective.candidates
-    forecast = GridWind(predicted, grid)
+    forecast = GridWind(predicted[0] if is_drifting else predicted, grid)
     # three horizontal coordinates in km, then altitude in km
     lengthscale = jnp.asarray([cfg.belief.lengthscale_km] * 3 + [cfg.belief.lengthscale_altitude_km])
     belief = (
