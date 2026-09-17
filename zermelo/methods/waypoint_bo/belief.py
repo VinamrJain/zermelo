@@ -134,12 +134,12 @@ class OracleBelief(Belief):
     data: Dataset
 
     field: Function = dataclasses.field(metadata=dict(static=True))
-    """The field the world drew, frozen to a table"""
+    """The field the world drew"""
 
     @classmethod
     def empty(cls, positions: Domain, rows: int, m: int, field: Function) -> "OracleBelief":
         """Seen nothing, over a buffer of `rows` rows, holding the field the world drew"""
-        return cls(positions, Dataset.empty(rows, m), lookup(positions, field(elements(positions))))
+        return cls(positions, Dataset.empty(rows, m), field)
 
     def fit(self, data: Dataset) -> "OracleBelief":
         return dataclasses.replace(self, data=data)
