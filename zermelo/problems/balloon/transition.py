@@ -1,15 +1,16 @@
 """One step of a balloon: the wind carries it, the action moves it between altitudes, and that spends resource
 
-s = (lat, lon, p, r, W)     where it is, which altitude, what resource is left, the wind it moves in
+s = (lat, lon, p, r, t, W)  where it is, which altitude, what resource is left, what time, the wind it moves in
 a in {0, 1, 2}              down one, hold, up one
-W(lat, lon, p) = (u, v)     the wind there (m/s), u eastward and v northward
+W(lat, lon, p, t) = (u, v)  the wind there (m/s), u eastward and v northward
 h                           hours in one step
 (i, j)                      the grid cell of (lat, lon): i the row, j the column
 
-Two factors write (lat, lon, p), and the resource follows from what they did:
+Three factors write (lat, lon, p, t), and the resource follows from what they did:
 
     (i, j)' ~ (i, j) + d           d the wind's step in cells, each axis rounded   Advection
     p'      = p + a - 1            where r > 0 and 0 <= p' < n_altitudes           Ascent
+    t'      = t + h                                                                Clock
     r'      = r - |p' - p|                                                         Resource
 """
 
@@ -105,11 +106,27 @@ class Ascent(Factor[Act]):
 
 
 @dataclass(frozen=True)
+class Clock(Factor[Act]):
+    """The hours an episode has run, advanced whatever the action: t' = t + h"""
+
+    step_hours: float
+
+    @property
+    def part(self) -> str:
+        return "hours"
+
+    def sample(self, key: PRNGKeyArray, state: dict[str, Any], action: Act) -> Float[Array, ""]:
+        """t' = t + h"""
+        return state["hours"] + self.step_hours
+
+
+@dataclass(frozen=True)
 class BalloonTransition(Transition[Act]):
-    """s' factor by factor: the wind moves (lat, lon), the action moves p, and a move spends resource"""
+    """s' factor by factor: the wind moves (lat, lon), the action moves p, the clock updates, and a move spends resource"""
 
     advection: Advection
     ascent: Ascent
+    clock: Clock
 
     state_domain: ProductDomain
     """Every state, in the index order a kernel's arrays follow"""
@@ -122,7 +139,7 @@ class BalloonTransition(Transition[Act]):
     @property
     def factors(self) -> tuple[Factor[Act], ...]:
         """The factors in the order their parts are written"""
-        return (self.advection, self.ascent)
+        return (self.advection, self.ascent, self.clock)
 
     def __call__(self, key: PRNGKeyArray, state: dict[str, Any], action: Act) -> dict[str, Any]:
         """One sampled step, and the resource the altitude change spent"""
