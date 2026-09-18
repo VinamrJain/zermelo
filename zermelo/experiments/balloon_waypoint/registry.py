@@ -2,7 +2,7 @@
 
 import dataclasses
 
-from zermelo.experiments.balloon_waypoint.schema import BeliefConfig, ProblemConfig, Resources
+from zermelo.experiments.balloon_waypoint.schema import BeliefConfig, BeliefKernelConfig, ProblemConfig, Resources
 from zermelo.experiments.balloon_waypoint.setup import point_speed
 
 IRMA_JOSE = ProblemConfig(
@@ -27,9 +27,10 @@ def matched_belief() -> BeliefConfig:
     """A belief the size and reach of the forecast's own error"""
     return BeliefConfig(
         oracle=False,
-        kernel="gpjax.kernels.Matern52",
-        lengthscale_km=300.0,  # error's horizontal correlation
-        lengthscale_altitude_km=3.0,
+        # three horizontal coordinates in km at the error's own correlation, then altitude in km
+        kernel_factors=[
+            BeliefKernelConfig(kernel="gpjax.kernels.Matern52", parts=["position", "altitude"], lengthscale=[300.0] * 3 + [3.0])
+        ],
         amplitude=4.8,  # m/s, the error's spread
         noise=1e-2,
         forecast_prior=True,

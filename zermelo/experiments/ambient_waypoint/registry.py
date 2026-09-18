@@ -1,6 +1,6 @@
 """The world every study runs on, and the numbers every sweep of it holds equal"""
 
-from zermelo.experiments.ambient_waypoint.schema import BeliefConfig, ProblemConfig, Resources
+from zermelo.experiments.ambient_waypoint.schema import BeliefConfig, BeliefKernelConfig, ProblemConfig, Resources
 
 AMBIENT1_CONTROL1 = ProblemConfig(
     ambient_axes=1,
@@ -29,8 +29,14 @@ def matched_belief(world: ProblemConfig) -> BeliefConfig:
     """A belief holding the world's own kernel numbers, at a stated noise and fidelity"""
     return BeliefConfig(
         oracle=False,
-        kernel=world.field_kernel,
-        lengthscale=world.field_lengthscale,
+        # one lengthscale per coordinate the two grids embed to, isotropic here
+        kernel_factors=[
+            BeliefKernelConfig(
+                kernel=world.field_kernel,
+                parts=["ambient", "controllable"],
+                lengthscale=[world.field_lengthscale] * (world.ambient_axes + world.controllable_axes),
+            )
+        ],
         amplitude=world.field_amplitude,  # a standard deviation on both sides; the kernel squares it
         noise=1e-3,
         n_features=256,

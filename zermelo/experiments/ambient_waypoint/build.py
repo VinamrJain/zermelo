@@ -12,7 +12,7 @@ from zermelo.interface import Agent
 from zermelo.methods.random_agent import RandomAgent
 from zermelo.methods.waypoint_bo.acquisition import Acquisition
 from zermelo.methods.waypoint_bo.agent import WaypointAgent, posterior_moments
-from zermelo.methods.waypoint_bo.belief import GPBelief, OracleBelief
+from zermelo.methods.waypoint_bo.belief import BeliefKernel, GPBelief, OracleBelief
 from zermelo.problems.ambient_dynamics import (
     GP,
     AmbientObjective,
@@ -62,18 +62,20 @@ def assemble(cfg: RunConfig) -> Episode:
     world = ambient_world(ambient, controllable, transition, readout, field_prior, candidates)
     objective = AmbientObjective(candidates)
     positions = ambient_positions(ambient, controllable)
+    context = world.readout.context
     belief = (
         # the field of the world the episode runs in, drawn on its key
-        OracleBelief.empty(positions, cfg.horizon, ambient.n_axes, world.reset(k_world)[0]["field"])
+        OracleBelief.empty(positions, cfg.horizon, ambient.n_axes, world.reset(k_world)[0]["field"], context)
         if cfg.belief.oracle
         else GPBelief.empty(
             positions,
             cfg.horizon,  # one row per move, the readings an episode folds in
             ambient.n_axes,
-            lengthscale=jnp.full(positions.dim(), cfg.belief.lengthscale),  # one per embedded coordinate, isotropic here
+            n_context=sum(context.values()),
+            kernel_factors=tuple(BeliefKernel.of(get_class(f.kernel), f.parts, f.lengthscale) for f in cfg.belief.kernel_factors),
+            context=context,
             amplitude=jnp.asarray(cfg.belief.amplitude),
             noise=jnp.asarray(cfg.belief.noise),
-            kernel_family=get_class(cfg.belief.kernel),
             n_features=cfg.belief.n_features,
             refit=cfg.belief.refit,
             refit_steps=cfg.belief.refit_steps,
@@ -83,7 +85,7 @@ def assemble(cfg: RunConfig) -> Episode:
     agent: Agent[Any]
     if cfg.method is None:
         # no rule and no update: it claims the prior every step
-        agent = RandomAgent(claim=posterior_moments(belief))
+        agent = RandomAgent(claim=posterior_moments(belief, jnp.zeros(sum(context.values()))))
     else:
         agent = WaypointAgent(
             candidates=candidates,
@@ -102,6 +104,7 @@ def assemble(cfg: RunConfig) -> Episode:
             ),
             position_key="position",
             reading_key="reading",
+            context_key="context",
             horizon=cfg.horizon,
             opening_legs=cfg.method.opening_legs,
             claim_every=cfg.claim_every,

@@ -1,4 +1,5 @@
 import dataclasses
+from typing import Any
 
 from zermelo.experiments.ambient_waypoint.registry import (
     AMBIENT1_CONTROL1,
@@ -16,10 +17,17 @@ from zermelo.experiments.ambient_waypoint.setup import arm, max_magnitude, sweep
 
 MATCHED = matched_belief(AMBIENT1_CONTROL1)
 
+
+def with_kernel(belief: BeliefConfig, **replaced: Any) -> BeliefConfig:
+    """`belief` with the named settings of its kernel replaced, its kernel being a single factor"""
+    (factor,) = belief.kernel_factors
+    return dataclasses.replace(belief, kernel_factors=[dataclasses.replace(factor, **replaced)])
+
+
 BELIEFS: dict[str, BeliefConfig] = {
     "matched": MATCHED,
-    "matern32": dataclasses.replace(MATCHED, kernel="gpjax.kernels.Matern32"),
-    "lengthscale5": dataclasses.replace(MATCHED, lengthscale=5.0),  # the truth's is 2.5
+    "matern32": with_kernel(MATCHED, kernel="gpjax.kernels.Matern32"),
+    "lengthscale5": with_kernel(MATCHED, lengthscale=[5.0, 5.0]),  # the truth's is 2.5
     "amplitude2": dataclasses.replace(MATCHED, amplitude=2.0),  # the truth's is 3.0, as a standard deviation
 }
 

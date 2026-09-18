@@ -1,5 +1,5 @@
 from zermelo.experiments.ambient_waypoint.registry import RECORDED
-from zermelo.experiments.ambient_waypoint.schema import BeliefConfig, MethodConfig, ProblemConfig, Resources
+from zermelo.experiments.ambient_waypoint.schema import BeliefConfig, BeliefKernelConfig, MethodConfig, ProblemConfig, Resources
 from zermelo.experiments.ambient_waypoint.setup import Implementation, arm, expected_improvement, max_magnitude, sweep, value_iteration
 
 WORLD = ProblemConfig(
@@ -29,7 +29,13 @@ WORLD = ProblemConfig(
 def _belief(oracle: bool) -> BeliefConfig:
     """The model an arm holds: matched to this world, or the true field itself"""
     return BeliefConfig(
-        oracle=oracle, kernel="gpjax.kernels.RBF", lengthscale=1.2, amplitude=1.0, noise=0.01, n_features=32, refit=False, refit_steps=20
+        oracle=oracle,
+        kernel_factors=[BeliefKernelConfig(kernel="gpjax.kernels.RBF", parts=["ambient", "controllable"], lengthscale=[1.2, 1.2])],
+        amplitude=1.0,
+        noise=0.01,
+        n_features=32,
+        refit=False,
+        refit_steps=20,
     )
 
 

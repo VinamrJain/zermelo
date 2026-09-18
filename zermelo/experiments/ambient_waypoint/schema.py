@@ -67,16 +67,28 @@ class ProblemConfig:
 
 
 @dataclass
+class BeliefKernelConfig:
+    """One factor of the belief's kernel, over the parts it names"""
+
+    kernel: str = MISSING
+    """Dotted path to the stationary kernel family this factor is"""
+
+    parts: list[str] = MISSING
+    """Which parts of a coordinate row this reads, named as the problem names them"""
+
+    lengthscale: list[float] = MISSING
+    """One per column those parts occupy, in the order `parts` names them"""
+
+
+@dataclass
 class BeliefConfig:
     """A method's own model of the field"""
 
     oracle: bool = MISSING
     """Whether the method is handed the true field instead of fitting one"""
 
-    kernel: str = MISSING
-    """Dotted path to the kernel family the method assumes"""
-
-    lengthscale: float = MISSING
+    kernel_factors: list[BeliefKernelConfig] = MISSING
+    """The factors the kernel is a product of"""
 
     amplitude: float = MISSING
     """Amplitude of that kernel, as a standard deviation"""
