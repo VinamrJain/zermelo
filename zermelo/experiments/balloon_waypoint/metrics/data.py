@@ -32,7 +32,6 @@ RULES = {
     "ei": "expected improvement, closed form",
     "thompson": "Thompson sampling",
     "eui": "expected utility of information",
-    "predictive_confidence": "predictive confidence",
     "mean": "posterior-mean plan",
     "sampled": "sampled-field plan",
 }

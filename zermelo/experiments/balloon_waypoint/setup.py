@@ -117,11 +117,6 @@ def expected_improvement() -> Implementation:
     return _built("zermelo.methods.waypoint_bo.utility.ExpectedImprovement")
 
 
-def predictive_confidence() -> Implementation:
-    """Negative predictive entropy over the candidate cells, under the belief re-conditioned on the scored cells"""
-    return _built("zermelo.methods.waypoint_bo.utility.PredictiveConfidence")
-
-
 def uniform() -> Implementation:
     """A draw ignoring the data"""
     return _built("zermelo.methods.waypoint_bo.utility.Uniform")

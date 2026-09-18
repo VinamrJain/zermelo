@@ -1,6 +1,5 @@
 """`U(D_n)`: what a set of readings is worth"""
 
-import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
@@ -79,23 +78,6 @@ class UpperConfidence(Utility):
         mean, var = belief.predict(data.z, query_context(data))
         bound = jnp.linalg.norm(mean, axis=-1) + self.c * jnp.sqrt(jnp.sum(var, axis=-1))
         return jnp.max(jnp.where(data.live & candidates.live[data.z], bound, 0.0), axis=-1)  # 0.0 floors a magnitude
-
-
-@dataclass(frozen=True)
-class PredictiveConfidence(Utility):
-    """Negative predictive entropy over the candidate cells, under the belief re-conditioned on the scored data"""
-
-    def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
-        query = jnp.flatnonzero(candidates.live)
-        batch, rows = data.z.shape[:-1], data.z.shape[-1]
-        z, r, live = data.z.reshape(-1, rows), data.r.reshape(-1, rows, data.r.shape[-1]), data.live.reshape(-1, rows)
-        context = data.context.reshape(-1, rows, data.context.shape[-1])
-        scored = []
-        for i in range(z.shape[0]):
-            rows_i = Dataset(z[i], r[i], live[i] & candidates.live[z[i]], context[i])
-            var = belief.condition(rows_i).predict(query, context[i][-1])[1]
-            scored.append(-jnp.sum(0.5 * jnp.log(2 * math.pi * math.e * var)))
-        return jnp.stack(scored).reshape(batch)
 
 
 @dataclass(frozen=True)
