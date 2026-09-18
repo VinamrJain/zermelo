@@ -15,9 +15,9 @@ from zermelo.methods.waypoint_bo.belief import Belief, Dataset, coordinates, loo
 from zermelo.methods.waypoint_bo.planner import Policy
 
 
-def posterior_moments(belief: Belief) -> Function:
-    """The belief's mean and log-variance per component, readable at any cell"""
-    mean, var = belief.predict(jnp.arange(coordinates(belief.positions).shape[0]))
+def posterior_moments(belief: Belief, context: Float[Array, " n_context"]) -> Function:
+    """The belief's mean and log-variance per component at one context, readable at any cell"""
+    mean, var = belief.predict(jnp.arange(coordinates(belief.positions).shape[0]), context)
     return lookup(belief.positions, jnp.concatenate([mean, jnp.log(var)], axis=-1))
 
 
@@ -66,6 +66,9 @@ class WaypointAgent(Agent[WaypointAgentState]):
     reading_key: str
     """Which part of the reading carries what it read there"""
 
+    context_key: str
+    """Which part of the reading carries the coordinates beyond the cell, absent where the readout publishes none"""
+
     horizon: int
     """`T`: the episode's move count, one reading per move filling one buffer row"""
 
@@ -97,11 +100,16 @@ class WaypointAgent(Agent[WaypointAgentState]):
             raise ValueError("the transition's kernel is written over a different set from the one this agent was given")
         return kernel
 
+    def _context(self, obs: Observation) -> Float[Array, " n_context"]:
+        """The coordinates this reading carries beyond its cell, empty where the readout publishes none"""
+        return obs.reading[self.context_key] if self.context_key in obs.reading else jnp.zeros(0)
+
     def _fold_reading(self, state: WaypointAgentState, obs: Observation) -> tuple[Int[Array, ""], Belief]:
         """Where the actor stands, and the belief with this step's reading folded in"""
         z = self.candidates.index_of(obs.reading[self.position_key])
         row = int(jnp.sum(state.belief.data.live))  # rows written so far; concrete, an episode being a Python loop
-        return z, state.belief.fit(state.belief.data.write(row, z, obs.reading[self.reading_key]))
+        written = state.belief.data.write(row, z, obs.reading[self.reading_key], self._context(obs))
+        return z, state.belief.fit(written)
 
     def reset(self, key: PRNGKeyArray, obs: Observation) -> WaypointAgentState:
         """Nothing read yet: an empty buffer, blank scores at the shape they keep, and the step budget already spent"""
@@ -126,14 +134,15 @@ class WaypointAgent(Agent[WaypointAgentState]):
             frac_reachable_candidates=jnp.zeros(()),
         )
         policy = Policy(jnp.zeros((n_states, 1), jnp.int32), jnp.zeros((n_states, 1)))
-        empty = self.belief.condition(Dataset.empty(self.horizon, width))
+        context = self._context(obs)
+        empty = self.belief.condition(Dataset.empty(self.horizon, width, context.shape[-1]))
         return WaypointAgentState(
             empty,
             blank,
             policy,
             jnp.asarray(self.acquisition.planner.max_steps, jnp.int32),
             jnp.zeros((), jnp.int32),
-            posterior_moments(empty),
+            posterior_moments(empty, context),
         )
 
     def decide(self, key: PRNGKeyArray, agent_state: WaypointAgentState, obs: Observation) -> tuple[WaypointAgentState, Decision]:
@@ -141,7 +150,8 @@ class WaypointAgent(Agent[WaypointAgentState]):
         k_draw, k_score, k_plan = jax.random.split(key, 3)
         planner = self.acquisition.planner
         z, belief = self._fold_reading(agent_state, obs)
-        claim = posterior_moments(belief) if int(agent_state.steps_taken) % self.claim_every == 0 else agent_state.claim
+        context = self._context(obs)  # the field is read, planned and scored at the context this reading carries
+        claim = posterior_moments(belief, context) if int(agent_state.steps_taken) % self.claim_every == 0 else agent_state.claim
         if int(agent_state.steps_taken) < planner.max_steps * self.opening_legs:
             # the opening: a uniform act, no waypoint and no planning
             return WaypointAgentState(
@@ -150,9 +160,9 @@ class WaypointAgent(Agent[WaypointAgentState]):
         budget_spent = agent_state.steps_since_waypoint >= planner.max_steps
         if bool(budget_spent | planner.arrived(self.positions, agent_state.scores.waypoint[None])[z, 0]):
             actions = self._legal_actions(obs)
-            scores = self.acquisition.choose(k_score, belief, self.transition, z, actions, self.candidates)
+            scores = self.acquisition.choose(k_score, belief, self.transition, z, actions, self.candidates, context)
             # the walk actually taken is planned under the posterior mean, whatever field the winner was scored under
-            policy = planner.plan(k_plan, self._checked_kernel(belief.mean()), scores.waypoint[None], actions)
+            policy = planner.plan(k_plan, self._checked_kernel(belief.mean(context)), scores.waypoint[None], actions)
             steps = jnp.zeros((), jnp.int32)
         else:
             scores, policy, steps = agent_state.scores, agent_state.policy, agent_state.steps_since_waypoint + 1

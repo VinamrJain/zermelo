@@ -113,6 +113,7 @@ class Acquisition:
         position: Int[Array, ""],
         actions: Int[Array, " n_actions"],
         candidates: Subset[Any],
+        context: Float[Array, " n_context"],
     ) -> Scores:
         """Every candidate scored under every field and walk, and the argmax over them"""
         k_indices, k_field, k_plan, k_walk, k_utility = jax.random.split(key, 5)
@@ -124,16 +125,16 @@ class Acquisition:
         walk_keys = jax.vmap(jax.random.fold_in, in_axes=(None, 0))(k_walk, jnp.arange(max(self.n_walks, 1)))
         held, n_scored = belief.data, candidate_indices.shape[0]
         # pi[mu_n], solved once and reused
-        mean_policy = self.planner.plan(k_plan, transition.kernel(belief.mean()), candidate_indices, actions)
+        mean_policy = self.planner.plan(k_plan, transition.kernel(belief.mean(context)), candidate_indices, actions)
         utility_samples, predicted_samples, rolled_samples, first_draw_walks = [], [], [], None
 
         # f-hat^(1..S)
-        fields = [belief.mean()] if self.n_fields == 0 else belief.draw(k_field, self.n_fields)
+        fields = [belief.mean(context)] if self.n_fields == 0 else belief.draw(k_field, self.n_fields, context)
         score_keys = jax.vmap(jax.random.fold_in, in_axes=(None, 0))(k_utility, jnp.arange(len(fields)))  # keyed by index
         for k_score, field in zip(score_keys, fields, strict=True):
             kernel = transition.kernel(field)  # p(.|f-hat)
             values = field(elements(kernel.domain))  # f-hat(z), one row per cell of the position domain
-            held_under_field = Dataset(held.z, values[held.z], held.live)  # D_n, its readings re-taken from f-hat
+            held_under_field = Dataset(held.z, values[held.z], held.live, held.context)  # D_n, its readings re-taken from f-hat
             base_utility = self.utility(k_score, belief, held_under_field, candidates) if self.improvement else jnp.zeros(())  # U(D_n)
 
             if self.n_walks == 0:  # (1, n_candidates, 1): tau = (x), the destination and no route
@@ -142,7 +143,8 @@ class Acquisition:
                 walk, moved = self.planner.roll(walk_keys, kernel, mean_policy, position)
             first_draw_walks = walk[0] if first_draw_walks is None else first_draw_walks  # (n_candidates, steps) under f-hat^(1), tau^(1)
 
-            imagined = Dataset(walk, values[walk], moved)  # obs(tau)
+            # obs(tau) = {(z_i, f-hat(z_i), context)}: the walk's cells read off f-hat, every row at the plan's own context
+            imagined = Dataset(walk, values[walk], moved, jnp.broadcast_to(context, (*walk.shape, context.shape[-1])))
             scored = held_under_field.broadcast(walk.shape[:-1]).concat(imagined) if self.improvement else imagined  # D_n + obs(tau)
             utility_term = self.utility(k_score, belief, scored, candidates) - base_utility  # (n_walks, n_candidates)
             rolled = self.walk_cost(kernel, walk, moved, mean_policy, position, actions).astype(utility_term.dtype)  # cost(tau)

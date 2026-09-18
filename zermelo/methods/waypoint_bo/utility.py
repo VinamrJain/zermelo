@@ -22,6 +22,14 @@ class Utility(ABC):
         """What `data` is worth, one score per leading batch axis of `data`"""
 
 
+def query_context(data: Dataset) -> Float[Array, " n_context"]:
+    """The context the belief is read at to score `data`: its last row's
+
+    context[-1, ..., -1, :], one -1 per leading batch axis of a (*batch, n, n_context) array.
+    """
+    return data.context[(-1,) * (data.context.ndim - 1)]
+
+
 @dataclass(frozen=True)
 class MaxMagnitude(Utility):
     """U(D) = max over the set of ||r||, the incumbent beta_n"""
@@ -37,7 +45,7 @@ class PosteriorSpread(Utility):
     """The posterior standard deviations at the scored cells, summed"""
 
     def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
-        spread = jnp.sqrt(jnp.sum(belief.predict(data.z)[1], axis=-1))  # sqrt(sum_j var_j), the components being independent
+        spread = jnp.sqrt(jnp.sum(belief.predict(data.z, query_context(data))[1], axis=-1))  # sqrt(sum_j var_j), components independent
         return jnp.sum(jnp.where(data.live & candidates.live[data.z], spread, 0.0), axis=-1)
 
 
@@ -51,7 +59,7 @@ class ExpectedImprovement(Utility):
         held = belief.data  # the incumbent comes from what has actually been read, not from the scored rows
         # zero where nothing has been read yet, which is the infimum of a magnitude and makes the tails below disjoint
         beta = jnp.max(jnp.where(held.live & candidates.live[held.z], jnp.linalg.norm(held.r, axis=-1), 0.0))
-        mean, var = belief.predict(data.z)
+        mean, var = belief.predict(data.z, query_context(data))
         mu, spread = mean[..., 0], jnp.sqrt(jnp.maximum(var[..., 0], 1e-12))  # (*batch, n): spread floored to 1e-6
         # |f| clears beta above or below, disjointly for beta >= 0, so the two tails add. Each is
         # `E[(x - c)^+] = gap * Phi(gap / spread) + spread * phi(gap / spread)` at its own gap
@@ -68,7 +76,7 @@ class UpperConfidence(Utility):
     """How much of the spread to add"""
 
     def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
-        mean, var = belief.predict(data.z)
+        mean, var = belief.predict(data.z, query_context(data))
         bound = jnp.linalg.norm(mean, axis=-1) + self.c * jnp.sqrt(jnp.sum(var, axis=-1))
         return jnp.max(jnp.where(data.live & candidates.live[data.z], bound, 0.0), axis=-1)  # 0.0 floors a magnitude
 
@@ -81,9 +89,11 @@ class PredictiveConfidence(Utility):
         query = jnp.flatnonzero(candidates.live)
         batch, rows = data.z.shape[:-1], data.z.shape[-1]
         z, r, live = data.z.reshape(-1, rows), data.r.reshape(-1, rows, data.r.shape[-1]), data.live.reshape(-1, rows)
+        context = data.context.reshape(-1, rows, data.context.shape[-1])
         scored = []
         for i in range(z.shape[0]):
-            var = belief.condition(Dataset(z[i], r[i], live[i] & candidates.live[z[i]])).predict(query)[1]
+            rows_i = Dataset(z[i], r[i], live[i] & candidates.live[z[i]], context[i])
+            var = belief.condition(rows_i).predict(query, context[i][-1])[1]
             scored.append(-jnp.sum(0.5 * jnp.log(2 * math.pi * math.e * var)))
         return jnp.stack(scored).reshape(batch)
 
