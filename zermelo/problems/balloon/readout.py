@@ -39,12 +39,18 @@ class BalloonReadout(Readout):
         """What W reads where the balloon is"""
 
     @property
+    def context(self) -> dict[str, int]:
+        """The hour a reading was taken at, the wind it measures having moved by then"""
+        return {"hours": 1}
+
+    @property
     def readings(self) -> Domain:
-        """Where the balloon is, what it has left, one measurement of W, and F"""
+        """Where the balloon is, what it has left, when it read, one measurement of W, and F"""
         return ProductDomain(
             {
                 "position": self.states,
                 "balloon_resource": BoxDomain(()),
+                "context": BoxDomain((1,)),
                 "wind": BoxDomain(self.wind_shape),
                 "forecast": BoxDomain(self.forecast.shape),
             }
@@ -55,6 +61,7 @@ class BalloonReadout(Readout):
         return {
             "position": {part: state[part] for part in self.states.parts},
             "balloon_resource": state["balloon_resource"],
+            "context": jnp.atleast_1d(state["hours"]),
             "wind": self.measure(state),
             "forecast": self.forecast,
         }

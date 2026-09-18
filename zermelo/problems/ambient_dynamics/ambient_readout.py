@@ -19,6 +19,11 @@ class LocalReading(Readout):
     sigma_obs: float
 
     @property
+    def context(self) -> dict[str, int]:
+        """The field never moves, so a reading is placed by its position alone"""
+        return {}
+
+    @property
     def readings(self) -> Domain:
         """Where the actor stands and what it read there"""
         return ProductDomain({"position": ambient_positions(self.ambient, self.controllable), "reading": BoxDomain((self.ambient.n_axes,))})
