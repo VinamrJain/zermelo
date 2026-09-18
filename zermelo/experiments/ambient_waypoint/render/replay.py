@@ -8,7 +8,15 @@ import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Bool, Float, Int
 
-from zermelo.experiments.ambient_waypoint.metrics.data import CURVE_CHANNELS, channels, episode_curves, opening_moves, rule, settings
+from zermelo.experiments.ambient_waypoint.metrics.data import (
+    CURVE_CHANNELS,
+    at_each_snapshot,
+    channels,
+    episode_curves,
+    opening_moves,
+    rule,
+    settings,
+)
 from zermelo.problems.ambient_dynamics import AmbientTransition, PaddedGridDomain, ambient_candidates, ambient_positions
 from zermelo.run.record import Record
 
@@ -208,7 +216,8 @@ def read(path: Path) -> Replay:
     offsets = np.asarray(transition.offsets)  # (choices_per_axis,) signed cells, the middle one standing still
     steered = transition.control_step * offsets[np.asarray(transition.choices(record.decision["action"]))[:, 0]]  # (moves,) along q
 
-    claim = np.asarray(record.objective_state["claim"]).copy()
+    snapshots = int(record.reward.shape[0]) + 1
+    claim = at_each_snapshot(np.asarray(record.objective_state["claim"]), snapshots, int(record.config["claim_every"])).copy()
     claim[0] = np.nan  # the objective opens with zeros in the shape of a claim, which is not one
 
     index = np.asarray(record.agent_state["scores.waypoint"]) if method is not None else np.zeros(0, int)
@@ -252,5 +261,5 @@ def read(path: Path) -> Replay:
         seconds=np.asarray(record.time_per_decision),
         bytes_held=np.asarray(record.memory_per_decision),
         plan=plan,
-        curves=episode_curves(channels(path, CURVE_CHANNELS)),
+        curves=episode_curves(channels(path, CURVE_CHANNELS), int(record.config["claim_every"])),
     )

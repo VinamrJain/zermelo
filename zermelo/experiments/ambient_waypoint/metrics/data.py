@@ -92,12 +92,17 @@ def labels(arms: Sequence[str]) -> dict[str, str]:
     return {arm: words if shared[words] == 1 else own[arm].replace("_", " ") for arm, words in named.items()}
 
 
-def episode_curves(held: dict[str, Any]) -> dict[str, Any]:
+def at_each_snapshot(claim: Any, snapshots: int, claim_every: int) -> Any:
+    """A claim stored every `claim_every` moves, spread back over `snapshots` by carrying each reading forward"""
+    return claim[np.minimum(np.arange(snapshots) // claim_every, claim.shape[0] - 1)]
+
+
+def episode_curves(held: dict[str, Any], claim_every: int) -> dict[str, Any]:
     """What one episode achieved, a value per move"""
     oracle = held["objective_state/oracle"][1:]  # (moves,) constant: the best magnitude on offer
     incumbent = held["objective_state/incumbent"][1:]  # (moves,) the best magnitude stood on
     truth = held["objective_state/truth"][1:]  # (moves, scored_cells, ambient_axes)
-    claim = held["objective_state/claim"][1:]  # (moves, scored_cells, 2 * ambient_axes)
+    claim = at_each_snapshot(held["objective_state/claim"], oracle.size + 1, claim_every)[1:]
     mean, log_variance = np.split(claim, 2, axis=-1)
     log_variance = np.maximum(log_variance, LOG_VARIANCE_FLOOR)
     residual, regret = truth - mean, oracle - incumbent
@@ -205,7 +210,7 @@ def tables(cells: list[tuple[str, int, Path, dict[str, Any]]]) -> tuple[pd.DataF
                     "arm": arm,
                     "seed": seed,
                     "step": np.arange(1, held["reward"].shape[0] + 1),
-                    **episode_curves(held),
+                    **episode_curves(held, int(config["claim_every"])),
                     **episode_diagnostics(held, config),
                 }
             )
