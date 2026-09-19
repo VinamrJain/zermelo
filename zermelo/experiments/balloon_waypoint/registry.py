@@ -5,22 +5,25 @@ import dataclasses
 from zermelo.experiments.balloon_waypoint.schema import BeliefConfig, BeliefKernelConfig, ProblemConfig, Resources
 from zermelo.experiments.balloon_waypoint.setup import point_speed
 
-IRMA_JOSE = ProblemConfig(
-    wind_path="zermelo/problems/balloon/data/irma_jose.npz",
-    frame=23,  # 2017-09-09 00Z, +72h on the forecast
-    frames=1,  # the record reaches 15 hours past the start
+ATLANTIC_2017SEP = ProblemConfig(
+    wind_path="zermelo/problems/balloon/data/global_2017sep.npz",
+    grid_stride=1,
+    hour_stride=1,
+    start_hour=3.0,  # the data's first frame, 2017-09-01 03Z
+    time_varying=True,
     forecast="GEFS",
     resource_units=80,
-    step_hours=3.0,  # one position per step at the record's mean 10 m/s
+    step_hours=3.0,
     error_scale=0.0,
     error_lengthscale_km=400.0,
     error_jitter=1e-4,
-    readout="zermelo.problems.balloon.readout.PointWind",
     target=point_speed(),
-    margin_lat=10,
-    margin_lon=10,
+    lat_min=14.0,
+    lat_max=30.0,
+    lon_min=-85.0,
+    lon_max=-40.0,
 )
-"""Two hurricanes over the Atlantic, under the forecast issued 72h before them"""
+"""The whole globe in September 2017, scored over the Atlantic box two hurricanes cross"""
 
 
 def matched_belief() -> BeliefConfig:
@@ -54,8 +57,8 @@ ARRIVAL_RADIUS_KM = 60.0
 OPENING_LEGS = 1
 """Waypoint legs of uniform random walking taken before the rule starts"""
 
-HORIZON_LENGTH = 250
-"""`T`: moves an episode makes, at 3 hours a move"""
+HORIZON_LENGTH = 238
+"""time_steps in an episode: 714 hours at 3 hours each, from the data's first frame to its last"""
 
 CLAIM_EVERY_STEPS = PLANNING_BUDGET
 """Moves between re-readings of the claim off a belief"""
@@ -64,8 +67,9 @@ RECORDED = {
     "state/position": 1,
     "state/altitude": 1,
     "state/balloon_resource": 1,
-    "objective_state/oracle": 1,
-    "objective_state/incumbent": 1,
+    "state/hours_elapsed": 1,
+    "objective_state/best_possible_speed": 1,
+    "objective_state/speed": 1,
     "objective_state/truth": 1,
     "objective_state/claim": CLAIM_EVERY_STEPS,
     "agent_state/steps_since_waypoint": 1,

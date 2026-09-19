@@ -17,7 +17,7 @@ from zermelo.experiments.balloon_waypoint.metrics.data import (
     settings,
 )
 from zermelo.problems.balloon.grid import balloon_states
-from zermelo.problems.balloon.objective import balloon_candidates
+from zermelo.problems.balloon.objective import balloon_candidates, candidate_box
 from zermelo.problems.balloon.world import load_wind
 from zermelo.run.record import Record
 
@@ -189,17 +189,20 @@ def read(path: Path) -> Replay:
     """The episode recorded in the directory at `path`, on the world its own configuration describes"""
     record = Record.load(path)
     problem, method, belief = record.config["problem"], record.config["method"], record.config["belief"]
-    recording = load_wind(Path(problem["wind_path"]))
-    grid, n_alt = recording.grid, recording.n_alt
-    altitude_km = tuple(float(km) for km in np.asarray(recording.altitude_km))
-    wind = np.asarray(recording.at(int(problem["frame"]))).reshape(n_alt, grid.n_lat, grid.n_lon, 2)
+    wind_data = load_wind(Path(problem["wind_path"]), int(problem["grid_stride"]), int(problem["hour_stride"]))
+    grid, n_alt = wind_data.grid, wind_data.n_alt
+    altitude_km = tuple(float(km) for km in np.asarray(wind_data.altitude_km))
+    # the wind the episode opened on: a sheet draws one field, whatever the wind did afterwards
+    opening = wind_data.frames_from(float(problem["start_hour"]), 0.0, False)[0][0]  # (alt, pos, uv)
+    wind = np.asarray(opening).reshape(n_alt, grid.n_lat, grid.n_lon, 2)
 
     states = balloon_states(grid, altitude_km)
-    candidates = balloon_candidates(states, grid, int(problem["margin_lat"]), int(problem["margin_lon"]))
+    box = candidate_box(grid, float(problem["lat_min"]), float(problem["lat_max"]), float(problem["lon_min"]), float(problem["lon_max"]))
+    candidates = balloon_candidates(states, grid, box)
     live = np.flatnonzero(np.asarray(candidates.live))  # (n_candidates,) indices into the state domain
     element = states.elements()
     position = np.asarray(element["position"])[live]  # (n_candidates, 2) degrees
-    cell = np.asarray(grid.cell_of(element["position"]))[live]  # (n_candidates, 2) row and column
+    cell = np.asarray(grid.row_col_of(element["position"]))[live]  # (n_candidates, 2) row and column
     level = np.asarray(element["altitude"])[live].astype(int)
     outside = np.ones((grid.n_lat, grid.n_lon), bool)
     outside[cell[:, 0], cell[:, 1]] = False  # every scored cell is inside the margin

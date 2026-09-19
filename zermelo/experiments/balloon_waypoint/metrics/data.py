@@ -56,7 +56,7 @@ DIAGNOSTICS = {
 }
 """What an arm did to get there, in the same two parts"""
 
-CURVE_CHANNELS = ("objective_state/oracle", "objective_state/incumbent", "objective_state/truth", "objective_state/claim")
+CURVE_CHANNELS = ("objective_state/best_possible_speed", "objective_state/speed", "objective_state/truth", "objective_state/claim")
 """What the curves are computed from, as the names a record holds them under"""
 
 TABLE_CHANNELS = CURVE_CHANNELS + (
@@ -113,12 +113,12 @@ def at_each_snapshot(claim: Any, snapshots: int, claim_every: int) -> Any:
 
 def episode_curves(held: dict[str, Any], claim_every: int) -> dict[str, Any]:
     """What one episode achieved, a value per move"""
-    oracle = held["objective_state/oracle"][1:]  # (moves,) constant: the best g on offer
-    incumbent = held["objective_state/incumbent"][1:]  # (moves,) the fastest wind stood in
-    truth = held["objective_state/truth"][1:]  # (moves, candidates) g at each candidate
-    claim = at_each_snapshot(held["objective_state/claim"], oracle.size + 1, claim_every)
+    best_possible_speed = held["objective_state/best_possible_speed"][1:]  # (moves,) the fastest wind on offer at each hour
+    flown = held["objective_state/speed"][1:]  # (moves,) the wind stood in, 0 off a candidate
+    truth = held["objective_state/truth"][1:]  # (moves, candidates) the speed at each candidate, at each hour
+    claim = at_each_snapshot(held["objective_state/claim"], flown.size + 1, claim_every)
     speed, spread = claimed_speed(claim[1:])  # (moves, candidates) each
-    regret = oracle - incumbent
+    regret = best_possible_speed - flown
     return {
         "simple_regret": regret,
         "cumulative_regret": np.cumsum(regret),
@@ -162,7 +162,7 @@ def episode_diagnostics(held: dict[str, Any], config: dict[str, Any]) -> dict[st
     fresh = np.zeros(stood.shape[0], bool)
     fresh[np.unique(stood, axis=0, return_index=True)[1]] = True  # the first snapshot each distinct cell was stood on
     altitude = held["state/altitude"]  # (moves + 1,) which of the record's altitudes it flew at
-    flown = held["objective_state/incumbent"][1:]  # (moves,) the fastest wind stood in by each move
+    flown = np.maximum.accumulate(held["objective_state/speed"][1:])  # (moves,) best_observed_speed: the fastest wind stood in by each move
     legs, after = episode_legs(held, config), np.arange(1, moves + 1) > opening_moves(config, moves)
     finished, arrived = np.zeros(moves + 1), np.zeros(moves + 1)
     np.add.at(finished, legs["ended"].astype(int), 1.0)

@@ -1,6 +1,6 @@
 import dataclasses
 
-from zermelo.experiments.balloon_waypoint.registry import IRMA_JOSE, RECORDED, matched_belief
+from zermelo.experiments.balloon_waypoint.registry import ATLANTIC_2017SEP, RECORDED, matched_belief
 from zermelo.experiments.balloon_waypoint.schema import BeliefConfig, BeliefKernelConfig, MethodConfig, Resources
 from zermelo.experiments.balloon_waypoint.setup import (
     Implementation,
@@ -13,17 +13,16 @@ from zermelo.experiments.balloon_waypoint.setup import (
 )
 
 WORLD = dataclasses.replace(
-    IRMA_JOSE,
+    ATLANTIC_2017SEP,
+    grid_stride=4,  # a 4 degree grid: 45 rows by 90 columns
+    hour_stride=2,  # a frame every 6 hours, at hours 3, 9, 15, ...
     forecast="gaussian",  # the drawn error, so the smoke run exercises that path too
-    resource_units=2,
-    frames=4,  # the wind moves under the balloon
+    resource_units=3,
     error_scale=1.0,
     error_lengthscale_km=600.0,  # wide, so a handful of readings say something about the whole box
     target=point_speed(),
-    margin_lat=15,
-    margin_lon=28,  # a narrow band of candidates, so a decision scores tens of states rather than thousands
 )
-"""The world at a ballast budget of two, scored over a strip of it"""
+"""The world on a coarse grid at a ballast budget of two, the wind moving under the balloon"""
 
 
 def _belief(oracle: bool) -> BeliefConfig:
@@ -33,7 +32,7 @@ def _belief(oracle: bool) -> BeliefConfig:
         matched_belief(),
         oracle=oracle,
         # the wind moves here, so the kernel carries a factor in the hour a reading was taken at
-        kernel_factors=[spatial, BeliefKernelConfig(kernel="gpjax.kernels.Matern32", parts=["hours"], lengthscale=[12.0])],
+        kernel_factors=[spatial, BeliefKernelConfig(kernel="gpjax.kernels.Matern32", parts=["hours_elapsed"], lengthscale=[12.0])],
         amplitude=WORLD.error_scale,
         n_features=32,
         refit_steps=20,
@@ -67,7 +66,7 @@ for name, resources in (
     sweep(
         name,
         problem=WORLD,
-        horizon=6,
+        horizon=10,
         claim_every=1,
         recorded={**RECORDED, "objective_state/claim": 1},
         seeds=[0],

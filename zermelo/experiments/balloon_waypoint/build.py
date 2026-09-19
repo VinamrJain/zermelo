@@ -7,7 +7,6 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 from hydra.utils import get_class, instantiate
-from jaxtyping import Array, Float
 
 from zermelo.experiments.balloon_waypoint.schema import RunConfig
 from zermelo.interface import Agent
@@ -18,12 +17,13 @@ from zermelo.methods.waypoint_bo.belief import BeliefKernel, GPBelief, OracleBel
 from zermelo.problems.balloon import (
     GaussianError,
     GEFSError,
-    GridWind,
+    StaticWind,
     WindError,
     balloon_objective,
     balloon_states,
     balloon_transition,
     balloon_world,
+    candidate_box,
     load_wind,
 )
 from zermelo.run.episode import Episode
@@ -38,39 +38,27 @@ WIND_COMPONENTS = 2
 def assemble(cfg: RunConfig) -> Episode:
     """The episode one configuration describes, that configuration carried onto its record"""
     k_world, k_agent, k_steps = jax.random.split(jax.random.key(cfg.seed), 3)
-    recording = load_wind(Path(__file__).resolve().parents[3] / cfg.problem.wind_path)
-    grid, n_alt = recording.grid, recording.n_alt
-    is_drifting = cfg.problem.frames > 1
-    over, held_at = recording.window(slice(cfg.problem.frame, cfg.problem.frame + cfg.problem.frames))
-    truth, predicted = over if is_drifting else tuple(window[0] for window in over)  # (t, alt, pos, uv), or one frame held still
-    hours: Float[Array, " t"] | None = held_at if is_drifting else None
+    wind_data = load_wind(Path(__file__).resolve().parents[3] / cfg.problem.wind_path, cfg.problem.grid_stride, cfg.problem.hour_stride)
+    grid = wind_data.grid
+    # (frames, alt, pos, uv) twice, and the hours_elapsed each frame stands for; one frame where the wind is held still
+    truth, predicted, frame_hours_elapsed = wind_data.frames_from(
+        cfg.problem.start_hour, cfg.horizon * cfg.problem.step_hours, cfg.problem.time_varying
+    )
     error: WindError
     if cfg.problem.forecast == "GEFS":
-        error = GEFSError(truth - predicted)  # W - F at every hour the window holds
+        error = GEFSError(truth - predicted)  # W - F at every frame the episode reads
     else:  # W is the forecast, so the drawn error is what makes them differ
         predicted = truth
         error = GaussianError(
             length_scale_km=cfg.problem.error_lengthscale_km, amplitude_ms=cfg.problem.error_scale, jitter=cfg.problem.error_jitter
         )
-    states = balloon_states(grid, tuple(float(h) for h in recording.altitude_km))
-    transition = balloon_transition(recording, states, cfg.problem.step_hours)
-    world = balloon_world(
-        recording,
-        states,
-        forecast=predicted,
-        error=error,
-        transition=transition,
-        readout=get_class(cfg.problem.readout),
-        resource_units=cfg.problem.resource_units,
-        margin_lat=cfg.problem.margin_lat,
-        margin_lon=cfg.problem.margin_lon,
-        hours=hours,
-    )
-    objective = balloon_objective(
-        recording, states, instantiate(cfg.problem.target, _target_whitelist_=WHITELIST), cfg.problem.margin_lat, cfg.problem.margin_lon
-    )
+    states = balloon_states(grid, tuple(float(h) for h in wind_data.altitude_km))
+    transition = balloon_transition(wind_data, states, cfg.problem.step_hours)
+    box = candidate_box(grid, cfg.problem.lat_min, cfg.problem.lat_max, cfg.problem.lon_min, cfg.problem.lon_max)
+    world = balloon_world(grid, states, predicted, frame_hours_elapsed, error, transition, cfg.problem.resource_units, box)
+    objective = balloon_objective(states, grid, instantiate(cfg.problem.target, _target_whitelist_=WHITELIST), box)
     candidates = objective.candidates
-    forecast = GridWind(predicted[0] if is_drifting else predicted, grid)
+    forecast = StaticWind(predicted[0], grid)  # F as the episode opens
     context = world.readout.context
     belief = (
         # the wind of the world the episode runs in, drawn on its key

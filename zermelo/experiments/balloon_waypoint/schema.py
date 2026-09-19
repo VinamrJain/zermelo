@@ -13,11 +13,17 @@ class ProblemConfig:
     wind_path: str = MISSING
     """Where the wind is read from, relative to the package"""
 
-    frame: int = MISSING
-    """Which hour of the record the episode starts at, taking W and F from there"""
+    grid_stride: int = MISSING
+    """Every how many of the data's rows and columns the grid keeps, 1 keeping all"""
 
-    frames: int = MISSING
-    """How many hours of the record the episode runs over, one holding W and F still"""
+    hour_stride: int = MISSING
+    """Every how many of the data's frames the episode may read, 1 keeping all"""
+
+    start_hour: float = MISSING
+    """The data's hour the episode begins at"""
+
+    time_varying: bool = MISSING
+    """Whether W and F move with hours_elapsed, or stay as they are at `start_hour`"""
 
     forecast: Literal["GEFS", "gaussian"] = MISSING
     """F = the forecast the record holds, or W itself under a drawn error"""
@@ -26,7 +32,7 @@ class ProblemConfig:
     """`r_0`: altitude changes the balloon can afford over the whole episode"""
 
     step_hours: float = MISSING
-    """`h`: hours the wind carries the balloon for in one step"""
+    """Hours in one time_step"""
 
     error_scale: float = MISSING
     """Standard deviation of a drawn error (m/s)"""
@@ -37,17 +43,14 @@ class ProblemConfig:
     error_jitter: float = MISSING
     """Added to a drawn error's correlation diagonal so it factorises"""
 
-    readout: str = MISSING
-    """Dotted path to what the balloon measures of the wind"""
-
     target: Any = MISSING
     """Which scalar of the wind the episode is scored on predicting, as a dotted path with its own arguments"""
 
-    margin_lat: int = MISSING
-    """Rows at each edge of the grid that no candidate sits in"""
-
-    margin_lon: int = MISSING
-    """Columns at each edge of the grid that no candidate sits in"""
+    lat_min: float = MISSING
+    lat_max: float = MISSING
+    lon_min: float = MISSING
+    lon_max: float = MISSING
+    """The box of grid points, in degrees, the candidates sit above and the balloon starts over"""
 
 
 @dataclass

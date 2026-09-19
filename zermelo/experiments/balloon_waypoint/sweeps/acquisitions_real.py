@@ -2,9 +2,9 @@ import dataclasses
 
 from zermelo.experiments.balloon_waypoint.registry import (
     ARRIVAL_RADIUS_KM,
+    ATLANTIC_2017SEP,
     CLAIM_EVERY_STEPS,
     HORIZON_LENGTH,
-    IRMA_JOSE,
     N_CANDIDATES,
     N_SEEDS,
     OPENING_LEGS,
@@ -49,7 +49,7 @@ def _method(
 
 sweep(
     "acquisitions_real",
-    problem=IRMA_JOSE,
+    problem=ATLANTIC_2017SEP,
     horizon=HORIZON_LENGTH,
     claim_every=CLAIM_EVERY_STEPS,
     recorded=RECORDED,

@@ -39,7 +39,7 @@ NOTATION = (
 """Every symbol the tables below use, as the symbol against its definition"""
 
 OUTCOME = (
-    ("simple_regret", "simple regret", r"R_T = g^\star - b_T", 2, "min"),
+    ("simple_regret", "simple regret", r"R_T = g^\star_T - g(z_T)", 2, "min"),
     ("cumulative_regret", "cumulative regret", r"\sum_{t = 1}^{T} (g^\star - b_t)", 0, "min"),
     ("reconstruction_error", "reconstruction error", r"\sqrt{\frac{1}{C} \sum_{x \in X} \big(\|\mu_T(x)\| - g(x)\big)^2}", 3, "min"),
     ("posterior_uncertainty", "posterior uncertainty", r"\frac{1}{C} \sum_{x \in X} s_T(x)", 3, "min"),

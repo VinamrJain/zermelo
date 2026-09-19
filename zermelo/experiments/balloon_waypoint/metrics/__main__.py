@@ -44,8 +44,10 @@ figures.draw_curves(curves, CURVES, colours, names, opening, style, title, sweep
 figures.draw_curves(curves, DIAGNOSTICS, colours, names, opening, style, title, sweep / "diagnostics.png")
 figures.draw_cost(spent, curves, colours, names, style, title, sweep / "cost.png")
 
-record = load_wind(Path(described["problem"]["wind_path"]))
-grid = record.grid
+wind_data = load_wind(
+    Path(described["problem"]["wind_path"]), int(described["problem"]["grid_stride"]), int(described["problem"]["hour_stride"])
+)
+grid = wind_data.grid
 
 walked = 0
 for arm, seed, cell, _ in cells:
@@ -54,6 +56,6 @@ for arm, seed, cell, _ in cells:
         figures.draw_legs(own, budget, colours[arm], style, f"{names[arm]}, seed {seed}", cell / "legs.png")
         walked += 1
 print(f"wrote curves.png, diagnostics.png and cost.png under {sweep}, and legs.png under {walked} cells")
-states = record.n_alt * grid.n_lat * grid.n_lon
+states = wind_data.n_alt * grid.n_lat * grid.n_lon
 candidates = int(np.asarray(channels(cells[0][2], ("objective_state/truth",))["objective_state/truth"]).shape[-1])
 print(f"wrote the tables under {summary.write(sweep, curves, legs, spent, described, names, states, candidates)}")

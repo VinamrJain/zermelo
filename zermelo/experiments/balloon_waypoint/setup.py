@@ -126,12 +126,12 @@ def uniform() -> Implementation:
 
 
 def point_speed() -> Implementation:
-    """`g(W; lat, lon, p) = ||W(lat, lon, p)||`"""
+    """speed = ||W(state)||"""
     return _built("zermelo.problems.balloon.objective.PointSpeed")
 
 
 def column_peak_speed(n_alt: int) -> Implementation:
-    """`g(W; lat, lon, p) = max over p' of ||W(lat, lon, p')||`"""
+    """max over altitudes of ||W|| above the state's grid point"""
     return _built("zermelo.problems.balloon.objective.ColumnPeakSpeed", n_alt=n_alt)
 
 
