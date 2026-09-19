@@ -48,7 +48,12 @@ DIAGNOSTICS = {
 }
 """What an arm did to get there, in the same two parts"""
 
-CURVE_CHANNELS = ("objective_state/oracle", "objective_state/incumbent", "objective_state/truth", "objective_state/claim")
+CURVE_CHANNELS = (
+    "objective_state/best_possible_magnitude",
+    "objective_state/best_observed_magnitude",
+    "objective_state/truth",
+    "objective_state/claim",
+)
 """What the curves are computed from, as the names a record holds them under"""
 
 TABLE_CHANNELS = CURVE_CHANNELS + (
@@ -99,13 +104,13 @@ def at_each_snapshot(claim: Any, snapshots: int, claim_every: int) -> Any:
 
 def episode_curves(held: dict[str, Any], claim_every: int) -> dict[str, Any]:
     """What one episode achieved, a value per move"""
-    oracle = held["objective_state/oracle"][1:]  # (moves,) constant: the best magnitude on offer
-    incumbent = held["objective_state/incumbent"][1:]  # (moves,) the best magnitude stood on
+    best_possible_magnitude = held["objective_state/best_possible_magnitude"][1:]  # (moves,) constant: the best magnitude on offer
+    best_observed_magnitude = held["objective_state/best_observed_magnitude"][1:]  # (moves,) the best magnitude stood on
     truth = held["objective_state/truth"][1:]  # (moves, scored_cells, ambient_axes)
-    claim = at_each_snapshot(held["objective_state/claim"], oracle.size + 1, claim_every)[1:]
+    claim = at_each_snapshot(held["objective_state/claim"], best_possible_magnitude.size + 1, claim_every)[1:]
     mean, log_variance = np.split(claim, 2, axis=-1)
     log_variance = np.maximum(log_variance, LOG_VARIANCE_FLOOR)
-    residual, regret = truth - mean, oracle - incumbent
+    residual, regret = truth - mean, best_possible_magnitude - best_observed_magnitude
     above = np.linalg.norm(truth, axis=-1) > LEVEL_SET_THRESHOLD  # (moves, scored_cells)
     return {
         "simple_regret": regret,
