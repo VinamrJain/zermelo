@@ -31,22 +31,6 @@ class WindField(ABC):
 
 @register_dataclass
 @dataclass(frozen=True)
-class StaticWind(WindField):
-    """W(position, altitude), the same at every hour, read at the nearest grid point"""
-
-    wind_on_grid: Float[Array, "alt pos uv"]
-    """(u, v) at every altitude and grid point, in the grid's index order"""
-
-    grid: SphereGrid = dataclasses.field(metadata=dict(static=True))
-    """What `pos` is indexed by"""
-
-    def __call__(self, state: dict[str, Any]) -> Float[Array, "*batch uv"]:
-        """wind_on_grid[altitude, flat index of position]"""
-        return self.wind_on_grid[state["altitude"], self.grid.flat_index(state["position"])]
-
-
-@register_dataclass
-@dataclass(frozen=True)
 class TimeVaryingWind(WindField):
     """W(position, altitude, hours_elapsed), read at the nearest grid point and the nearest hour the frames stand for"""
 
@@ -61,9 +45,8 @@ class TimeVaryingWind(WindField):
 
     def __call__(self, state: dict[str, Any]) -> Float[Array, "*batch uv"]:
         """wind_on_grid[argmin over frames of |frame_hours_elapsed - hours_elapsed|, altitude, flat index of position]"""
-        hours_elapsed = state["hours_elapsed"]
-        gap = jnp.abs(self.frame_hours_elapsed[:, None] - jnp.atleast_1d(hours_elapsed)[None, :])  # (frames, batch)
-        frame = jnp.argmin(gap, axis=0).reshape(jnp.shape(hours_elapsed))
+        gap = jnp.abs(jnp.asarray(state["hours_elapsed"])[..., None] - self.frame_hours_elapsed)  # (*batch, frames)
+        frame = jnp.argmin(gap, axis=-1)  # (*batch,)
         return self.wind_on_grid[frame, state["altitude"], self.grid.flat_index(state["position"])]
 
 

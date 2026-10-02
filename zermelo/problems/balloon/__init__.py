@@ -18,7 +18,7 @@ reward = ||W(state)||           counted on a candidate, a latitude-longitude box
 A plan and a belief are written over (position, altitude) alone
 """
 
-from zermelo.problems.balloon.field import ForecastPrior, GaussianError, GEFSError, StaticWind, TimeVaryingWind, WindError, WindField
+from zermelo.problems.balloon.field import ForecastPrior, GaussianError, GEFSError, TimeVaryingWind, WindError, WindField
 from zermelo.problems.balloon.grid import SphereGrid, Steps, balloon_states
 from zermelo.problems.balloon.objective import ColumnPeakSpeed, PointSpeed, StormSearch, Target, balloon_candidates, candidate_box
 from zermelo.problems.balloon.readout import PointWind
@@ -40,7 +40,6 @@ __all__ = [
     "PointSpeed",
     "PointWind",
     "SphereGrid",
-    "StaticWind",
     "Steps",
     "StormSearch",
     "Target",
