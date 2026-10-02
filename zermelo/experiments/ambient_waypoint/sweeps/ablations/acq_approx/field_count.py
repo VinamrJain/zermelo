@@ -19,7 +19,7 @@ def _method(n_fields: int) -> MethodConfig:
     """This sweep's held values"""
     return MethodConfig(
         utility=max_magnitude(),
-        planner=value_iteration(max_steps=PLANNING_BUDGET, radius=0.5, target_chunk=None),
+        planner=value_iteration(replan_every=PLANNING_BUDGET, radius=0.5, target_chunk=None),
         improvement=True,
         n_fields=n_fields,
         n_walks=16,

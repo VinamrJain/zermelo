@@ -251,7 +251,7 @@ def read(path: Path) -> Replay:
         prior_sd=float(belief["amplitude"]),
         cell=cell,
         pad=pad,
-        leg=int(method["planner"]["max_steps"]) if method is not None else int(record.reward.shape[0]),
+        leg=int(method["planner"]["replan_every"]) if method is not None else int(record.reward.shape[0]),
         path=position,
         drift=drift,
         control=np.stack([np.zeros_like(steered), steered], -1),

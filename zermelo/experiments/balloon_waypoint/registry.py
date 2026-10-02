@@ -36,7 +36,6 @@ def matched_belief() -> BeliefConfig:
         ],
         amplitude=4.8,  # m/s, the error's spread
         noise=1e-2,
-        forecast_prior=True,
         n_features=256,
         refit=False,
         refit_steps=100,  # unread while refitting is off, and stated anyway
@@ -72,7 +71,7 @@ RECORDED = {
     "objective_state/speed": 1,
     "objective_state/truth": 1,
     "objective_state/claim": CLAIM_EVERY_STEPS,
-    "agent_state/steps_since_waypoint": 1,
+    "agent_state/time_steps_since_waypoint": 1,
     "agent_state/scores.predicted_step_cost": 1,
     "agent_state/scores.frac_zero_value_candidates": 1,
     "agent_state/scores.frac_reachable_candidates": 1,

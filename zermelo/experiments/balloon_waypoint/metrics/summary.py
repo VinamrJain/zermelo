@@ -167,7 +167,7 @@ def write(
     """
     method = config.get("method")
     moves = int(curves["step"].max())
-    planner = {"max_steps": moves, "radius": float("nan")} if method is None else method["planner"]
+    planner = {"replan_every": moves, "radius": float("nan")} if method is None else method["planner"]
     ended = curves.sort_values("step").groupby(["arm", "seed"]).last().reset_index()
     held = curves.groupby(["arm", "seed"])[["zero_value_candidates", "reachable_candidates"]].mean().reset_index()
     counted = (
@@ -209,7 +209,7 @@ def write(
             "cells": states,  # every (lat, lon, altitude) the balloon may stand on
             "candidates": candidates,  # the subset of those the objective scores
             "axes": 3,  # lat, lon and altitude
-            "budget": int(planner["max_steps"]),
+            "budget": int(planner["replan_every"]),
             "radius": float(planner["radius"]),
             "opening": opening_moves(config, moves),
         }

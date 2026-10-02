@@ -17,7 +17,6 @@ from zermelo.methods.waypoint_bo.belief import BeliefKernel, GPBelief, OracleBel
 from zermelo.problems.balloon import (
     GaussianError,
     GEFSError,
-    StaticWind,
     WindError,
     balloon_objective,
     balloon_states,
@@ -58,7 +57,6 @@ def assemble(cfg: RunConfig) -> Episode:
     world = balloon_world(grid, states, predicted, frame_hours_elapsed, error, transition, cfg.problem.resource_units, box)
     objective = balloon_objective(states, grid, instantiate(cfg.problem.target, _target_whitelist_=WHITELIST), box)
     candidates = objective.candidates
-    forecast = StaticWind(predicted[0], grid)  # F as the episode opens
     context = world.readout.context
     belief = (
         # the wind of the world the episode runs in, drawn on its key
@@ -76,7 +74,7 @@ def assemble(cfg: RunConfig) -> Episode:
             n_features=cfg.belief.n_features,
             refit=cfg.belief.refit,
             refit_steps=cfg.belief.refit_steps,
-            prior_mean=forecast if cfg.belief.forecast_prior else None,
+            prior_mean=None,  # the forecast the reading carries, set at the first reading
         )
     )
     agent: Agent[Any]
@@ -102,6 +100,7 @@ def assemble(cfg: RunConfig) -> Episode:
             position_key="position",
             reading_key="wind",
             context_key="context",
+            prior_mean_key="forecast",
             horizon=cfg.horizon,
             opening_legs=cfg.method.opening_legs,
             claim_every=cfg.claim_every,

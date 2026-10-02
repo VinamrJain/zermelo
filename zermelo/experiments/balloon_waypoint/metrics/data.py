@@ -62,7 +62,7 @@ CURVE_CHANNELS = ("objective_state/best_possible_speed", "objective_state/speed"
 TABLE_CHANNELS = CURVE_CHANNELS + (
     "state/position",
     "state/altitude",
-    "agent_state/steps_since_waypoint",
+    "agent_state/time_steps_since_waypoint",
     "agent_state/scores.predicted_step_cost",
     "agent_state/scores.frac_zero_value_candidates",
     "agent_state/scores.frac_reachable_candidates",
@@ -134,7 +134,7 @@ def opening_moves(config: dict[str, Any], moves: int) -> int:
     method = config.get("method")
     if method is None:
         return moves
-    return int(method["opening_legs"]) * int(method["planner"]["max_steps"])
+    return int(method["opening_legs"]) * int(method["planner"]["replan_every"])
 
 
 def episode_legs(held: dict[str, Any], config: dict[str, Any]) -> dict[str, np.ndarray]:
@@ -142,8 +142,8 @@ def episode_legs(held: dict[str, Any], config: dict[str, Any]) -> dict[str, np.n
     method = config.get("method")
     if method is None:
         return {name: np.zeros(0) for name in ("ended", "walked", "predicted", "arrived")}
-    budget = int(method["planner"]["max_steps"])
-    since = held["agent_state/steps_since_waypoint"]  # (moves + 1,) zero on a replan and up one a move
+    budget = int(method["planner"]["replan_every"])
+    since = held["agent_state/time_steps_since_waypoint"]  # (moves + 1,) zero on a replan and up one a move
     ends = np.flatnonzero(np.diff(since) < 0)  # the last snapshot of each waypoint leg, where the sawtooth drops
     ends = ends[ends > opening_moves(config, since.size - 1)]  # the drop closing the opening ends no waypoint leg
     walked = since[ends].astype(float)

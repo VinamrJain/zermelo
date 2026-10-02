@@ -33,7 +33,7 @@ title = sweep.parent.name.replace("_", " ")
 described = next((config for *_, config in cells if config.get("method") is not None), cells[0][3])
 method = described.get("method")
 moves = int(curves["step"].max())
-budget = moves if method is None else int(method["planner"]["max_steps"])
+budget = moves if method is None else int(method["planner"]["replan_every"])
 opening = opening_moves(described, moves)
 
 figures.draw_curves(curves, CURVES, colours, names, opening, style, title, sweep / "curves.png")

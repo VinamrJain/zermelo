@@ -43,7 +43,7 @@ def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walk
     """One rule on a value-iteration planner, at the settings the arms differ in"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(max_steps=4, radius=0.05, target_chunk=None),
+        planner=value_iteration(replan_every=4, radius=0.05, target_chunk=None),
         improvement=improvement,
         n_fields=n_fields,
         n_walks=n_walks,

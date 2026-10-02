@@ -125,22 +125,30 @@ def uniform() -> Implementation:
 # --- planners: how the actor is carried to a waypoint, and how that walk is priced ----------------------------------
 
 
-def value_iteration(max_steps: int, radius: float, target_chunk: int | None) -> Implementation:
-    """`v_0 = 0`, `v_{k+1}(s) = 0 on arrival, else min over a of c(s, a) + sum over s' of P(s' | s, a) v_k(s')`, `max_steps` rounds"""
+def value_iteration(replan_every: int, radius: float, target_chunk: int | None) -> Implementation:
+    """`v_0 = 0`, `v_{k+1}(s) = 0 on arrival, else min over a of c(s, a) + sum over s' of P(s' | s, a) v_k(s')`, `replan_every` rounds"""
     return _built(
-        "zermelo.methods.waypoint_bo.planner.ValueIteration", max_steps=max_steps, radius=radius, target_chunk=target_chunk, cost_weight=0.0
+        "zermelo.methods.waypoint_bo.planner.ValueIteration",
+        replan_every=replan_every,
+        radius=radius,
+        target_chunk=target_chunk,
+        cost_weight=0.0,
     )
 
 
-def greedy(max_steps: int, radius: float, target_chunk: int | None) -> Implementation:
+def greedy(replan_every: int, radius: float, target_chunk: int | None) -> Implementation:
     """One backup on the distance to the target: the act whose next cell is nearest it in expectation"""
     return _built(
-        "zermelo.methods.waypoint_bo.planner.Greedy", max_steps=max_steps, radius=radius, target_chunk=target_chunk, cost_weight=0.0
+        "zermelo.methods.waypoint_bo.planner.Greedy", replan_every=replan_every, radius=radius, target_chunk=target_chunk, cost_weight=0.0
     )
 
 
-def random_walk(max_steps: int, radius: float, target_chunk: int | None) -> Implementation:
+def random_walk(replan_every: int, radius: float, target_chunk: int | None) -> Implementation:
     """One uniform act per cell, drawn when the plan is made and the same for every target"""
     return _built(
-        "zermelo.methods.waypoint_bo.planner.RandomWalk", max_steps=max_steps, radius=radius, target_chunk=target_chunk, cost_weight=0.0
+        "zermelo.methods.waypoint_bo.planner.RandomWalk",
+        replan_every=replan_every,
+        radius=radius,
+        target_chunk=target_chunk,
+        cost_weight=0.0,
     )

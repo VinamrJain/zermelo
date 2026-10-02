@@ -155,7 +155,7 @@ def write(
     """The LaTeX fragments, the document that inputs them and its PDF, written under `launch / "summary"` and given back as it"""
     problem, method = config["problem"], config.get("method")
     moves = int(curves["step"].max())
-    planner = {"max_steps": moves, "radius": float("nan")} if method is None else method["planner"]
+    planner = {"replan_every": moves, "radius": float("nan")} if method is None else method["planner"]
     ended = curves.sort_values("step").groupby(["arm", "seed"]).last().reset_index()
     held = curves.groupby(["arm", "seed"])[["zero_value_candidates", "reachable_candidates"]].mean().reset_index()
     counted = (
@@ -202,7 +202,7 @@ def write(
                 problem["ambient_cells"] ** problem["ambient_axes"] * problem["controllable_cells"] ** problem["controllable_axes"]
             ),
             "axes": int(problem["ambient_axes"]),
-            "budget": int(planner["max_steps"]),
+            "budget": int(planner["replan_every"]),
             "radius": float(planner["radius"]),
             "opening": opening_moves(config, moves),
         }

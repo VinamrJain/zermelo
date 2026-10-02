@@ -83,9 +83,6 @@ class BeliefConfig:
     noise: float = MISSING
     """Standard deviation the method assumes a reading has"""
 
-    forecast_prior: bool = MISSING
-    """Whether the forecast is the belief's mean before any reading, or zero is"""
-
     n_features: int = MISSING
     refit: bool = MISSING
 

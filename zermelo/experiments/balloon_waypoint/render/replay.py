@@ -251,7 +251,7 @@ def read(path: Path) -> Replay:
         level=level,
         index=live,
         outside=outside,
-        leg=int(method["planner"]["max_steps"]) if method is not None else int(record.reward.shape[0]),
+        leg=int(method["planner"]["replan_every"]) if method is not None else int(record.reward.shape[0]),
         path=np.asarray(record.state["position"]),
         flown=flown,
         balloon_resource=np.asarray(record.state["balloon_resource"]).astype(int),

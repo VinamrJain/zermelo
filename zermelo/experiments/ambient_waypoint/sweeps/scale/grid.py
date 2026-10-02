@@ -27,7 +27,7 @@ def _method(
     """This sweep's held values"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(max_steps=PLANNING_BUDGET, radius=0.5, target_chunk=target_chunk),
+        planner=value_iteration(replan_every=PLANNING_BUDGET, radius=0.5, target_chunk=target_chunk),
         improvement=improvement,
         n_fields=n_fields,
         n_walks=n_walks,
