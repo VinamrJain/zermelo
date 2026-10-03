@@ -3,7 +3,7 @@ import dataclasses
 from zermelo.experiments.ambient_waypoint.registry import (
     AMBIENT1_CONTROL1,
     CLAIM_EVERY_STEPS,
-    OPENING_LEGS,
+    OPENING_STEPS,
     PLANNING_BUDGET,
     RECORDED,
     RESOURCES,
@@ -28,7 +28,7 @@ def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walk
         step_rate=step_rate,
         steps_from="predicted",
         n_candidates=None,
-        opening_legs=OPENING_LEGS,
+        opening_steps=OPENING_STEPS,
     )
 
 

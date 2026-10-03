@@ -75,8 +75,8 @@ class WaypointAgent(Agent[WaypointAgentState]):
     horizon: int
     """`T`: the episode's time_steps, one reading per time_step filling one buffer row"""
 
-    opening_legs: int
-    """How many of the planner's step budgets are walked at random before the rule starts"""
+    opening_steps: int
+    """time_steps walked at random before the rule starts"""
 
     claim_every: int
     """time_steps between re-readings of the claim off the belief"""
@@ -119,7 +119,7 @@ class WaypointAgent(Agent[WaypointAgentState]):
         """Nothing read yet: an empty buffer, blank scores at the shape they keep, and the step budget already spent"""
         if self.belief.positions != self.positions:
             raise ValueError("the belief and the candidate set were built over different position domains")
-        if self.acquisition.planner.replan_every * self.opening_legs >= self.horizon:
+        if self.opening_steps >= self.horizon:
             raise ValueError("the random walk opening is longer than the episode horizon")
         n_states = coordinates(self.positions).shape[0]
         width = self.belief.data.state_value.shape[-1]
@@ -157,7 +157,7 @@ class WaypointAgent(Agent[WaypointAgentState]):
         z, belief = self._fold_reading(agent_state, obs)
         context = self._context(obs)  # the field is read, planned and scored at the context this reading carries
         claim = posterior_moments(belief, context) if int(agent_state.time_steps_taken) % self.claim_every == 0 else agent_state.claim
-        if int(agent_state.time_steps_taken) < planner.replan_every * self.opening_legs:
+        if int(agent_state.time_steps_taken) < self.opening_steps:
             # the opening: a uniform act, no waypoint and no planning
             return WaypointAgentState(
                 belief,

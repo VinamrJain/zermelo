@@ -54,7 +54,7 @@ def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walk
         step_rate=0.5,
         steps_from="predicted",
         n_candidates=16,
-        opening_legs=1,  # three uniform moves, leaving three the rule decides
+        opening_steps=3,  # three uniform moves, leaving three the rule decides
     )
 
 
