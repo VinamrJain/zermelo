@@ -6,8 +6,9 @@ from typing import Any
 
 import jax
 import jax.numpy as jnp
+from jax.scipy.linalg import solve_triangular
 from jax.scipy.stats import norm
-from jaxtyping import Array, Bool, Float, PRNGKeyArray
+from jaxtyping import Array, Bool, Float, Int, PRNGKeyArray
 
 from zermelo.interface import Subset
 from zermelo.methods.waypoint_bo.belief import Belief, Dataset
@@ -49,6 +50,55 @@ class SumMagnitude(Utility):
 
     def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
         return jnp.sum(jnp.where(row_counts_toward_utility(data, candidates), jnp.linalg.norm(data.state_value, axis=-1), 0.0), axis=-1)
+
+
+@dataclass(frozen=True)
+class TotalVariance(Utility):
+    """U(D) = - sum over the candidate states c of Var[f(c) | the states D was read at], f one component of the field
+
+    U(D) = - sum over c of k_n(c, c)  +  trace( k_n(C, w) [k_n(w, w) + 1e-6 I]^-1 k_n(w, C) )
+    w = the rows of D past the belief's own buffer, not yet conditioned on, taken as exact readings
+    """
+
+    def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
+        context = query_context(data)
+        candidate_states = jnp.flatnonzero(candidates.live)  # (n_candidates,)
+        variance_now = jnp.sum(belief.predict(candidate_states, context)[1][:, 0])  # sum over c of k_n(c, c)
+        n_conditioned = belief.data.state_index.shape[0]
+        imagined_states, imagined_is_live = data.state_index[..., n_conditioned:], data.row_is_written[..., n_conditioned:]
+        if imagined_states.shape[-1] == 0:
+            return jnp.broadcast_to(-variance_now, imagined_states.shape[:-1])
+        if imagined_states.ndim == 1:
+            return variance_removed(belief, candidate_states, imagined_states, imagined_is_live, context) - variance_now
+        # one leading batch element at a time: the block to the candidates is (n_candidates, n_candidates, n_imagined) per walk
+        return (
+            jnp.stack(
+                [
+                    variance_removed(belief, candidate_states, states, is_live, context)
+                    for states, is_live in zip(imagined_states, imagined_is_live, strict=True)
+                ]
+            )
+            - variance_now
+        )
+
+
+def variance_removed(
+    belief: Belief,
+    candidate_states: Int[Array, " n_candidates"],
+    imagined_states: Int[Array, "*batch n_imagined"],
+    imagined_is_live: Bool[Array, "*batch n_imagined"],
+    context: Float[Array, " n_context"],
+) -> Float[Array, " *batch"]:
+    """trace( k_n(C, w) [k_n(w, w) + 1e-6 I]^-1 k_n(w, C) ), a dead row of `w` made an identity row that removes nothing"""
+    both_live = imagined_is_live[..., :, None] & imagined_is_live[..., None, :]  # (*batch, n_imagined, n_imagined)
+    among_imagined = jnp.where(both_live, belief.posterior_covariance(imagined_states, imagined_states, context), 0.0)
+    among_imagined = among_imagined + jnp.where(imagined_is_live, 1e-6, 1.0)[..., None, :] * jnp.eye(imagined_states.shape[-1])
+    to_candidates = belief.posterior_covariance(candidate_states, imagined_states, context)  # (*batch, n_candidates, n_imagined)
+    to_candidates = jnp.where(imagined_is_live[..., None, :], to_candidates, 0.0)
+    whitened = solve_triangular(
+        jnp.linalg.cholesky(among_imagined), jnp.swapaxes(to_candidates, -1, -2), lower=True
+    )  # (*batch, n_imagined, n_candidates)
+    return jnp.sum(whitened**2, axis=(-1, -2))
 
 
 @dataclass(frozen=True)

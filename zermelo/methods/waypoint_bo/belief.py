@@ -221,6 +221,12 @@ class Belief(ABC):
         """Posterior mean and per-component variance at those states, at one context"""
 
     @abstractmethod
+    def posterior_covariance(
+        self, a: Int[Array, "*batch_a n_a"], b: Int[Array, "*batch_b n_b"], context: Float[Array, " n_context"]
+    ) -> Float[Array, "*batch n_a n_b"]:
+        """`k_n(a, b)` for every state `a` of the first set and `b` of the second, at one context; the batch axes broadcast"""
+
+    @abstractmethod
     def mean(self, context: Float[Array, " n_context"]) -> BeliefField:
         """`mu_n`, the posterior mean field at one context"""
 
@@ -280,6 +286,12 @@ class OracleBelief(Belief):
         mean = self._field(context).table[state_index]
         return mean, jnp.zeros_like(mean)
 
+    def posterior_covariance(
+        self, a: Int[Array, "*batch_a n_a"], b: Int[Array, "*batch_b n_b"], context: Float[Array, " n_context"]
+    ) -> Float[Array, "*batch n_a n_b"]:
+        """Zero everywhere: the truth has no spread"""
+        return jnp.zeros((*jnp.broadcast_shapes(a.shape[:-1], b.shape[:-1]), a.shape[-1], b.shape[-1]))
+
     def mean(self, context: Float[Array, " n_context"]) -> BeliefField:
         return self._field(context)
 
@@ -304,12 +316,22 @@ def _conjugate(
 
     Time O(rows^3 + q rows^2), memory O(q rows).
     """
-    pair = keep[:, None] & keep[None, :]  # (rows, rows): both ends kept
-    diagonal = jnp.where(keep, noise_var, 1.0) + 1e-6  # (rows,): dropped rows get variance 1; +1e-6 jitter for float32
-    chol = jnp.linalg.cholesky(jnp.where(pair, gram, 0.0) + jnp.diag(diagonal))  # (rows, rows)
-    solved = jnp.where(keep[:, None], solve_triangular(chol, cross, lower=True), 0.0)  # (rows, q), a dropped row zeroed
+    chol = _cholesky(gram, keep, noise_var)
+    solved = _whiten(chol, keep, cross)  # (rows, q)
     mean = solved.T @ solve_triangular(chol, jnp.where(keep[:, None], y, 0.0), lower=True)  # (q, m)
     return mean, jnp.maximum(variance - jnp.sum(solved**2, axis=0), 0.0)  # (q,)
+
+
+def _cholesky(gram: Float[Array, "rows rows"], keep: Bool[Array, " rows"], noise_var: Float[Array, " rows"]) -> Float[Array, "rows rows"]:
+    """`L` with `L L^T = K`, `K = gram + diag(noise_var)` over the rows `keep` marks and the identity elsewhere"""
+    pair = keep[:, None] & keep[None, :]  # (rows, rows): both ends kept
+    diagonal = jnp.where(keep, noise_var, 1.0) + 1e-6  # (rows,): dropped rows get variance 1; +1e-6 jitter for float32
+    return jnp.linalg.cholesky(jnp.where(pair, gram, 0.0) + jnp.diag(diagonal))
+
+
+def _whiten(chol: Float[Array, "rows rows"], keep: Bool[Array, " rows"], cross: Float[Array, "rows q"]) -> Float[Array, "rows q"]:
+    """`V = L^-1 cross`, a dropped row zeroed"""
+    return jnp.where(keep[:, None], solve_triangular(chol, cross, lower=True), 0.0)
 
 
 @register_dataclass
@@ -364,7 +386,11 @@ class GPBelief(Belief):
 
     def query(self, context: Float[Array, " n_context"]) -> Float[Array, "n_states dim"]:
         """Every state's coordinates at one context, that context repeated down the query"""
-        return jnp.concatenate([self.coords, jnp.broadcast_to(context, (self.coords.shape[0], context.shape[-1]))], axis=-1)
+        return self._coordinate_rows(jnp.arange(self.coords.shape[0]), context)
+
+    def _coordinate_rows(self, state_index: Int[Array, "*batch n"], context: Float[Array, " n_context"]) -> Float[Array, "*batch n dim"]:
+        """The kernel's row for each state at one context: its coordinates, then the context"""
+        return jnp.concatenate([self.coords[state_index], jnp.broadcast_to(context, (*state_index.shape, context.shape[-1]))], axis=-1)
 
     def _prior_mean_at(
         self, state_index: Int[Array, "*batch n"], context_value: Float[Array, "*batch n n_context"]
@@ -463,6 +489,21 @@ class GPBelief(Belief):
         mean, var = self._moments(self.query(context))  # (n_states, m) each: solved at every state, then gathered
         at = jnp.broadcast_to(context, (*state_index.shape, context.shape[-1]))
         return mean[state_index] + self._prior_mean_at(state_index, at), var[state_index]
+
+    def posterior_covariance(
+        self, first_states: Int[Array, "*batch_a n_a"], second_states: Int[Array, "*batch_b n_b"], context: Float[Array, " n_context"]
+    ) -> Float[Array, "*batch n_a n_b"]:
+        """k_n(a, b) = k(a, b) - V_a^T V_b,   V = L^-1 k(X_n, .),   each side whitened once over its own batch
+
+        Memory O(rows (n_a + n_b) + n_a n_b) per batch element.
+        """
+        x, _, keep, noise_var = self._conditioning()
+        kernel = self.kernel
+        chol = _cholesky(kernel.gram(x).to_dense(), keep, noise_var)
+        first, second = self._coordinate_rows(first_states, context), self._coordinate_rows(second_states, context)
+        prior = jnp.vectorize(kernel.cross_covariance, signature="(a,d),(b,d)->(a,b)")(first, second)  # (*batch, n_a, n_b): k(a, b)
+        whiten = jnp.vectorize(lambda rows: _whiten(chol, keep, kernel.cross_covariance(x, rows)), signature="(n,d)->(r,n)")
+        return prior - jnp.einsum("...ra,...rb->...ab", whiten(first), whiten(second))
 
     def mean(self, context: Float[Array, " n_context"]) -> BeliefField:
         return self._field(context, self._moments(self._query_and_rows(context))[0])

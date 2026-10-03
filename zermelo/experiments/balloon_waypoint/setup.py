@@ -107,6 +107,11 @@ def sum_magnitude() -> Implementation:
     return _built("zermelo.methods.waypoint_bo.utility.SumMagnitude")
 
 
+def total_variance() -> Implementation:
+    """Minus the posterior variance summed over every candidate state, given where the dataset was read"""
+    return _built("zermelo.methods.waypoint_bo.utility.TotalVariance")
+
+
 def posterior_spread() -> Implementation:
     """The posterior standard deviations at the scored cells, summed"""
     return _built("zermelo.methods.waypoint_bo.utility.PosteriorSpread")
