@@ -76,7 +76,7 @@ def _per_belief(name: str, method: MethodConfig | None) -> list:
 
 
 sweep(
-    "core",
+    "core_cost0",
     problem=ATLANTIC_2017SEP,
     horizon=HORIZON_LENGTH,
     claim_every=CLAIM_EVERY_STEPS,
