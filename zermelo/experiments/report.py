@@ -41,13 +41,13 @@ FALLBACK_COLOURS = (
 """Hex colours given one per acquisition where an acquisition's family has no colour of its own"""
 
 VARIANT_STYLES = (
-    "",
+    "mark=o, mark size=1.4pt, mark repeat=12, mark phase=7",
     "mark=*, mark size=1.4pt, mark repeat=12, mark phase=1",
     "dashed, mark=square*, mark size=1.4pt, mark repeat=12, mark phase=5",
     "densely dotted, mark=triangle*, mark size=1.7pt, mark repeat=12, mark phase=9",
     "dash dot, mark=diamond*, mark size=1.7pt, mark repeat=12, mark phase=3",
 )
-"""Line styles telling apart the acquisitions of one family, in the order they are drawn"""
+"""Line styles telling apart the acquisitions of one family, in the order they are drawn; a family with more members than styles is coloured one by one instead"""
 
 ROWS_PER_CURVE = 100
 """Most x values one CSV holds; a longer curve is thinned to every k-th x with its last x kept"""
@@ -98,10 +98,12 @@ def write_figure(
     Acquisitions of one family share its colour and differ by line style; a dotted rule at `opening_x` marks the shared opening.
     """
     families = [family(labels[a]) for a in acquisitions]
-    coloured = all(f in COLOURED for f in families)
+    coloured = all(f in COLOURED for f in families) and max(families.count(f) for f in families) <= len(VARIANT_STYLES)
     colour = {a: families[i] if coloured else f"acq{chr(65 + i)}" for i, a in enumerate(acquisitions)}
+    # one colour per family and a style per member; past the styles, a colour per acquisition and a style per round of colours
     style = {
-        a: VARIANT_STYLES[families[:i].count(families[i]) % len(VARIANT_STYLES)] if coloured else "" for i, a in enumerate(acquisitions)
+        a: VARIANT_STYLES[(families[:i].count(families[i]) if coloured else i // len(FALLBACK_COLOURS)) % len(VARIANT_STYLES)]
+        for i, a in enumerate(acquisitions)
     }
     defined = (
         []
