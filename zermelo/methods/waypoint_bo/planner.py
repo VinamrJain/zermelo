@@ -129,7 +129,7 @@ class Planner(ABC):
             lambda _, h: jnp.where(stop, 0.0, self._backup(kernel, h, actions)[position_of(actions, act), rows, columns]),
             jnp.zeros(stop.shape),
         )
-        return Policy(act, hitting)
+        return Policy(act.astype(jnp.int8), hitting)  # an act value fits a byte
 
     @partial(jax.jit, static_argnums=0)
     def roll(
