@@ -16,9 +16,10 @@ from zermelo.experiments.balloon_waypoint.metrics.data import (
     settings,  # noqa: E402
 )
 from zermelo.experiments.balloon_waypoint.render.film import film, schedule  # noqa: E402
-from zermelo.experiments.balloon_waypoint.render.panels import RASTER_NAMES, compare, contact, detail  # noqa: E402
+from zermelo.experiments.balloon_waypoint.render.globe import Camera, Scene  # noqa: E402
+from zermelo.experiments.balloon_waypoint.render.panels import RASTER_NAMES, compare, contact, detail, globe  # noqa: E402
 from zermelo.experiments.balloon_waypoint.render.replay import read, runs  # noqa: E402
-from zermelo.experiments.balloon_waypoint.render.style import Style  # noqa: E402
+from zermelo.experiments.balloon_waypoint.render.style import Style, dark  # noqa: E402
 from zermelo.experiments.balloon_waypoint.render.submit import send  # noqa: E402
 
 SWEEPS = Path("results") / __package__.split(".")[-2]
@@ -59,7 +60,21 @@ def draw(chosen: Sequence[Path], into: Path, stem: str, given: argparse.Namespac
 
     if given.film:
         written = [into / f"{stem}.mp4"]
-        film(figure, sheet, schedule(replays, given.stride), written[0], style, fps=given.fps)
+        if alone:  # one episode is filmed on the globe, seen from above the box's centre
+            lat_min, lat_max, lon_min, lon_max = replays[0].box
+            scene = Scene.sown(Camera(int(round(style.world_height * style.dpi)), (lon_min + lon_max) / 2, (lat_min + lat_max) / 2))
+            shaded = dark(style)
+            figure.set_facecolor(shaded.paper)
+            film(
+                figure,
+                lambda fig, move: globe(fig, replays[0], move, shaded, scene),
+                schedule(replays, given.stride),
+                written[0],
+                shaded,
+                fps=given.fps,
+            )
+        else:
+            film(figure, sheet, schedule(replays, given.stride), written[0], style, fps=given.fps)
     else:
         last = max(replay.n_moves for replay in replays)
         moves = np.asarray(sorted(int(move) for move in given.moves.split(","))) if given.moves else np.asarray([last])

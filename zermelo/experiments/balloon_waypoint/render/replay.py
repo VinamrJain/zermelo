@@ -69,6 +69,15 @@ class Replay:
     altitude_km: tuple[float, ...]
     """What each altitude index stands for, in km"""
 
+    latitude: Float[np.ndarray, " lat"]
+    """Latitude of every grid row, in degrees"""
+
+    longitude: Float[np.ndarray, " lon"]
+    """Longitude of every grid column, in degrees"""
+
+    box: tuple[float, float, float, float]
+    """(lat_min, lat_max, lon_min, lon_max) of the candidates, in degrees"""
+
     wind: Float[np.ndarray, "frames alt lat lon uv"]
     """W at every frame the episode read, altitude and cell, as (u, v) in m/s"""
 
@@ -257,6 +266,9 @@ def read(path: Path) -> Replay:
         ),
         aspect=1.0 / float(np.cos(np.radians(0.5 * (lat_edges[0] + lat_edges[1])))),
         altitude_km=altitude_km,
+        latitude=grid.lat_first + grid.lat_step * np.arange(grid.n_lat),
+        longitude=grid.lon_first + grid.lon_step * np.arange(grid.n_lon),
+        box=(lat_edges[0], lat_edges[1], float(np.min(position[:, 1])), float(np.max(position[:, 1]))),
         wind=wind,
         speed=np.linalg.norm(wind, axis=-1),
         frame_hours=np.asarray(frame_hours),
