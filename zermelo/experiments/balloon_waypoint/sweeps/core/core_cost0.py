@@ -11,6 +11,7 @@ from zermelo.experiments.balloon_waypoint.registry import (
     PLANNING_BUDGET,
     RECORDED,
     RESOURCES,
+    TARGET_CHUNK,
     error_belief,
     wind_belief,
 )
@@ -37,7 +38,7 @@ def _method(
     """One acquisition on a value-iteration planner, at the settings the acquisitions differ in"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(replan_every=replan_every, radius=ARRIVAL_RADIUS_KM, target_chunk=None, cost_weight=cost_weight),
+        planner=value_iteration(replan_every=replan_every, radius=ARRIVAL_RADIUS_KM, target_chunk=TARGET_CHUNK, cost_weight=cost_weight),
         improvement=improvement,
         n_fields=n_fields,
         n_walks=n_walks,
@@ -49,11 +50,11 @@ def _method(
     )
 
 
-COST_WEIGHT = 0.25
-"""Price of one altitude change in time_steps, to be set from the `tuning` sweep"""
+COST_WEIGHT = 0.0
+"""Price of one altitude change in time_steps: none, the `tuning` sweep steering only at zero"""
 
-STEP_RATE = 0.5
-"""Share of the spread of worth a full-budget trip costs, to be set from the `tuning` sweep"""
+STEP_RATE = 1.0
+"""Share of the spread of worth a full-budget trip costs, the `tuning` sweep's best"""
 
 
 def _baseline(utility: Implementation, n_fields: int) -> MethodConfig:
@@ -82,7 +83,7 @@ sweep(
     claim_every=CLAIM_EVERY_STEPS,
     recorded=RECORDED,
     seeds=range(N_SEEDS),
-    resources=RESOURCES,
+    resources=dataclasses.replace(RESOURCES, constraint="avx2&gpu-high"),  # 48 GB cards and up
     arms=[
         arm("rand_act", None, BELIEFS["error"]),  # no rule at all: acts uniformly and claims the prior
         # the forecast flown as if exact: a belief that cannot move off it, aimed at the fastest forecast wind
@@ -103,13 +104,7 @@ sweep(
         *_per_belief("max_var", _baseline(posterior_spread(), 0)),
         *_per_belief("ucb", _baseline(upper_confidence(2.0), 0)),
         *_per_belief("ts", _baseline(max_magnitude(), 1)),
-        *_per_belief("esi_L1", _ours(sum_magnitude(), replan_every=1)),
-        *_per_belief("esi_L8", _ours(sum_magnitude(), replan_every=8)),
-        *_per_belief("esi_L25", _ours(sum_magnitude())),
-        *_per_belief("esi_c1", _ours(sum_magnitude(), step_rate=1.0)),
-        *_per_belief("evi_L1", _ours(posterior_spread(), replan_every=1)),
-        *_per_belief("evi_L8", _ours(posterior_spread(), replan_every=8)),
-        *_per_belief("evi_L25", _ours(posterior_spread())),
-        *_per_belief("evi_c1", _ours(posterior_spread(), step_rate=1.0)),
+        *_per_belief("esi_L50", _ours(sum_magnitude())),
+        *_per_belief("evi_L50", _ours(posterior_spread())),
     ],
 )
