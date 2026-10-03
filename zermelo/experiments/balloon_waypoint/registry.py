@@ -60,8 +60,11 @@ def oracle_belief() -> BeliefConfig:
     return dataclasses.replace(wind_belief(), oracle=True)
 
 
-PLANNING_BUDGET = 25
+PLANNING_BUDGET = 50
 """`L`: a replan fires every `L` moves, costs `L` backups, and truncates a hitting time at `L` steps"""
+
+TARGET_CHUNK = 500
+"""Candidates one planner solve handles"""
 
 ARRIVAL_RADIUS_KM = 60.0
 """`rho`: how near a waypoint counts as arrived, inside positions about 100 km apart"""

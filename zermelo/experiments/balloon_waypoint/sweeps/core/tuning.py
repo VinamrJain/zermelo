@@ -9,6 +9,7 @@ from zermelo.experiments.balloon_waypoint.registry import (
     OPENING_STEPS,
     RECORDED,
     RESOURCES,
+    TARGET_CHUNK,
     error_belief,
     wind_belief,
 )
@@ -25,7 +26,7 @@ def _method(
     """One acquisition on a value-iteration planner, at the settings the acquisitions differ in"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(replan_every=replan_every, radius=ARRIVAL_RADIUS_KM, target_chunk=None, cost_weight=cost_weight),
+        planner=value_iteration(replan_every=replan_every, radius=ARRIVAL_RADIUS_KM, target_chunk=TARGET_CHUNK, cost_weight=cost_weight),
         improvement=improvement,
         n_fields=n_fields,
         n_walks=n_walks,
