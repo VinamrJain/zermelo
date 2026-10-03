@@ -23,7 +23,7 @@ from zermelo.experiments.balloon_waypoint.render.style import Style, plain_numbe
 RASTER_NAMES = ("truth", "belief", "uncertainty", "error", "acquisition")
 """What the map may be shaded by, and what the panels beside it are chosen from"""
 
-LIVE = ("simple_regret", "cumulative_regret", "reconstruction_error", "posterior_uncertainty")
+LIVE = ("simple_regret", "cumulative_regret", "rmse", "posterior_spread")
 """What the strip under a single episode advances through, one panel each"""
 
 TITLES = {
@@ -171,14 +171,15 @@ def ladder(ax: Axes, replay: Replay, move: int, style: Style) -> None:
 def levels(axes: Sequence[Axes], replay: Replay, move: int, style: Style) -> None:
     """Every altitude's own speed field across, the cells stood on it marked, the one being flown outlined"""
     here = int(replay.flown[min(move, replay.flown.size - 1)])
-    span = float(np.max(replay.speed))
-    fastest = np.unravel_index(int(np.argmax(replay.speed)), replay.speed.shape)  # the one fastest point of the volume
+    span = float(np.max(replay.speed))  # over every frame, so the colours hold still through a film
+    now = replay.speed[replay.frame_at(move)]  # (alt, lat, lon) at this move's hour
+    fastest = np.unravel_index(int(np.argmax(now)), now.shape)  # the one fastest point of the volume now
     lon = np.linspace(replay.extent[0], replay.extent[1], replay.shape[1])
     lat = np.linspace(replay.extent[2], replay.extent[3], replay.shape[0])
     walked, flown = replay.path[: move + 1], replay.flown[: move + 1]
     for level, ax in enumerate(axes):
         ax.imshow(
-            replay.speed[level],
+            now[level],
             origin="lower" if replay.extent[3] > replay.extent[2] else "upper",
             extent=replay.extent,
             cmap=style.speed_colours,
@@ -245,14 +246,15 @@ def world(
     image = raster(ax, replay, background, move, style)
     _geography(ax, replay, style)
     here = int(replay.flown[min(move, replay.flown.size - 1)])
+    frame = replay.frame_at(move)
     lon = np.linspace(replay.extent[0], replay.extent[1], replay.shape[1])
     lat = np.linspace(replay.extent[2], replay.extent[3], replay.shape[0])
-    # one arrow per cell; length carries speed, the fastest wind in the volume drawing `arrow_span` of the panel wide
+    # one arrow per cell; length carries speed, the fastest wind of the episode drawing `arrow_span` of the panel wide
     ax.quiver(
         lon,
         lat,
-        replay.wind[here, :, :, 0],
-        replay.wind[here, :, :, 1],
+        replay.wind[frame, here, :, :, 0],
+        replay.wind[frame, here, :, :, 1],
         color=style.arrow_colour,
         width=style.arrow_width,
         headwidth=style.arrow_head,
@@ -263,7 +265,8 @@ def world(
         zorder=6,
         transform=ccrs.PlateCarree(),
     )
-    fastest = np.unravel_index(int(np.argmax(replay.speed)), replay.speed.shape)  # the one fastest point of the volume
+    now = replay.speed[frame]
+    fastest = np.unravel_index(int(np.argmax(now)), now.shape)  # the one fastest point of the volume now
     if fastest[0] == here:
         ax.plot(
             lon[fastest[2]],
@@ -369,7 +372,7 @@ def caption(replay: Replay, move: int) -> str:
     here = int(replay.flown[min(move, replay.flown.size - 1)])
     left = int(replay.balloon_resource[min(move, replay.balloon_resource.size - 1)])
     return (
-        f"{replay.name}      $t = {move}$ of ${replay.n_moves}$      "
+        f"{replay.name}      $t = {move}$ of ${replay.n_moves}$      {replay.hours[min(move, replay.hours.size - 1)]:.0f} h      "
         f"{replay.altitude_km[here]:.1f} km      resource: {left}      "
         f"replans: {_plans(replay, move)}      planning time: {spent / 60:.1f} min"
     )

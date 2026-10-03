@@ -20,7 +20,7 @@ from zermelo.experiments.ambient_waypoint.render.style import Style, plain_numbe
 RASTER_NAMES = ("truth", "belief", "uncertainty", "error", "acquisition")
 """What a world panel may be shaded by, and what the panels beside it are chosen from"""
 
-LIVE = ("simple_regret", "cumulative_regret", "reconstruction_error", "posterior_uncertainty")
+LIVE = ("simple_regret", "cumulative_regret", "rmse", "posterior_spread")
 """What the strip under a single episode advances through, one panel each"""
 
 TITLES = {

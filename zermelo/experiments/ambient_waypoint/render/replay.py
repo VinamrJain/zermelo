@@ -10,11 +10,11 @@ from jaxtyping import Bool, Float, Int
 
 from zermelo.experiments.ambient_waypoint.metrics.data import (
     CURVE_CHANNELS,
+    acquisition_label,
     at_each_snapshot,
     channels,
     episode_curves,
     opening_moves,
-    rule,
     settings,
 )
 from zermelo.problems.ambient_dynamics import AmbientTransition, PaddedGridDomain, ambient_candidates, ambient_positions
@@ -102,7 +102,7 @@ class Replay:
     """Position index of each of those cells"""
 
     seconds: Float[np.ndarray, " moves"]
-    bytes_held: Int[np.ndarray, " moves"]
+    bytes_held: Float[np.ndarray, " moves"]
 
     plan: Plan | None
     """Absent from an arm with no rule"""
@@ -242,7 +242,7 @@ def read(path: Path) -> Replay:
 
     return Replay(
         name=path.name,
-        label=rule(settings(path.name).get("arm", path.name)),
+        label=acquisition_label(settings(path.name).get("arm", path.name)),
         n_moves=int(record.reward.shape[0]),
         shape=(controllable.cells, ambient.cells),
         extent=(float(y.min()) - h / 2, float(y.max()) + h / 2, float(q.min()) - h / 2, float(q.max()) + h / 2),

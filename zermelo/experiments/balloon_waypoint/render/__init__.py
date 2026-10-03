@@ -1,6 +1,6 @@
 """Drawing recorded episodes: what the wind was, what was believed, and where the balloon went"""
 
-from zermelo.experiments.balloon_waypoint.metrics.data import labels, rule, settings
+from zermelo.experiments.balloon_waypoint.metrics.data import acquisition_label, settings
 from zermelo.experiments.balloon_waypoint.render.film import film, schedule
 from zermelo.experiments.balloon_waypoint.render.panels import (
     RASTER_NAMES,
@@ -32,13 +32,12 @@ __all__ = [
     "detail",
     "film",
     "keys",
-    "labels",
     "ladder",
     "levels",
     "progress",
     "raster",
     "read",
-    "rule",
+    "acquisition_label",
     "schedule",
     "settings",
     "survey",

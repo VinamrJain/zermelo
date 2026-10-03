@@ -8,12 +8,12 @@ from jaxtyping import Bool, Float, Int
 
 from zermelo.experiments.balloon_waypoint.metrics.data import (
     CURVE_CHANNELS,
+    acquisition_label,
     at_each_snapshot,
     channels,
     claimed_speed,
     episode_curves,
     opening_moves,
-    rule,
     settings,
 )
 from zermelo.problems.balloon.grid import balloon_states
@@ -69,11 +69,17 @@ class Replay:
     altitude_km: tuple[float, ...]
     """What each altitude index stands for, in km"""
 
-    wind: Float[np.ndarray, "alt lat lon uv"]
-    """W at every altitude and cell, as (u, v) in m/s"""
+    wind: Float[np.ndarray, "frames alt lat lon uv"]
+    """W at every frame the episode read, altitude and cell, as (u, v) in m/s"""
 
-    speed: Float[np.ndarray, "alt lat lon"]
+    speed: Float[np.ndarray, "frames alt lat lon"]
     """||W|| there"""
+
+    frame_hours: Float[np.ndarray, " frames"]
+    """hours_elapsed each frame stands for"""
+
+    hours: Float[np.ndarray, " snapshots"]
+    """hours_elapsed at every snapshot"""
 
     prior_sd: float
     """Standard deviation the belief started at, the top of the uncertainty raster's range"""
@@ -102,20 +108,24 @@ class Replay:
     balloon_resource: Int[np.ndarray, " snapshots"]
     """What it had left to spend"""
 
-    truth: Float[np.ndarray, " n_candidates"]
-    """g at every candidate, the same at every move"""
+    truth: Float[np.ndarray, "snapshots n_candidates"]
+    """||W|| at every candidate, at the hour of each snapshot"""
 
     claim: Float[np.ndarray, "snapshots n_candidates 4"]
     """What was claimed there: the mean of (u, v), then their log-variances, NaN at the first snapshot"""
 
     seconds: Float[np.ndarray, " moves"]
-    bytes_held: Int[np.ndarray, " moves"]
+    bytes_held: Float[np.ndarray, " moves"]
 
     plan: Plan | None
     """Absent from an arm with no rule"""
 
     curves: dict[str, Float[np.ndarray, " moves"]]
     """Every quantity this episode is scored by, one value per move"""
+
+    def frame_at(self, move: int) -> int:
+        """The frame the wind was read from at `move`: the one whose hours_elapsed is nearest"""
+        return int(np.argmin(np.abs(self.frame_hours - self.hours[min(move, self.hours.size - 1)])))
 
     def raster(self, name: str, move: int) -> Float[np.ndarray, "lat lon"]:
         """One named quantity laid on the grid at `move`, at the altitude being flown, NaN wherever it is not defined"""
@@ -137,7 +147,8 @@ class Replay:
             frame[self.cell[seen[kept], 0], self.cell[seen[kept], 1]] = value[kept]
             return frame
         speed, spread = claimed_speed(self.claim[move])  # (n_candidates,) each
-        value = {"truth": self.truth, "belief": speed, "uncertainty": spread, "error": np.abs(speed - self.truth)}[name]
+        truth = self.truth[min(move, self.truth.shape[0] - 1)]
+        value = {"truth": truth, "belief": speed, "uncertainty": spread, "error": np.abs(speed - truth)}[name]
         frame = np.full(self.shape, np.nan, np.float32)
         frame[self.cell[at_level, 0], self.cell[at_level, 1]] = value[at_level]
         return frame
@@ -192,9 +203,11 @@ def read(path: Path) -> Replay:
     wind_data = load_wind(Path(problem["wind_path"]), int(problem["grid_stride"]), int(problem["hour_stride"]))
     grid, n_alt = wind_data.grid, wind_data.n_alt
     altitude_km = tuple(float(km) for km in np.asarray(wind_data.altitude_km))
-    # the wind the episode opened on: a sheet draws one field, whatever the wind did afterwards
-    opening = wind_data.frames_from(float(problem["start_hour"]), 0.0, False)[0][0]  # (alt, pos, uv)
-    wind = np.asarray(opening).reshape(n_alt, grid.n_lat, grid.n_lon, 2)
+    horizon = int(record.reward.shape[0])
+    frames, _, frame_hours = wind_data.frames_from(
+        float(problem["start_hour"]), horizon * float(problem["step_hours"]), bool(problem["time_varying"])
+    )
+    wind = np.asarray(frames).reshape(frames.shape[0], n_alt, grid.n_lat, grid.n_lon, 2)
 
     states = balloon_states(grid, altitude_km)
     box = candidate_box(grid, float(problem["lat_min"]), float(problem["lat_max"]), float(problem["lon_min"]), float(problem["lon_max"]))
@@ -233,7 +246,7 @@ def read(path: Path) -> Replay:
     lat_edges = (float(np.min(position[:, 0])), float(np.max(position[:, 0])))
     return Replay(
         name=path.name,
-        label=rule(settings(path.name).get("arm", path.name)),
+        label=acquisition_label(settings(path.name).get("arm", path.name)),
         n_moves=int(record.reward.shape[0]),
         shape=(grid.n_lat, grid.n_lon),
         extent=(
@@ -246,6 +259,8 @@ def read(path: Path) -> Replay:
         altitude_km=altitude_km,
         wind=wind,
         speed=np.linalg.norm(wind, axis=-1),
+        frame_hours=np.asarray(frame_hours),
+        hours=np.asarray(record.state["hours_elapsed"]),
         prior_sd=float(belief["amplitude"]) if float(belief["amplitude"]) > 0.0 else 1.0,
         cell=cell,
         level=level,
@@ -255,7 +270,7 @@ def read(path: Path) -> Replay:
         path=np.asarray(record.state["position"]),
         flown=flown,
         balloon_resource=np.asarray(record.state["balloon_resource"]).astype(int),
-        truth=np.asarray(record.objective_state["truth"])[0],
+        truth=np.asarray(record.objective_state["truth"]),
         claim=claim,
         seconds=np.asarray(record.time_per_decision),
         bytes_held=np.asarray(record.memory_per_decision),

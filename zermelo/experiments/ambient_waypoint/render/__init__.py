@@ -1,6 +1,6 @@
 """Drawing recorded episodes: what was true, what was believed, and where the actor went"""
 
-from zermelo.experiments.ambient_waypoint.metrics.data import labels, rule, settings
+from zermelo.experiments.ambient_waypoint.metrics.data import acquisition_label, settings
 from zermelo.experiments.ambient_waypoint.render.film import film, schedule
 from zermelo.experiments.ambient_waypoint.render.panels import (
     RASTER_NAMES,
@@ -30,10 +30,9 @@ __all__ = [
     "film",
     "keys",
     "progress",
-    "labels",
     "raster",
     "read",
-    "rule",
+    "acquisition_label",
     "schedule",
     "settings",
     "survey",
