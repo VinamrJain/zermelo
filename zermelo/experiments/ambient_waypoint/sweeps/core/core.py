@@ -5,7 +5,7 @@ from zermelo.experiments.ambient_waypoint.registry import (
     CLAIM_EVERY_STEPS,
     HORIZON_LENGTH,
     N_SEEDS,
-    OPENING_LEGS,
+    OPENING_STEPS,
     PLANNING_BUDGET,
     RECORDED,
     RESOURCES,
@@ -19,7 +19,6 @@ from zermelo.experiments.ambient_waypoint.setup import (
     max_magnitude,
     posterior_spread,
     sweep,
-    total_variance,
     uniform,
     upper_confidence,
     value_iteration,
@@ -43,7 +42,7 @@ def _method(
         step_rate=step_rate,
         steps_from="predicted",
         n_candidates=None,
-        opening_legs=OPENING_LEGS,
+        opening_steps=OPENING_STEPS,
     )
 
 
@@ -72,13 +71,11 @@ sweep(
         arm("ucb", _baseline(upper_confidence(2.0), 0), BELIEF),
         arm("ei", _baseline(expected_improvement(), 0), BELIEF),
         arm("ts", _baseline(max_magnitude(), 1), BELIEF),
-        arm("emi_L1", _ours(max_magnitude(), replan_every=1), BELIEF),
         arm("emi_L25", _ours(max_magnitude()), BELIEF),
         arm("emi_L50", _ours(max_magnitude(), replan_every=50), BELIEF),
         arm("emi_c1", _ours(max_magnitude(), step_rate=1.0), BELIEF),
-        arm("evi_L1", _ours(total_variance(), replan_every=1), BELIEF),
-        arm("evi_L25", _ours(total_variance()), BELIEF),
-        arm("evi_L50", _ours(total_variance(), replan_every=50), BELIEF),
-        arm("evi_c1", _ours(total_variance(), step_rate=1.0), BELIEF),
+        arm("evi_L25", _ours(posterior_spread()), BELIEF),
+        arm("evi_L50", _ours(posterior_spread(), replan_every=50), BELIEF),
+        arm("evi_c1", _ours(posterior_spread(), step_rate=1.0), BELIEF),
     ],
 )

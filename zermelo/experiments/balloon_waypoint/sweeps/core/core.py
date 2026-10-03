@@ -7,7 +7,7 @@ from zermelo.experiments.balloon_waypoint.registry import (
     HORIZON_LENGTH,
     N_CANDIDATES,
     N_SEEDS,
-    OPENING_LEGS,
+    OPENING_STEPS,
     PLANNING_BUDGET,
     RECORDED,
     RESOURCES,
@@ -22,7 +22,6 @@ from zermelo.experiments.balloon_waypoint.setup import (
     posterior_spread,
     sum_magnitude,
     sweep,
-    total_variance,
     uniform,
     upper_confidence,
     value_iteration,
@@ -46,7 +45,7 @@ def _method(
         step_rate=step_rate,
         steps_from="predicted",
         n_candidates=N_CANDIDATES,
-        opening_legs=OPENING_LEGS,
+        opening_steps=OPENING_STEPS,
     )
 
 
@@ -108,9 +107,9 @@ sweep(
         *_per_belief("esi_L8", _ours(sum_magnitude(), replan_every=8)),
         *_per_belief("esi_L25", _ours(sum_magnitude())),
         *_per_belief("esi_c1", _ours(sum_magnitude(), step_rate=1.0)),
-        *_per_belief("evi_L1", _ours(total_variance(), replan_every=1)),
-        *_per_belief("evi_L8", _ours(total_variance(), replan_every=8)),
-        *_per_belief("evi_L25", _ours(total_variance())),
-        *_per_belief("evi_c1", _ours(total_variance(), step_rate=1.0)),
+        *_per_belief("evi_L1", _ours(posterior_spread(), replan_every=1)),
+        *_per_belief("evi_L8", _ours(posterior_spread(), replan_every=8)),
+        *_per_belief("evi_L25", _ours(posterior_spread())),
+        *_per_belief("evi_c1", _ours(posterior_spread(), step_rate=1.0)),
     ],
 )
