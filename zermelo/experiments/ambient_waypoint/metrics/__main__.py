@@ -1,50 +1,51 @@
-"""One sweep run drawn and tabulated: `python -m zermelo.experiments.ambient_waypoint.metrics <sweep name or its directory>`"""
+"""One launch written for the paper: `python -m zermelo.experiments.ambient_waypoint.metrics <sweep name or its directory>`"""
 
 import sys
 from pathlib import Path
 
-from zermelo.experiments.ambient_waypoint.metrics import figures, summary
+import numpy as np
+
+from zermelo.experiments import report
 from zermelo.experiments.ambient_waypoint.metrics.data import (
     CURVES,
-    DIAGNOSTICS,
+    DRAWN_ARMS,
+    TABLE_COLUMNS,
+    acquisition_label,
     finished_runs,
-    labels,
     latest_launch,
-    opening_moves,
     tables,
 )
-from zermelo.experiments.ambient_waypoint.render.style import Style
 
 SWEEPS = Path("results") / __package__.split(".")[-2]
 """Where a sweep named rather than pointed at is looked for: this experiment's own results"""
+
+REGRET_ONLY_SWEEPS = ("oracle",)
+"""Sweeps whose figure draws the two regret panels and nothing else"""
 
 asked = Path(sys.argv[1])
 where = asked if asked.exists() else SWEEPS / asked
 if not where.is_dir():
     sys.exit(f"no sweep or launch directory at {asked}, and none at {SWEEPS / asked}")
-sweep = latest_launch(where)
-runs = finished_runs(sweep)  # names and configurations only, the arrays read one run at a time
-curves, legs, spent = tables(runs)
-style = Style()
-names = labels(sorted(curves["arm"].unique()))
-colours = {arm: style.arm_colours[slot % len(style.arm_colours)] for slot, arm in enumerate(sorted(names))}
-title = sweep.parent.name.replace("_", " ")
-# an arm with no rule has no planner, so the planner is read off one that does
-described = next((config for *_, config in runs if config.get("method") is not None), runs[0][3])
-method = described.get("method")
-moves = int(curves["step"].max())
-budget = moves if method is None else int(method["planner"]["replan_every"])
-opening = opening_moves(described, moves)
+launch = latest_launch(where)
+sweep = launch.parent.name
+runs = finished_runs(launch)  # names and configurations only, the arrays read one run at a time
+curves, scalars = tables(runs)
+arms = sorted(curves["acquisition"].unique())
+labels = {arm: acquisition_label(arm) for arm in arms}
+drawn = arms if DRAWN_ARMS is None else [arm for arm in DRAWN_ARMS if arm in arms]
+panels = [(name, words, scale) for name, (words, scale) in CURVES.items() if name.endswith("regret") or sweep not in REGRET_ONLY_SWEEPS]
 
-figures.draw_curves(curves, CURVES, colours, names, opening, style, title, sweep / "curves.png")
-figures.draw_curves(curves, DIAGNOSTICS, colours, names, opening, style, title, sweep / "diagnostics.png")
-figures.draw_cost(spent, curves, colours, names, style, title, sweep / "cost.png")
-walked = 0
-for arm, seed, where, _ in runs:
-    own = legs[(legs["arm"] == arm) & (legs["seed"] == seed)]
-    if own.empty:  # an arm running no rule aims at nothing and finishes no waypoint leg
-        continue
-    figures.draw_legs(own, budget, colours[arm], style, f"{names[arm]}, seed {seed}", where / "legs.png")
-    walked += 1
-print(f"wrote curves.png, diagnostics.png and cost.png under {sweep}, and legs.png under {walked} runs")
-print(f"wrote the tables under {summary.write(sweep, curves, legs, spent, described, names)}")
+# the x up to which every arm walked at random: the x of the last opening time_step, every ruled arm sharing one count
+opening_steps = {int(config["method"]["opening_steps"]) for *_, config in runs if config.get("method") is not None}
+opening_x = float(np.sort(curves["x"].unique())[max(opening_steps) - 1]) if opening_steps and max(opening_steps) > 0 else None
+
+paper = launch / "paper"
+stem = f"{SWEEPS.name}_{sweep}"
+csvs = report.write_curves(paper / "results" / stem, curves, [name for name, _, _ in panels], labels)
+report.write_figure(paper / f"fig_{stem}.tex", csvs, panels, drawn, labels, "time step", opening_x)
+table = report.write_table(paper / f"tab_{stem}.tex", scalars, TABLE_COLUMNS, labels)
+report.compile_document(paper / f"fig_{stem}.tex")
+report.compile_document(table)
+print(
+    f"wrote {len(csvs)} CSVs, fig_{stem}.tex and tab_{stem}.tex under {paper}, over {len(arms)} acquisitions and {scalars['seed'].nunique()} seeds"
+)
