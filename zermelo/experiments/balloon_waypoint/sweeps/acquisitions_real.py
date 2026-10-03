@@ -11,7 +11,7 @@ from zermelo.experiments.balloon_waypoint.registry import (
     PLANNING_BUDGET,
     RECORDED,
     RESOURCES,
-    matched_belief,
+    error_belief,
 )
 from zermelo.experiments.balloon_waypoint.schema import MethodConfig
 from zermelo.experiments.balloon_waypoint.setup import (
@@ -25,7 +25,7 @@ from zermelo.experiments.balloon_waypoint.setup import (
     value_iteration,
 )
 
-BELIEF = matched_belief()
+BELIEF = error_belief()
 """The same model on every arm, matched to the truth"""
 
 

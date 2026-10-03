@@ -50,7 +50,10 @@ class ProblemConfig:
     lat_max: float = MISSING
     lon_min: float = MISSING
     lon_max: float = MISSING
-    """The box of grid points, in degrees, the candidates sit above and the balloon starts over"""
+    """The box of grid points, in degrees, the candidates sit above"""
+
+    start_inset_deg: float = MISSING
+    """Degrees the box the balloon starts over sits inside the candidate box, on every side"""
 
 
 @dataclass
@@ -77,8 +80,11 @@ class BeliefConfig:
     kernel_factors: list[BeliefKernelConfig] = MISSING
     """The factors the kernel is a product of"""
 
+    forecast_as_prior_mean: bool = MISSING
+    """Whether the belief learns the wind about the forecast, or about zero"""
+
     amplitude: float = MISSING
-    """How wrong the method assumes the forecast is, as a standard deviation"""
+    """Standard deviation the belief assumes of what it learns"""
 
     noise: float = MISSING
     """Standard deviation the method assumes a reading has"""

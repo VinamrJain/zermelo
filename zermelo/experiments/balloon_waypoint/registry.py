@@ -22,19 +22,22 @@ ATLANTIC_2017SEP = ProblemConfig(
     lat_max=30.0,
     lon_min=-85.0,
     lon_max=-40.0,
+    start_inset_deg=3.0,  # two time_steps of drift at 15 m/s
 )
 """The whole globe in September 2017, scored over the Atlantic box two hurricanes cross"""
 
 
-def matched_belief() -> BeliefConfig:
-    """A belief the size and reach of the forecast's own error"""
+def _belief(forecast_as_prior_mean: bool, place_km: float, altitude_km: float, hours: float, amplitude: float) -> BeliefConfig:
+    """A belief at the correlation lengths and spread of what it learns, no refitting"""
     return BeliefConfig(
         oracle=False,
-        # three horizontal coordinates in km at the error's own correlation, then altitude in km
+        forecast_as_prior_mean=forecast_as_prior_mean,
+        # three sphere coordinates in km, altitude in km, then the hour a reading was taken at
         kernel_factors=[
-            BeliefKernelConfig(kernel="gpjax.kernels.Matern52", parts=["position", "altitude"], lengthscale=[300.0] * 3 + [3.0])
+            BeliefKernelConfig(kernel="gpjax.kernels.Matern52", parts=["position", "altitude"], lengthscale=[place_km] * 3 + [altitude_km]),
+            BeliefKernelConfig(kernel="gpjax.kernels.Matern32", parts=["hours_elapsed"], lengthscale=[hours]),
         ],
-        amplitude=4.8,  # m/s, the error's spread
+        amplitude=amplitude,
         noise=1e-2,
         n_features=256,
         refit=False,
@@ -42,9 +45,20 @@ def matched_belief() -> BeliefConfig:
     )
 
 
+# Correlation lengths and standard deviations measured over the candidate box, every altitude, September 2017
+def error_belief() -> BeliefConfig:
+    """Learns W - F about the forecast: correlated over 175 km, 1.7 km of altitude and 4 hours, spread 2.64 m/s"""
+    return _belief(True, place_km=175.0, altitude_km=1.7, hours=4.0, amplitude=2.64)
+
+
+def wind_belief() -> BeliefConfig:
+    """Learns W about zero: correlated over 560 km, 6.5 km of altitude and 27 hours, spread 8.75 m/s"""
+    return _belief(False, place_km=560.0, altitude_km=6.5, hours=27.0, amplitude=8.75)
+
+
 def oracle_belief() -> BeliefConfig:
-    """The true field itself, the fitted settings stated and unread"""
-    return dataclasses.replace(matched_belief(), oracle=True)
+    """The true wind itself, the fitted settings stated and unread"""
+    return dataclasses.replace(wind_belief(), oracle=True)
 
 
 PLANNING_BUDGET = 25
@@ -59,7 +73,7 @@ OPENING_LEGS = 1
 HORIZON_LENGTH = 238
 """time_steps in an episode: 714 hours at 3 hours each, from the data's first frame to its last"""
 
-CLAIM_EVERY_STEPS = PLANNING_BUDGET
+CLAIM_EVERY_STEPS = 1
 """Moves between re-readings of the claim off a belief"""
 
 RECORDED = {

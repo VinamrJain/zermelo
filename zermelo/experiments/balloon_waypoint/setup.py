@@ -102,6 +102,11 @@ def max_magnitude() -> Implementation:
     return _built("zermelo.methods.waypoint_bo.utility.MaxMagnitude")
 
 
+def sum_magnitude() -> Implementation:
+    """The reading magnitudes among the cells scored, summed"""
+    return _built("zermelo.methods.waypoint_bo.utility.SumMagnitude")
+
+
 def posterior_spread() -> Implementation:
     """The posterior standard deviations at the scored cells, summed"""
     return _built("zermelo.methods.waypoint_bo.utility.PosteriorSpread")

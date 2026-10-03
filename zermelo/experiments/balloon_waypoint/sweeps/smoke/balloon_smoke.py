@@ -1,6 +1,6 @@
 import dataclasses
 
-from zermelo.experiments.balloon_waypoint.registry import ATLANTIC_2017SEP, RECORDED, matched_belief
+from zermelo.experiments.balloon_waypoint.registry import ATLANTIC_2017SEP, RECORDED, error_belief
 from zermelo.experiments.balloon_waypoint.schema import BeliefConfig, BeliefKernelConfig, MethodConfig, Resources
 from zermelo.experiments.balloon_waypoint.setup import (
     Implementation,
@@ -26,13 +26,15 @@ WORLD = dataclasses.replace(
 
 
 def _belief(oracle: bool) -> BeliefConfig:
-    """The model an arm holds: matched to this world, or the true wind itself"""
-    (spatial,) = matched_belief().kernel_factors
+    """The model an arm holds: the drawn error's own numbers, or the true wind itself"""
+    place, _ = error_belief().kernel_factors
     return dataclasses.replace(
-        matched_belief(),
+        error_belief(),
         oracle=oracle,
-        # the wind moves here, so the kernel carries a factor in the hour a reading was taken at
-        kernel_factors=[spatial, BeliefKernelConfig(kernel="gpjax.kernels.Matern32", parts=["hours_elapsed"], lengthscale=[12.0])],
+        kernel_factors=[
+            dataclasses.replace(place, lengthscale=[WORLD.error_lengthscale_km] * 3 + [3.0]),
+            BeliefKernelConfig(kernel="gpjax.kernels.Matern32", parts=["hours_elapsed"], lengthscale=[12.0]),
+        ],
         amplitude=WORLD.error_scale,
         n_features=32,
         refit_steps=20,

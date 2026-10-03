@@ -69,8 +69,8 @@ class WaypointAgent(Agent[WaypointAgentState]):
     context_key: str
     """Which part of the reading carries the coordinates beyond the state, absent where the readout publishes none"""
 
-    prior_mean_key: str
-    """Which part of the reading carries the field's prior mean as a function, absent where the readout publishes none"""
+    prior_mean_key: str | None
+    """Which part of the reading carries the field's prior mean as a function (None learns about zero)"""
 
     horizon: int
     """`T`: the episode's time_steps, one reading per time_step filling one buffer row"""
@@ -139,7 +139,7 @@ class WaypointAgent(Agent[WaypointAgentState]):
         )
         policy = Policy(jnp.zeros((n_states, 1), jnp.int32), jnp.zeros((n_states, 1)))
         context = self._context(obs)
-        prior_mean = obs.reading[self.prior_mean_key] if self.prior_mean_key in obs.reading else None
+        prior_mean = obs.reading[self.prior_mean_key] if self.prior_mean_key is not None and self.prior_mean_key in obs.reading else None
         empty = self.belief.with_prior_mean(prior_mean).condition(Dataset.empty(self.horizon, width, context.shape[-1]))
         return WaypointAgentState(
             empty,

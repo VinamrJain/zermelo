@@ -54,7 +54,7 @@ OPENING_LEGS = 1
 HORIZON_LENGTH = 2000
 """`T`: moves an episode makes"""
 
-CLAIM_EVERY_STEPS = 50
+CLAIM_EVERY_STEPS = 1
 """Moves between re-readings of the claim off a belief"""
 
 RECORDED = {
