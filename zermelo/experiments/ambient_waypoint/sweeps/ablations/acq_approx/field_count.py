@@ -1,9 +1,11 @@
+import dataclasses
+
 from zermelo.experiments.ambient_waypoint.registry import (
     AMBIENT1_CONTROL1,
     CLAIM_EVERY_STEPS,
     HORIZON_LENGTH,
     N_SEEDS,
-    OPENING_LEGS,
+    OPENING_STEPS,
     PLANNING_BUDGET,
     RECORDED,
     RESOURCES,
@@ -27,7 +29,7 @@ def _method(n_fields: int) -> MethodConfig:
         step_rate=0.5,
         steps_from="predicted",
         n_candidates=None,
-        opening_legs=OPENING_LEGS,
+        opening_steps=OPENING_STEPS,
     )
 
 
@@ -38,6 +40,6 @@ sweep(
     claim_every=CLAIM_EVERY_STEPS,
     recorded=RECORDED,
     seeds=range(N_SEEDS),
-    resources=RESOURCES,
-    arms=[arm(f"fields{s}", _method(s), BELIEF) for s in (1, 4, 8, 16, 32)],
+    resources=dataclasses.replace(RESOURCES, timeout_min=120),
+    arms=[arm(f"fields{s}", _method(s), BELIEF) for s in (0, 1, 4, 8, 16, 32)],
 )

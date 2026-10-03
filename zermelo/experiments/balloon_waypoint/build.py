@@ -54,10 +54,10 @@ def assemble(cfg: RunConfig) -> Episode:
     states = balloon_states(grid, tuple(float(h) for h in wind_data.altitude_km))
     transition = balloon_transition(wind_data, states, cfg.problem.step_hours)
     box = candidate_box(grid, cfg.problem.lat_min, cfg.problem.lat_max, cfg.problem.lon_min, cfg.problem.lon_max)
-    inset = cfg.problem.start_inset_deg
-    start_box = candidate_box(
-        grid, cfg.problem.lat_min + inset, cfg.problem.lat_max - inset, cfg.problem.lon_min + inset, cfg.problem.lon_max - inset
-    )
+    centre = jnp.array([(cfg.problem.lat_min + cfg.problem.lat_max) / 2, (cfg.problem.lon_min + cfg.problem.lon_max) / 2])
+    start_box = jnp.arange(grid.size()) == jnp.argmin(
+        jnp.sum((grid.elements() - centre) ** 2, axis=-1)
+    )  # the grid point nearest the box centre
     world = balloon_world(grid, states, predicted, frame_hours_elapsed, error, transition, cfg.problem.resource_units, start_box)
     objective = balloon_objective(states, grid, instantiate(cfg.problem.target, _target_whitelist_=WHITELIST), box)
     candidates = objective.candidates
@@ -106,7 +106,7 @@ def assemble(cfg: RunConfig) -> Episode:
             context_key="context",
             prior_mean_key="forecast" if cfg.belief.forecast_as_prior_mean else None,
             horizon=cfg.horizon,
-            opening_legs=cfg.method.opening_legs,
+            opening_steps=cfg.method.opening_steps,
             claim_every=cfg.claim_every,
         )
     # the settings as plain data, carried onto the record

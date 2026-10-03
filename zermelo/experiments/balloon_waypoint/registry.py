@@ -22,7 +22,6 @@ ATLANTIC_2017SEP = ProblemConfig(
     lat_max=30.0,
     lon_min=-85.0,
     lon_max=-40.0,
-    start_inset_deg=3.0,  # two time_steps of drift at 15 m/s
 )
 """The whole globe in September 2017, scored over the Atlantic box two hurricanes cross"""
 
@@ -67,8 +66,8 @@ PLANNING_BUDGET = 25
 ARRIVAL_RADIUS_KM = 60.0
 """`rho`: how near a waypoint counts as arrived, inside positions about 100 km apart"""
 
-OPENING_LEGS = 1
-"""Waypoint legs of uniform random walking taken before the rule starts"""
+OPENING_STEPS = 0
+"""time_steps of uniform random walking taken before the rule starts: none, the forecast being the prior"""
 
 HORIZON_LENGTH = 238
 """time_steps in an episode: 714 hours at 3 hours each, from the data's first frame to its last"""
@@ -99,10 +98,10 @@ RECORDED = {
 N_CANDIDATES = None
 """Candidates scored per move (None scores every one the grid and its altitudes hold)"""
 
-N_SEEDS = 20
+N_SEEDS = 10
 """Instances every arm is run on, seeded `0` to `N_SEEDS - 1`"""
 
-RESOURCES = Resources(cpus=2, mem_gb=12, timeout_min=30, gres="gpu:1", partition="gpu", constraint="avx2&gpu-high", array_parallelism=64)
+RESOURCES = Resources(cpus=2, mem_gb=16, timeout_min=120, gres="gpu:1", partition="gpu", constraint="avx2&gpu-high", array_parallelism=64)
 """What one cell of a sweep is given. A sweep wanting more states its own with `dataclasses.replace`.
 
 `avx2` and `gpu-high` are node features. Dropping either lands runs on nodes where jaxlib fails to

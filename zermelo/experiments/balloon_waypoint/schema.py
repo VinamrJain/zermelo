@@ -52,9 +52,6 @@ class ProblemConfig:
     lon_max: float = MISSING
     """The box of grid points, in degrees, the candidates sit above"""
 
-    start_inset_deg: float = MISSING
-    """Degrees the box the balloon starts over sits inside the candidate box, on every side"""
-
 
 @dataclass
 class BeliefKernelConfig:
@@ -127,8 +124,8 @@ class MethodConfig:
     n_candidates: int | None = MISSING
     """Cap on candidates scored per move (None scores every one)"""
 
-    opening_legs: int = MISSING
-    """Waypoint legs of uniform random walking taken before the rule starts"""
+    opening_steps: int = MISSING
+    """time_steps of uniform random walking taken before the rule starts"""
 
 
 @dataclass
