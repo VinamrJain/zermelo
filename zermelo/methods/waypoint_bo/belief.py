@@ -11,7 +11,6 @@ from typing import Any, Self
 import gpjax as gpx
 import jax
 import jax.numpy as jnp
-from gpjax.kernels import RFF
 from gpjax.kernels.base import AbstractKernel
 from gpjax.kernels.stationary.base import StationaryKernel
 from jax.scipy.linalg import solve_triangular
@@ -521,6 +520,19 @@ class GPBelief(Belief):
         e = jnp.stack(drawn, axis=-1)  # (n_fields, n_states + rows, m): a draw of e
         return [self._field(context, e[s]) for s in range(n_fields)]
 
+    def _fourier_features(self, key: PRNGKeyArray, coordinate_rows: Float[Array, "q dim"]) -> Float[Array, "q features"]:
+        """`Phi(z) = [cos(Omega z), sin(Omega z)]` for a product of stationary kernels:
+
+        Omega z = sum over factors i of  omega_i . z[columns_i] / lengthscale_i,   omega_i ~ the spectral density of factor i
+        """
+        kernel = self.kernel
+        factors = list(kernel.kernels) if len(self.kernel_factors) > 1 else [kernel]
+        phase = jnp.zeros((coordinate_rows.shape[0], self.n_features))  # (q, n_features): Omega z
+        for key_of_factor, factor in zip(jax.random.split(key, len(factors)), factors, strict=True):
+            frequencies = factor.spectral_density.sample(key=key_of_factor, sample_shape=(self.n_features, factor.n_dims))
+            phase = phase + coordinate_rows[:, factor.active_dims] @ (frequencies / factor.lengthscale[...]).T
+        return jnp.concatenate([jnp.cos(phase), jnp.sin(phase)], axis=-1)
+
     def _paths(
         self, key: PRNGKeyArray, x: Float[Array, "n_read dim"], y: Float[Array, " n_read"], n_fields: int, query: Float[Array, "q dim"]
     ) -> Float[Array, "n_fields q"]:
@@ -529,16 +541,17 @@ class GPBelief(Belief):
         e_s(z) = Phi(z) theta_s + k(z, x) v_s,   v_s = (K + noise^2 I)^-1 (y + eps_s - Phi(x) theta_s)
         """
         kernel = self.kernel
-        basis = RFF(base_kernel=kernel, num_basis_fns=self.n_features, key=key)
         scale = jnp.sqrt(self.amplitude**2 / self.n_features)
         theta = jax.random.normal(key, (n_fields, 2 * self.n_features))  # (n_fields, 2 n_features): row s is path s
-        features = basis.compute_features(query) * scale  # (q, 2 n_features)
+        features = self._fourier_features(key, query) * scale  # (q, 2 n_features)
         prior_part = theta @ features.T  # (n_fields, q)
         if x.shape[0] == 0:  # nothing read: the draw is from the prior
             return prior_part
         # drawn (n_fields, n_read) then turned: filling the other way round would change path s with n_fields
         eps = self.noise * jax.random.normal(key, (n_fields, x.shape[0])).T  # (n_read, n_fields)
         gram = kernel.gram(x).to_dense() + (self.noise**2 + 1e-6) * jnp.eye(x.shape[0])  # (n_read, n_read)
-        residual = y[:, None] + eps - (basis.compute_features(x) * scale) @ theta.T  # (n_read, n_fields)
+        residual = (
+            y[:, None] + eps - (self._fourier_features(key, x) * scale) @ theta.T
+        )  # (n_read, n_fields): the same key, so the same Omega
         canonical = jnp.linalg.solve(gram, residual)  # (n_read, n_fields): one factorization, a column per field
         return prior_part + (kernel.cross_covariance(query, x) @ canonical).T
