@@ -80,8 +80,13 @@ RECORDED = {
 N_SEEDS = 10
 """Instances every arm is run on, seeded `0` to `N_SEEDS - 1`"""
 
-RESOURCES = Resources(cpus=2, mem_gb=12, timeout_min=60, gres="gpu:1", partition="gpu", constraint="avx2&gpu-high", array_parallelism=64)
-"""What one cell of a sweep is given. A sweep wanting more states its own with `dataclasses.replace`.
-
-`avx2` and `gpu-high` are node features. Dropping either lands runs on nodes where jaxlib fails to
-import or a matrix multiply fails to launch. A cell wanting no device states `avx2` alone"""
+RESOURCES = Resources(
+    cpus=2,
+    mem_gb=12,
+    timeout_min=60,
+    gres="gpu:1",
+    partition="default_partition",
+    constraint="avx2&(gpu-high|gpu-mid|titanxp)",
+    array_parallelism=64,
+)
+"""What one cell of a sweep is given; `avx2` and the GPU classes are node features. A sweep wanting more states its own with `dataclasses.replace`"""
