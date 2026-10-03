@@ -1,6 +1,14 @@
 from zermelo.experiments.ambient_waypoint.registry import RECORDED
 from zermelo.experiments.ambient_waypoint.schema import BeliefConfig, BeliefKernelConfig, MethodConfig, ProblemConfig, Resources
-from zermelo.experiments.ambient_waypoint.setup import Implementation, arm, expected_improvement, max_magnitude, sweep, value_iteration
+from zermelo.experiments.ambient_waypoint.setup import (
+    Implementation,
+    arm,
+    expected_improvement,
+    max_magnitude,
+    sweep,
+    total_variance,
+    value_iteration,
+)
 
 WORLD = ProblemConfig(
     ambient_cells=5,
@@ -79,6 +87,7 @@ for name, resources in (
                 _method(expected_improvement(), improvement=False, n_fields=0, n_walks=0, step_rate=0.0),
                 _belief(oracle=False),
             ),
+            arm("evi", _method(total_variance(), improvement=True, n_fields=2, n_walks=2, step_rate=0.5), _belief(oracle=False)),
             arm("random", None, _belief(oracle=False)),  # no rule at all
         ],
     )

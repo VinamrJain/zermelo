@@ -45,7 +45,7 @@ def matched_belief(world: ProblemConfig) -> BeliefConfig:
     )
 
 
-PLANNING_BUDGET = 50
+PLANNING_BUDGET = 25
 """`L`: a replan fires every `L` moves, costs `L` backups, and truncates a hitting time at `L` steps"""
 
 OPENING_LEGS = 1
@@ -77,7 +77,7 @@ RECORDED = {
 }
 """What a record stores, and the moves between the snapshots it keeps of each"""
 
-N_SEEDS = 10
+N_SEEDS = 20
 """Instances every arm is run on, seeded `0` to `N_SEEDS - 1`"""
 
 RESOURCES = Resources(cpus=2, mem_gb=12, timeout_min=60, gres="gpu:1", partition="gpu", constraint="avx2&gpu-high", array_parallelism=64)

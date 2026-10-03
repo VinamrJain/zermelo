@@ -99,7 +99,7 @@ RECORDED = {
 N_CANDIDATES = None
 """Candidates scored per move (None scores every one the grid and its altitudes hold)"""
 
-N_SEEDS = 10
+N_SEEDS = 20
 """Instances every arm is run on, seeded `0` to `N_SEEDS - 1`"""
 
 RESOURCES = Resources(cpus=2, mem_gb=12, timeout_min=30, gres="gpu:1", partition="gpu", constraint="avx2&gpu-high", array_parallelism=64)

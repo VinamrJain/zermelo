@@ -8,6 +8,7 @@ from zermelo.experiments.balloon_waypoint.setup import (
     max_magnitude,
     point_speed,
     sweep,
+    total_variance,
     upper_confidence,
     value_iteration,
 )
@@ -78,6 +79,7 @@ for name, resources in (
             arm("mean", _method(max_magnitude(), improvement=True, n_fields=0, n_walks=0, cost_weight=0.25), _belief(oracle=False)),
             arm("oracle", _method(max_magnitude(), improvement=True, n_fields=0, n_walks=0, cost_weight=0.0), _belief(oracle=True)),
             arm("ucb", _method(upper_confidence(c=2.0), improvement=False, n_fields=0, n_walks=0, cost_weight=0.0), _belief(oracle=False)),
+            arm("evi", _method(total_variance(), improvement=True, n_fields=2, n_walks=2, cost_weight=0.25), _belief(oracle=False)),
             arm("random", None, _belief(oracle=False)),  # no rule at all
         ],
     )
