@@ -1,4 +1,4 @@
-"""One launch written for the paper: `python -m zermelo.experiments.balloon_waypoint.metrics <sweep name or its directory>`"""
+"""One launch written for the paper: `python -m zermelo.experiments.balloon_waypoint.metrics <sweep name or its directory> [--top N]`"""
 
 import sys
 from pathlib import Path
@@ -33,6 +33,9 @@ curves, scalars = tables(runs)
 arms = sorted(curves["acquisition"].unique())
 labels = {arm: acquisition_label(arm) for arm in arms}
 drawn = arms if DRAWN_ARMS is None else [arm for arm in DRAWN_ARMS if arm in arms]
+if "--top" in sys.argv:  # the N arms of lowest median cumulative regret, the table keeping every arm
+    ranked = scalars.groupby("acquisition")["cumulative_regret"].median().sort_values()
+    drawn = [arm for arm in ranked.index[: int(sys.argv[sys.argv.index("--top") + 1])] if arm in drawn]
 panels = [(name, words, scale) for name, (words, scale) in CURVES.items() if name.endswith("regret") or sweep not in REGRET_ONLY_SWEEPS]
 
 # the x up to which every arm walked at random: the x of the last opening time_step, every ruled arm sharing one count
