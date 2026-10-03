@@ -73,9 +73,9 @@ TABLE_CHANNELS = CURVE_CHANNELS + (
 )
 
 
-def channels(cell: Path, wanted: Sequence[str]) -> dict[str, Any]:
-    """The arrays `wanted` names from one cell's record (a name the record does not hold is absent)"""
-    with np.load(cell / "record.npz") as npz:
+def channels(run: Path, wanted: Sequence[str]) -> dict[str, Any]:
+    """The arrays `wanted` names from one run's record (a name the record does not hold is absent)"""
+    with np.load(run / "record.npz") as npz:
         return {name: npz[name] for name in wanted if name in npz}
 
 
@@ -191,29 +191,29 @@ def episode_cost(held: dict[str, Any]) -> dict[str, float]:
 
 
 def latest_launch(sweep: Path) -> Path:
-    """The directory holding cells: `sweep` itself, or the newest run under it"""
+    """The directory holding runs: `sweep` itself, or the newest run under it"""
     return sweep if any(sweep.glob("*/record.npz")) else max(launch for launch in sweep.iterdir() if launch.is_dir())
 
 
-def finished_cells(sweep: Path) -> list[tuple[str, int, Path, dict[str, Any]]]:
-    """Every finished cell under one sweep directory: the arm, the seed, where it was written, and the settings it ran"""
+def finished_runs(sweep: Path) -> list[tuple[str, int, Path, dict[str, Any]]]:
+    """Every finished run under one sweep directory: the arm, the seed, where it was written, and the settings it ran"""
     found: list[tuple[str, int, Path, dict[str, Any]]] = []
     for marker in sorted(sweep.glob("*/record.npz")):  # a record is renamed into place whole, so its presence means finished
         varied = settings(marker.parent.name)
         arm = ",".join(f"{key}={value}" for key, value in varied.items() if key != "seed") or "one arm"
         found.append((arm, int(varied.get("seed", 0)), marker.parent, json.loads((marker.parent / "config.json").read_text())))
     if not found:
-        raise ValueError(f"no finished cell under {sweep}")
+        raise ValueError(f"no finished run under {sweep}")
     return found
 
 
-def tables(cells: list[tuple[str, int, Path, dict[str, Any]]]) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def tables(runs: list[tuple[str, int, Path, dict[str, Any]]]) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Three tables over one launch: what each episode achieved per move, what each waypoint leg walked, and what each episode cost"""
     curves: list[pd.DataFrame] = []
     legs: list[pd.DataFrame] = []
     spent: list[dict[str, Any]] = []
-    for arm, seed, cell, config in cells:
-        held = channels(cell, TABLE_CHANNELS)
+    for arm, seed, run, config in runs:
+        held = channels(run, TABLE_CHANNELS)
         curves.append(
             pd.DataFrame(
                 {
@@ -227,5 +227,5 @@ def tables(cells: list[tuple[str, int, Path, dict[str, Any]]]) -> tuple[pd.DataF
         )
         legs.append(pd.DataFrame({"arm": arm, "seed": seed, **episode_legs(held, config)}))
         spent.append({"arm": arm, "seed": seed, **episode_cost(held)})
-        del held  # one cell's channels live at a time
+        del held  # one run's channels live at a time
     return pd.concat(curves, ignore_index=True), pd.concat(legs, ignore_index=True), pd.DataFrame(spent)

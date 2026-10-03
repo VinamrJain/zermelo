@@ -14,7 +14,7 @@ from zermelo.experiments.ambient_waypoint.render.panels import (
     survey,
     world,
 )
-from zermelo.experiments.ambient_waypoint.render.replay import Plan, Replay, cells, read
+from zermelo.experiments.ambient_waypoint.render.replay import Plan, Replay, read, runs
 from zermelo.experiments.ambient_waypoint.render.style import Style, truncated
 
 __all__ = [
@@ -23,7 +23,7 @@ __all__ = [
     "Replay",
     "Style",
     "caption",
-    "cells",
+    "runs",
     "compare",
     "contact",
     "detail",

@@ -158,7 +158,7 @@ class Replay:
         return chosen[np.linspace(0, chosen.size - 1, min(count, chosen.size)).round().astype(int)]
 
 
-def cells(launch: Path, *, seed: str | None = None, arm: str | None = None) -> list[Path]:
+def runs(launch: Path, *, seed: str | None = None, arm: str | None = None) -> list[Path]:
     """The directories under `launch`, one per episode, kept to one seed or one arm where asked and sorted by name"""
     found = sorted(path.parent for path in launch.glob("*/record.npz"))
     if seed is None and arm is None:  # many seeds of many arms is a sheet nobody reads: one axis is held by default
@@ -166,7 +166,7 @@ def cells(launch: Path, *, seed: str | None = None, arm: str | None = None) -> l
         seed = seeds[0] if len(seeds) > 1 else None
     kept = [path for path in found if seed in (None, settings(path.name).get("seed")) and arm in (None, settings(path.name).get("arm"))]
     if not kept:
-        raise ValueError(f"{launch} holds no cell at seed {seed} of arm {arm}; it holds {[path.name for path in found]}")
+        raise ValueError(f"{launch} holds no run at seed {seed} of arm {arm}; it holds {[path.name for path in found]}")
     return kept
 
 

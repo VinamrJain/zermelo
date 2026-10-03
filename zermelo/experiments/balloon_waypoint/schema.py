@@ -140,7 +140,7 @@ class Resources:
     """Generic resources a cell asks the scheduler for, such as `gpu:1` (None asks for none)"""
 
     partition: str = MISSING
-    """Scheduler partition the cells are submitted to"""
+    """Scheduler partition the runs are submitted to"""
 
     constraint: str | None = MISSING
     """Node features a cell demands of the scheduler, joined by `&` and `|` (None demands none)"""
@@ -173,7 +173,7 @@ class RunConfig:
     """What the record stores, and the moves between the snapshots it keeps of each"""
 
     resources: Resources = MISSING
-    """What the cell was given, carried onto the record"""
+    """What the run was given, carried onto the record"""
 
     seed: int = MISSING
     """The one number an episode replays from"""

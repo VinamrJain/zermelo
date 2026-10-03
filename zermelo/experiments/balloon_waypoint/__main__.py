@@ -23,7 +23,7 @@ def main(cfg: DictConfig) -> None:
     from zermelo.experiments.balloon_waypoint.build import assemble
 
     if os.environ.get("SLURM_JOB_ID") and cfg.resources.gres and jax.default_backend() == "cpu":
-        raise RuntimeError(f"this cell asked for {cfg.resources.gres} and its jax runs on the processor: submit with `pixi run -e cuda`")
+        raise RuntimeError(f"this run asked for {cfg.resources.gres} and its jax runs on the processor: submit with `pixi run -e cuda`")
     settings = resolve(cfg)  # into dataclasses, which refuse a setting nobody gave
     record = assemble(settings).run()
     record.save(Path(HydraConfig.get().runtime.output_dir))

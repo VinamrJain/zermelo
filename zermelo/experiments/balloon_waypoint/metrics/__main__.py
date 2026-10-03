@@ -10,7 +10,7 @@ from zermelo.experiments.balloon_waypoint.metrics.data import (
     CURVES,
     DIAGNOSTICS,
     channels,
-    finished_cells,
+    finished_runs,
     labels,
     latest_launch,
     opening_moves,
@@ -27,14 +27,14 @@ where = asked if asked.exists() else SWEEPS / asked
 if not where.is_dir():
     sys.exit(f"no sweep or launch directory at {asked}, and none at {SWEEPS / asked}")
 sweep = latest_launch(where)
-cells = finished_cells(sweep)  # names and configurations only, the arrays read one cell at a time
-curves, legs, spent = tables(cells)
+runs = finished_runs(sweep)  # names and configurations only, the arrays read one run at a time
+curves, legs, spent = tables(runs)
 style = Style()
 names = labels(sorted(curves["arm"].unique()))
 colours = {arm: style.arm_colours[slot % len(style.arm_colours)] for slot, arm in enumerate(sorted(names))}
 title = sweep.parent.name.replace("_", " ")
 # an arm with no rule has no planner, so the planner is read off one that does
-described = next((config for *_, config in cells if config.get("method") is not None), cells[0][3])
+described = next((config for *_, config in runs if config.get("method") is not None), runs[0][3])
 method = described.get("method")
 moves = int(curves["step"].max())
 budget = moves if method is None else int(method["planner"]["replan_every"])
@@ -50,12 +50,12 @@ wind_data = load_wind(
 grid = wind_data.grid
 
 walked = 0
-for arm, seed, cell, _ in cells:
+for arm, seed, run, _ in runs:
     own = legs[(legs["arm"] == arm) & (legs["seed"] == seed)]
     if not own.empty:  # an arm running no rule aims at nothing and finishes no waypoint leg
-        figures.draw_legs(own, budget, colours[arm], style, f"{names[arm]}, seed {seed}", cell / "legs.png")
+        figures.draw_legs(own, budget, colours[arm], style, f"{names[arm]}, seed {seed}", run / "legs.png")
         walked += 1
-print(f"wrote curves.png, diagnostics.png and cost.png under {sweep}, and legs.png under {walked} cells")
+print(f"wrote curves.png, diagnostics.png and cost.png under {sweep}, and legs.png under {walked} runs")
 states = wind_data.n_alt * grid.n_lat * grid.n_lon
-candidates = int(np.asarray(channels(cells[0][2], ("objective_state/truth",))["objective_state/truth"]).shape[-1])
+candidates = int(np.asarray(channels(runs[0][2], ("objective_state/truth",))["objective_state/truth"]).shape[-1])
 print(f"wrote the tables under {summary.write(sweep, curves, legs, spent, described, names, states, candidates)}")

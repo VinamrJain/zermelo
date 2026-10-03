@@ -91,5 +91,5 @@ N_SEEDS = 10
 RESOURCES = Resources(cpus=2, mem_gb=12, timeout_min=30, gres="gpu:1", partition="gpu", constraint="avx2&gpu-high", array_parallelism=64)
 """What one cell of a sweep is given. A sweep wanting more states its own with `dataclasses.replace`.
 
-`avx2` and `gpu-high` are node features. Dropping either lands cells on nodes where jaxlib fails to
+`avx2` and `gpu-high` are node features. Dropping either lands runs on nodes where jaxlib fails to
 import or a matrix multiply fails to launch. A cell wanting no device states `avx2` alone"""

@@ -17,7 +17,7 @@ from zermelo.experiments.balloon_waypoint.render.panels import (
     track,
     world,
 )
-from zermelo.experiments.balloon_waypoint.render.replay import Plan, Replay, cells, read
+from zermelo.experiments.balloon_waypoint.render.replay import Plan, Replay, read, runs
 from zermelo.experiments.balloon_waypoint.render.style import Style, truncated
 
 __all__ = [
@@ -26,7 +26,7 @@ __all__ = [
     "Replay",
     "Style",
     "caption",
-    "cells",
+    "runs",
     "compare",
     "contact",
     "detail",

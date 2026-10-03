@@ -55,7 +55,7 @@ def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walk
     )
 
 
-# One entry per device the cells can run on; `smoke_gpu` asks for an accelerator and a gpu-high node
+# One entry per device the runs can run on; `smoke_gpu` asks for an accelerator and a gpu-high node
 for name, resources in (
     ("smoke", Resources(cpus=1, mem_gb=8, timeout_min=20, gres=None, partition="dean", constraint="avx2", array_parallelism=10)),
     (
