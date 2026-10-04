@@ -102,6 +102,11 @@ def max_magnitude() -> Implementation:
     return _built("zermelo.methods.waypoint_bo.utility.MaxMagnitude")
 
 
+def sum_magnitude() -> Implementation:
+    """The reading magnitudes among the cells scored, summed"""
+    return _built("zermelo.methods.waypoint_bo.utility.SumMagnitude")
+
+
 def total_variance() -> Implementation:
     """Minus the posterior variance summed over every candidate state, given where the dataset was read"""
     return _built("zermelo.methods.waypoint_bo.utility.TotalVariance")
