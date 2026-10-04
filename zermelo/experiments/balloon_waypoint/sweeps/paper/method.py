@@ -13,8 +13,11 @@ PLANNING_BUDGET = 100
 STEP_RATE = 0.0
 """`c` each of our rules charges a full-budget trip"""
 
-TUNED_COST_WEIGHT = {"emi": 0.5, "evi": 0.0, "esi": 0.5}
-"""`w`, the time_steps the planner prices one altitude change at under a budget, picked on the `paper_tuning_cost_weight` sweep"""
+BUDGETED_STEP_RATE = 1.0
+"""`c` each of our rules charges a full-budget trip where the altitude budget binds"""
+
+COST_WEIGHT = 1.0
+"""`w`, the time_steps the planner prices one altitude change at where the altitude budget binds"""
 
 N_SEEDS = 5
 """Instances every arm is run on at each frame"""

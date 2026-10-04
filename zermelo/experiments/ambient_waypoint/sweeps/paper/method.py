@@ -10,7 +10,7 @@ UTILITIES = {"emi": max_magnitude, "evi": posterior_spread, "esi": sum_magnitude
 PLANNING_BUDGET = 25
 """`L` every rule replans at"""
 
-STEP_RATE = 1.0
+STEP_RATE = 0.0
 """`c` each of our rules charges a full-budget trip"""
 
 TUNING_SEEDS = range(100, 105)
