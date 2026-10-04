@@ -29,6 +29,21 @@ IRMA_2017SEP06 = dataclasses.replace(ATLANTIC_2017SEP, time_varying=False, start
 """The one frame at 2017-09-06 12Z, Irma inside the box, held still for the whole episode"""
 
 
+STILL_FRAMES = {"sep06": 132.0, "sep09": 204.0, "sep19": 444.0, "sep24": 564.0}
+"""`start_hour` of the 12Z frames of September 2017 the paper's still-wind studies run on, keyed by date"""
+
+TUNING_FRAME = 324.0
+"""`start_hour` of 2017-09-14 12Z, the still frame settings are picked on, apart from the ones reported"""
+
+STILL_HORIZON = 240
+"""time_steps in an episode on a still frame"""
+
+
+def still(start_hour: float, resource_units: int) -> ProblemConfig:
+    """The frame at `start_hour` held still for the whole episode, with `resource_units` altitude changes to spend"""
+    return dataclasses.replace(ATLANTIC_2017SEP, time_varying=False, start_hour=start_hour, resource_units=resource_units)
+
+
 def _belief(forecast_as_prior_mean: bool, place_km: float, altitude_km: float, hours: float, amplitude: float) -> BeliefConfig:
     """A belief at the correlation lengths and spread of what it learns, no refitting"""
     return BeliefConfig(
