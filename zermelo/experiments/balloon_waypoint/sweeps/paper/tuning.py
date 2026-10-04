@@ -28,10 +28,12 @@ RATE_ARMS = {
 """Every planning budget and step rate, the altitude budget never binding"""
 
 WEIGHT_ARMS = [
-    arm(f"{name}_w{rate_name(weight)}", ours(name, cost_weight=weight), BELIEF)
+    arm(f"{name}_c{rate_name(rate)}_w{rate_name(weight)}", ours(name, step_rate=rate, cost_weight=weight), BELIEF)
     for name in ("emi", "evi", "esi")
+    for rate in (0.0, 1.0)
     for weight in (0.0, 0.5, 1.0, 2.0, 4.0)
 ]
+"""Every price of an altitude change, the score charging no travel and charging it at step rate 1"""
 
 for swept, resource_units, arms in (
     *((swept, STILL_HORIZON, arms) for swept, arms in RATE_ARMS.items()),
