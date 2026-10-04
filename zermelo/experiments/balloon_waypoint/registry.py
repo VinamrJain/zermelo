@@ -86,7 +86,7 @@ def oracle_belief() -> BeliefConfig:
 PLANNING_BUDGET = 50
 """`L`: a replan fires every `L` moves, costs `L` backups, and truncates a hitting time at `L` steps"""
 
-TARGET_CHUNK = 500
+TARGET_CHUNK = 100
 """Candidates one planner solve handles"""
 
 ARRIVAL_RADIUS_KM = 60.0
