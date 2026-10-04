@@ -13,7 +13,7 @@ TUNED_PLANNING_BUDGET = {"emi": 100, "evi": 100, "esi": 100}
 TUNED_STEP_RATE = {"emi": 0.0, "evi": 0.0, "esi": 0.0}
 """`c` each of our rules charges a full-budget trip, picked on the `paper_tuning` sweep"""
 
-TUNED_COST_WEIGHT = {"emi": 0.0, "evi": 0.0, "esi": 0.0}
+TUNED_COST_WEIGHT = {"emi": 0.5, "evi": 0.0, "esi": 0.5}
 """`w`, the time_steps the planner prices one altitude change at under a budget, picked on the `paper_tuning_cost_weight` sweep"""
 
 N_SEEDS = 5
