@@ -7,10 +7,10 @@ from zermelo.experiments.balloon_waypoint.setup import Implementation, max_magni
 UTILITIES = {"emi": max_magnitude, "evi": posterior_spread, "esi": sum_magnitude}
 """What each of our rules takes the expected improvement of"""
 
-TUNED_PLANNING_BUDGET = {"emi": 50, "evi": 50, "esi": 50}
+TUNED_PLANNING_BUDGET = {"emi": 100, "evi": 100, "esi": 100}
 """`L` each of our rules replans at, picked on the `paper_tuning` sweep"""
 
-TUNED_STEP_RATE = {"emi": 1.0, "evi": 1.0, "esi": 1.0}
+TUNED_STEP_RATE = {"emi": 0.0, "evi": 0.0, "esi": 0.0}
 """`c` each of our rules charges a full-budget trip, picked on the `paper_tuning` sweep"""
 
 TUNED_COST_WEIGHT = {"emi": 0.0, "evi": 0.0, "esi": 0.0}
