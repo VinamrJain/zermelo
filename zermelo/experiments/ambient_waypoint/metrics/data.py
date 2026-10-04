@@ -38,7 +38,7 @@ DRAWN_ARMS: tuple[str, ...] | None = None
 
 CURVES = {
     "simple_regret": ("simple regret", "linear"),
-    "cumulative_regret": ("cumulative regret", "linear"),
+    "average_regret": ("average regret", "linear"),
     "rmse": ("RMSE", "linear"),
     "posterior_spread": ("posterior spread", "linear"),
 }
@@ -109,6 +109,7 @@ def episode_curves(held: dict[str, Any], claim_every: int) -> dict[str, Any]:
 
     simple_regret     g - b_t
     cumulative_regret sum over u <= t of (g - b_u)
+    average_regret    cumulative_regret / t
     rmse              sqrt(mean over cells and axes of (f* - mu_t)^2)
     posterior_spread  mean over cells and axes of exp(v_t / 2)
     """
@@ -121,6 +122,7 @@ def episode_curves(held: dict[str, Any], claim_every: int) -> dict[str, Any]:
     return {
         "simple_regret": regret,
         "cumulative_regret": np.cumsum(regret),
+        "average_regret": np.cumsum(regret) / np.arange(1, regret.size + 1),
         "rmse": np.sqrt(np.mean((truth - mean) ** 2, axis=(1, 2))),
         "posterior_spread": np.mean(np.exp(0.5 * np.maximum(log_variance, LOG_VARIANCE_FLOOR)), axis=(1, 2)),
     }
