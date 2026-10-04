@@ -38,7 +38,5 @@ for budget in BUDGETS:
                 arm("emi", ours("emi", step_rate=BUDGETED_STEP_RATE, cost_weight=COST_WEIGHT), BELIEF),
                 arm("evi_w0", ours("evi"), BELIEF),
                 arm("evi", ours("evi", step_rate=BUDGETED_STEP_RATE, cost_weight=COST_WEIGHT), BELIEF),
-                arm("esi_w0", ours("esi"), BELIEF),
-                arm("esi", ours("esi", step_rate=BUDGETED_STEP_RATE, cost_weight=COST_WEIGHT), BELIEF),
             ],
         )
