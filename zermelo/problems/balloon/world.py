@@ -34,7 +34,7 @@ class Highest(Prior[Any]):
         """The element at `size() - 1`"""
         if not isinstance(domain, Enumerable):
             raise TypeError(f"a {type(domain).__name__} has no largest element, so none can be drawn from it")
-        return domain.from_index(jnp.asarray(domain.size() - 1))
+        return domain.from_index(jnp.asarray(domain.size() - 1, jnp.int32))
 
 
 class Zero(Prior[Float[Array, ""]]):
