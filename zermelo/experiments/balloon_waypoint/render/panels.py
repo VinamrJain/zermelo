@@ -366,8 +366,8 @@ def keys(style: Style, *, plan: bool) -> list[Line2D | Patch]:
     ]
     if plan:  # an arm running no rule has no opening, no waypoint and no route
         marks += [
-            Line2D([], [], color=style.imagined_colour, lw=2.6, ls="--", label="planned route to waypoint"),
-            Line2D([], [], color=style.waypoint_colour, marker="X", ls="", mec=style.trail_halo, mew=1.0, ms=13, label="waypoint"),
+            Line2D([], [], color=style.imagined_colour, lw=2.6, ls="--", label="planned route to target"),
+            Line2D([], [], color=style.waypoint_colour, marker="X", ls="", mec=style.trail_halo, mew=1.0, ms=13, label="target"),
             Line2D([], [], color=style.faint, lw=1.2, ls=":", label="end of the shared opening"),
         ]
     marks.append(Patch(facecolor=style.pad_wash, alpha=style.pad_alpha, edgecolor=style.faint, lw=0.8, label="margin, no candidate scored"))
@@ -541,8 +541,8 @@ def globe_keys(replay: Replay) -> list[Line2D | Patch]:
     ]
     if replay.plan is not None:
         held += [
-            Line2D([], [], color=ROUTE, lw=1.8, ls="--", label="planned route to waypoint"),
-            Line2D([], [], color=WAYPOINT, marker="X", ls="", mec="#12181f", mew=0.8, ms=12, label="waypoint"),
+            Line2D([], [], color=ROUTE, lw=1.8, ls="--", label="planned route to target"),
+            Line2D([], [], color=WAYPOINT, marker="X", ls="", mec="#12181f", mew=0.8, ms=12, label="target"),
         ]
     return held
 
