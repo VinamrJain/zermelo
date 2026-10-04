@@ -1,5 +1,6 @@
 """One launch written for the paper: `python -m zermelo.experiments.balloon_waypoint.metrics <sweep name or its directory> [--top N] [--without TOKEN ...]`"""
 
+import re
 import sys
 from pathlib import Path
 
@@ -35,6 +36,9 @@ if "--without" in sys.argv:  # arms whose name carries one of the tokens are lef
 curves, scalars = tables(runs)
 arms = sorted(curves["acquisition"].unique())
 labels = {arm: acquisition_label(arm) for arm in arms}
+budgets = {found.group() for label in labels.values() if (found := re.search(r"-L\d+", label))}
+if len(budgets) == 1:  # one planning budget across the launch is left out of every label
+    labels = {arm: label.replace(next(iter(budgets)), "") for arm, label in labels.items()}
 drawn = arms if DRAWN_ARMS is None else [arm for arm in DRAWN_ARMS if arm in arms]
 if "--top" in sys.argv:  # the N arms of lowest median cumulative regret, the table keeping every arm
     ranked = scalars.groupby("acquisition")["cumulative_regret"].median().sort_values()
