@@ -25,6 +25,9 @@ ATLANTIC_2017SEP = ProblemConfig(
 )
 """The whole globe in September 2017, scored over the Atlantic box two hurricanes cross"""
 
+IRMA_2017SEP06 = dataclasses.replace(ATLANTIC_2017SEP, time_varying=False, start_hour=132.0)
+"""The one frame at 2017-09-06 12Z, Irma inside the box, held still for the whole episode"""
+
 
 def _belief(forecast_as_prior_mean: bool, place_km: float, altitude_km: float, hours: float, amplitude: float) -> BeliefConfig:
     """A belief at the correlation lengths and spread of what it learns, no refitting"""
@@ -53,6 +56,11 @@ def error_belief() -> BeliefConfig:
 def wind_belief() -> BeliefConfig:
     """Learns W about zero: correlated over 560 km, 6.5 km of altitude and 27 hours, spread 8.75 m/s"""
     return _belief(False, place_km=560.0, altitude_km=6.5, hours=27.0, amplitude=8.75)
+
+
+def static_error_belief() -> BeliefConfig:
+    """The error belief over position and altitude alone, for a wind that does not move"""
+    return dataclasses.replace(error_belief(), kernel_factors=error_belief().kernel_factors[:1])
 
 
 def oracle_belief() -> BeliefConfig:
