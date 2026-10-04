@@ -1,4 +1,4 @@
-"""Our two rules at every planning budget and step rate, on held-out seeds: where the paper's settings are picked"""
+"""Our rules at every planning budget and step rate, on held-out seeds"""
 
 import dataclasses
 
@@ -15,18 +15,19 @@ from zermelo.experiments.ambient_waypoint.sweeps.paper.method import TUNING_SEED
 
 BELIEF = matched_belief(AMBIENT1_CONTROL1)
 
-sweep(
-    "paper_tuning",
-    problem=AMBIENT1_CONTROL1,
-    horizon=HORIZON_LENGTH,
-    claim_every=CLAIM_EVERY_STEPS,
-    recorded=RECORDED,
-    seeds=TUNING_SEEDS,
-    resources=dataclasses.replace(RESOURCES, mem_gb=16, timeout_min=240),
-    arms=[
-        arm(f"{name}_L{budget}_c{rate_name(rate)}", ours(name, step_rate=rate, replan_every=budget), BELIEF)
-        for name in ("emi", "evi")
-        for budget in (25, 50, 100)
-        for rate in (0.0, 0.5, 1.0, 2.0)
-    ],
-)
+for swept, names in (("paper_tuning", ("emi", "evi")), ("paper_tuning_esi", ("esi",))):
+    sweep(
+        swept,
+        problem=AMBIENT1_CONTROL1,
+        horizon=HORIZON_LENGTH,
+        claim_every=CLAIM_EVERY_STEPS,
+        recorded=RECORDED,
+        seeds=TUNING_SEEDS,
+        resources=dataclasses.replace(RESOURCES, mem_gb=16, timeout_min=240),
+        arms=[
+            arm(f"{name}_L{budget}_c{rate_name(rate)}", ours(name, step_rate=rate, replan_every=budget), BELIEF)
+            for name in names
+            for budget in (25, 50, 100)
+            for rate in (0.0, 0.5, 1.0, 2.0)
+        ],
+    )

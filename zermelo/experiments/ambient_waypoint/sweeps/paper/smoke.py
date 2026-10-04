@@ -29,7 +29,7 @@ sweep(
     seeds=[0],
     resources=Resources(cpus=1, mem_gb=4, timeout_min=10, gres=None, partition="dean", constraint="avx2", array_parallelism=10),
     arms=[
-        arm("mc_ei_charged", _small(mc_ei(0.5)), _belief(oracle=False)),
+        arm("mc_ei", _small(mc_ei()), _belief(oracle=False)),
         arm("esi", _small(ours("esi")), _belief(oracle=False)),
         arm("oracle_emi", _small(ours("emi")), _belief(oracle=True)),
     ],

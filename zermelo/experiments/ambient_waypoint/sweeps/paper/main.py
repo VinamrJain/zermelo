@@ -1,4 +1,4 @@
-"""Our rules against the baselines on the grid, the parts our rule is made of, and the same planner on the true field"""
+"""Our rules against the baselines on the 2D grid, and the same rules planning on the true field"""
 
 import dataclasses
 
@@ -11,15 +11,7 @@ from zermelo.experiments.ambient_waypoint.registry import (
     RESOURCES,
     matched_belief,
 )
-from zermelo.experiments.ambient_waypoint.setup import (
-    arm,
-    expected_improvement,
-    max_magnitude,
-    posterior_spread,
-    sweep,
-    uniform,
-    upper_confidence,
-)
+from zermelo.experiments.ambient_waypoint.setup import arm, max_magnitude, posterior_spread, sweep, uniform, upper_confidence
 from zermelo.experiments.ambient_waypoint.sweeps.paper.method import baseline, mc_ei, ours
 
 BELIEF = matched_belief(AMBIENT1_CONTROL1)
@@ -39,11 +31,8 @@ sweep(
         arm("rand_target", baseline(uniform(), 0), BELIEF),
         arm("max_var", baseline(posterior_spread(), 0), BELIEF),
         arm("ucb", baseline(upper_confidence(2.0), 0), BELIEF),
-        arm("ei", baseline(expected_improvement(), 0), BELIEF),
         arm("ts", baseline(max_magnitude(), 1), BELIEF),
-        arm("mc_ei", mc_ei(0.0), BELIEF),
-        arm("mc_ei_charged", mc_ei(0.5), BELIEF),
-        arm("emi_charged", ours("emi", step_rate=0.5), BELIEF),
+        arm("mc_ei", mc_ei(), BELIEF),
         arm("emi", ours("emi"), BELIEF),
         arm("evi", ours("evi"), BELIEF),
         arm("esi", ours("esi"), BELIEF),
@@ -58,5 +47,10 @@ sweep(
     recorded=RECORDED,
     seeds=range(N_SEEDS),
     resources=dataclasses.replace(RESOURCES, mem_gb=16, timeout_min=240),
-    arms=[arm("rand_target", baseline(uniform(), 0), ORACLE), arm("mc_ei", mc_ei(0.0), ORACLE), arm("oracle_emi", ours("emi"), ORACLE)],
+    arms=[
+        arm("rand_target", baseline(uniform(), 0), ORACLE),
+        arm("mc_ei", mc_ei(), ORACLE),
+        arm("emi", ours("emi"), ORACLE),
+        arm("esi", ours("esi"), ORACLE),
+    ],
 )

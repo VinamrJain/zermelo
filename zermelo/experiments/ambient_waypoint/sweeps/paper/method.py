@@ -1,17 +1,17 @@
-"""The rules the paper compares on the grid, and the settings our own run at"""
+"""The rules the paper compares on the 2D grid, and the settings they run at"""
 
-from zermelo.experiments.ambient_waypoint.registry import OPENING_STEPS, PLANNING_BUDGET
+from zermelo.experiments.ambient_waypoint.registry import OPENING_STEPS
 from zermelo.experiments.ambient_waypoint.schema import MethodConfig
 from zermelo.experiments.ambient_waypoint.setup import Implementation, max_magnitude, posterior_spread, sum_magnitude, value_iteration
 
 UTILITIES = {"emi": max_magnitude, "evi": posterior_spread, "esi": sum_magnitude}
 """What each of our rules takes the expected improvement of"""
 
-TUNED_PLANNING_BUDGET = {"emi": 100, "evi": 25, "esi": 100}
-"""`L` each of our rules replans at, picked on the `paper_tuning` sweep"""
+PLANNING_BUDGET = 25
+"""`L` every rule replans at"""
 
-TUNED_STEP_RATE = {"emi": 0.0, "evi": 0.5, "esi": 0.0}
-"""`c` each of our rules charges a full-budget trip, picked on the `paper_tuning` sweep"""
+STEP_RATE = 1.0
+"""`c` each of our rules charges a full-budget trip"""
 
 TUNING_SEEDS = range(100, 105)
 """Instances the settings above are picked on, disjoint from the ones reported"""
@@ -38,20 +38,20 @@ def baseline(utility: Implementation, n_fields: int) -> MethodConfig:
     return method(utility, improvement=False, n_fields=n_fields, n_walks=0, step_rate=0.0, replan_every=PLANNING_BUDGET)
 
 
-def mc_ei(step_rate: float) -> MethodConfig:
+def mc_ei() -> MethodConfig:
     """Expected improvement of the largest magnitude at the target alone, over 16 drawn fields and no walk"""
-    return method(max_magnitude(), improvement=True, n_fields=16, n_walks=0, step_rate=step_rate, replan_every=PLANNING_BUDGET)
+    return method(max_magnitude(), improvement=True, n_fields=16, n_walks=0, step_rate=0.0, replan_every=PLANNING_BUDGET)
 
 
 def ours(name: str, *, step_rate: float | None = None, replan_every: int | None = None) -> MethodConfig:
-    """Expected improvement of `name`'s utility over 16 imagined walks under 16 drawn fields, at its tuned settings unless given"""
+    """Expected improvement of `name`'s utility over 16 imagined walks under 16 drawn fields, at `STEP_RATE` and `PLANNING_BUDGET` unless given"""
     return method(
         UTILITIES[name](),
         improvement=True,
         n_fields=16,
         n_walks=16,
-        step_rate=TUNED_STEP_RATE[name] if step_rate is None else step_rate,
-        replan_every=TUNED_PLANNING_BUDGET[name] if replan_every is None else replan_every,
+        step_rate=STEP_RATE if step_rate is None else step_rate,
+        replan_every=PLANNING_BUDGET if replan_every is None else replan_every,
     )
 
 

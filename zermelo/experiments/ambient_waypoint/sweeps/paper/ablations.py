@@ -1,4 +1,4 @@
-"""Our two rules as the step rate moves and as the planning budget moves, the other held at its tuned value"""
+"""Two of our rules as the random time_steps an episode opens with move"""
 
 import dataclasses
 
@@ -12,31 +12,19 @@ from zermelo.experiments.ambient_waypoint.registry import (
     matched_belief,
 )
 from zermelo.experiments.ambient_waypoint.setup import arm, sweep
-from zermelo.experiments.ambient_waypoint.sweeps.paper.method import ours, rate_name
+from zermelo.experiments.ambient_waypoint.sweeps.paper.method import ours
 
-BELIEF = matched_belief(AMBIENT1_CONTROL1)
-
-for swept, arms in (
-    (
-        "paper_cost_rate",
-        [
-            arm(f"{name}_c{rate_name(rate)}", ours(name, step_rate=rate), BELIEF)
-            for name in ("emi", "evi")
-            for rate in (0.0, 0.25, 0.5, 1.0, 2.0)
-        ],
-    ),
-    (
-        "paper_planning_budget",
-        [arm(f"{name}_L{budget}", ours(name, replan_every=budget), BELIEF) for name in ("emi", "evi") for budget in (10, 25, 50, 100, 200)],
-    ),
-):
-    sweep(
-        swept,
-        problem=AMBIENT1_CONTROL1,
-        horizon=HORIZON_LENGTH,
-        claim_every=CLAIM_EVERY_STEPS,
-        recorded=RECORDED,
-        seeds=range(N_SEEDS),
-        resources=dataclasses.replace(RESOURCES, mem_gb=16, timeout_min=480),
-        arms=arms,
-    )
+sweep(
+    "paper_opening_steps",
+    problem=AMBIENT1_CONTROL1,
+    horizon=HORIZON_LENGTH,
+    claim_every=CLAIM_EVERY_STEPS,
+    recorded=RECORDED,
+    seeds=range(N_SEEDS),
+    resources=dataclasses.replace(RESOURCES, mem_gb=16, timeout_min=240),
+    arms=[
+        arm(f"{name}_o{steps}", dataclasses.replace(ours(name), opening_steps=steps), matched_belief(AMBIENT1_CONTROL1))
+        for name in ("emi", "evi")
+        for steps in (0, 25, 50, 100)
+    ],
+)
