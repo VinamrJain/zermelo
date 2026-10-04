@@ -20,7 +20,7 @@ from zermelo.experiments.ambient_waypoint.setup import (
     uniform,
     upper_confidence,
 )
-from zermelo.experiments.ambient_waypoint.sweeps.paper.method import TUNED_STEP_RATE, baseline, mc_ei, ours
+from zermelo.experiments.ambient_waypoint.sweeps.paper.method import baseline, mc_ei, ours
 
 BELIEF = matched_belief(AMBIENT1_CONTROL1)
 ORACLE = dataclasses.replace(BELIEF, oracle=True)
@@ -42,8 +42,8 @@ sweep(
         arm("ei", baseline(expected_improvement(), 0), BELIEF),
         arm("ts", baseline(max_magnitude(), 1), BELIEF),
         arm("mc_ei", mc_ei(0.0), BELIEF),
-        arm("mc_ei_charged", mc_ei(TUNED_STEP_RATE["emi"]), BELIEF),
-        arm("emi_c0", ours("emi", step_rate=0.0), BELIEF),
+        arm("mc_ei_charged", mc_ei(0.5), BELIEF),
+        arm("emi_charged", ours("emi", step_rate=0.5), BELIEF),
         arm("emi", ours("emi"), BELIEF),
         arm("evi", ours("evi"), BELIEF),
         arm("esi", ours("esi"), BELIEF),
