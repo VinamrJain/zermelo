@@ -1,4 +1,4 @@
-"""One launch written for the paper: `python -m zermelo.experiments.balloon_waypoint.metrics <sweep name or its directory> [--top N]`"""
+"""One launch written for the paper: `python -m zermelo.experiments.balloon_waypoint.metrics <sweep name or its directory> [--top N] [--without TOKEN ...]`"""
 
 import sys
 from pathlib import Path
@@ -29,6 +29,9 @@ if not where.is_dir():
 launch = latest_launch(where)
 sweep = launch.parent.name
 runs = finished_runs(launch)  # names and configurations only, the arrays read one run at a time
+if "--without" in sys.argv:  # arms whose name carries one of the tokens are left out of the figure and the table
+    dropped = set(sys.argv[sys.argv.index("--without") + 1 :])
+    runs = [run for run in runs if not dropped & set(run[0].split("_"))]
 curves, scalars = tables(runs)
 arms = sorted(curves["acquisition"].unique())
 labels = {arm: acquisition_label(arm) for arm in arms}
@@ -42,10 +45,14 @@ panels = [(name, words, scale) for name, (words, scale) in CURVES.items() if nam
 opening_steps = {int(config["method"]["opening_steps"]) for *_, config in runs if config.get("method") is not None}
 opening_x = float(np.sort(curves["x"].unique())[max(opening_steps) - 1]) if opening_steps and max(opening_steps) > 0 else None
 
+# an arm with no rule claims nothing it learned, so the panels read off a claim leave it out
+ruleless = {arm for arm, _, _, config in runs if config.get("method") is None}
+omitted = {(name, arm) for name, _, _ in panels if not name.endswith("regret") for arm in ruleless}
+
 paper = launch / "paper"
 stem = f"{SWEEPS.name}_{sweep}"
 csvs = report.write_curves(paper / "results" / stem, curves, [name for name, _, _ in panels], labels)
-report.write_figure(paper / f"fig_{stem}.tex", csvs, panels, drawn, labels, "hours elapsed", opening_x)
+report.write_figure(paper / f"fig_{stem}.tex", csvs, panels, drawn, labels, "hours elapsed", opening_x, omitted)
 table = report.write_table(paper / f"tab_{stem}.tex", scalars, TABLE_COLUMNS, labels)
 report.compile_document(paper / f"fig_{stem}.tex")
 report.compile_document(table)

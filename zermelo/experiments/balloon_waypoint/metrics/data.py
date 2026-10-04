@@ -34,22 +34,21 @@ DRAWN_ARMS: tuple[str, ...] | None = None
 """The arms the figure draws, in legend order; None draws every arm of the launch. Every arm appears in the table"""
 
 CURVES = {
-    "simple_regret": ("simple regret (m/s)", "linear"),
-    "cumulative_regret": ("cumulative regret (m/s)", "linear"),
-    "rmse": ("RMSE (m/s)", "linear"),
-    "posterior_spread": ("posterior spread (m/s)", "linear"),
+    "simple_regret": ("simple regret", "linear"),
+    "average_regret": ("average regret", "linear"),
+    "rmse": ("RMSE", "linear"),
+    "posterior_variance": ("posterior variance", "linear"),
 }
-"""What an arm achieved, a value per time_step, as the words naming it and the scale it is drawn on"""
+"""What an arm achieved, a value per time_step in m/s (the variance in m^2/s^2), as the words naming it and the scale it is drawn on"""
 
 TABLE_COLUMNS = (
-    ("simple_regret", "simple regret", 2, "min"),
+    ("simple_regret", "simple regret", 1, "min"),
     ("cumulative_regret", "cumulative regret", 0, "min"),
-    ("rmse", "RMSE", 3, "min"),
-    ("posterior_spread", "posterior spread", 3, "min"),
-    ("arrival_share", r"arrival \%", 1, "max"),
-    ("in_box_share", r"in-box \%", 1, "max"),
-    ("altitude_changes", "altitude changes", 0, "none"),
-    ("seconds", "seconds per episode", 0, "min"),
+    ("rmse", "RMSE", 2, "min"),
+    ("posterior_variance", "posterior variance", 2, "min"),
+    ("arrival_share", r"arrival \%", 0, "max"),
+    ("in_box_share", r"in box \%", 0, "max"),
+    ("seconds", "time (s)", 0, "none"),
 )
 """The table's columns: the scalar, its heading, its digits, and which end is better"""
 
@@ -113,10 +112,11 @@ def at_each_snapshot(claim: Any, snapshots: int, claim_every: int) -> Any:
 def episode_curves(held: dict[str, Any], claim_every: int) -> dict[str, Any]:
     """What one episode achieved, a value per time_step
 
-    simple_regret     g_t - b_t
+    simple_regret     min over u <= t of (g_u - b_u)
     cumulative_regret sum over u <= t of (g_u - b_u)
+    average_regret    cumulative_regret / t
     rmse              sqrt(mean over candidates of (||W|| - ||mu_t||)^2)
-    posterior_spread  mean over candidates of (exp(v_t,u) + exp(v_t,v))^(1/2)
+    posterior_variance  mean over candidates of exp(v_t,u) + exp(v_t,v)
     """
     best_possible_speed = held["objective_state/best_possible_speed"][1:]  # (time_steps,) g_t
     flown = held["objective_state/speed"][1:]  # (time_steps,) b_t
@@ -125,10 +125,11 @@ def episode_curves(held: dict[str, Any], claim_every: int) -> dict[str, Any]:
     speed, spread = claimed_speed(claim)  # (time_steps, candidates) each
     regret = best_possible_speed - flown
     return {
-        "simple_regret": regret,
+        "simple_regret": np.minimum.accumulate(regret),
         "cumulative_regret": np.cumsum(regret),
+        "average_regret": np.cumsum(regret) / np.arange(1, regret.size + 1),
         "rmse": np.sqrt(np.mean((speed - truth) ** 2, axis=-1)),
-        "posterior_spread": np.mean(spread, axis=-1),
+        "posterior_variance": np.mean(spread**2, axis=-1),
     }
 
 
@@ -171,7 +172,11 @@ def finished_runs(launch: Path) -> list[tuple[str, int, Path, dict[str, Any]]]:
 
 
 def tables(runs: list[tuple[str, int, Path, dict[str, Any]]]) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Two tables over one launch: the curves of every episode at every hour `x`, and one row of scalars per episode"""
+    """Two tables over one launch: the curves of every episode at every hour `x`, and one row of scalars per episode
+
+    A scalar is its curve's last value; rmse and posterior_variance are their mean over the episode where the wind moves,
+    and nan for an arm with no rule.
+    """
     curves: list[pd.DataFrame] = []
     scalars: list[dict[str, Any]] = []
     for arm, seed, run, config in runs:
@@ -184,6 +189,12 @@ def tables(runs: list[tuple[str, int, Path, dict[str, Any]]]) -> tuple[pd.DataFr
                 "acquisition": arm,
                 "seed": seed,
                 **{name: float(values[-1]) for name, values in achieved.items()},
+                **{
+                    name: float("nan")
+                    if config.get("method") is None
+                    else float(np.mean(achieved[name]) if config["problem"]["time_varying"] else achieved[name][-1])
+                    for name in ("rmse", "posterior_variance")
+                },
                 "arrival_share": 100.0 * float(np.mean(legs["arrived"])) if legs["arrived"].size else float("nan"),
                 "in_box_share": 100.0 * float(np.mean(held["objective_state/speed"][1:] > 0)),
                 "altitude_changes": float(np.sum(np.abs(np.diff(held["state/altitude"])))),

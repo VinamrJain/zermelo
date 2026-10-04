@@ -42,7 +42,7 @@ opening_x = float(np.sort(curves["x"].unique())[max(opening_steps) - 1]) if open
 paper = launch / "paper"
 stem = f"{SWEEPS.name}_{sweep}"
 csvs = report.write_curves(paper / "results" / stem, curves, [name for name, _, _ in panels], labels)
-report.write_figure(paper / f"fig_{stem}.tex", csvs, panels, drawn, labels, "time step", opening_x)
+report.write_figure(paper / f"fig_{stem}.tex", csvs, panels, drawn, labels, "time step", opening_x, set())
 table = report.write_table(paper / f"tab_{stem}.tex", scalars, TABLE_COLUMNS, labels)
 report.compile_document(paper / f"fig_{stem}.tex")
 report.compile_document(table)

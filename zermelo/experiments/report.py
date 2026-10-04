@@ -1,12 +1,12 @@
 """One launch written for the paper: a CSV per curve per acquisition, a pgfplots figure reading them, and a booktabs table
 
-Every curve is a median over seeds inside its interquartile band, at every x; every table cell is median [q25, q75] at the last x.
+Every curve is a median over seeds inside its interquartile band, at every x; every table cell is mean +- standard error over seeds.
 """
 
 import shutil
 import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from pathlib import Path
 
 import numpy as np
@@ -15,8 +15,22 @@ import pandas as pd
 STYLE = Path("../paper/manuscript/figures/configs/style.tex")
 """The paper's shared pgfplots style, copied beside the figure so it compiles where it is written"""
 
-COLOURED = ("RandAct", "RandWP", "MaxVar", "UCB", "EI", "TS", "Forecast", "EMI", "EVI", "ESI")
-"""Acquisition families the paper's style defines a colour for, under the family's own name"""
+FAMILY_COLOURS = {
+    "EMI": "0173B2",
+    "ESI": "D55E00",
+    "EVI": "029E73",
+    "EI": "DE8F05",
+    "UCB": "7F3C8D",
+    "TS": "CC78BC",
+    "MaxVar": "CA9161",
+    "RandWP": "555555",
+    "RandAct": "A0A0A0",
+    "Forecast": "000000",
+}
+"""A hex colour per acquisition family, defined in every figure under the family's own name; a table lists the families in this order"""
+
+OURS = ("EMI", "ESI", "EVI")
+"""The families a table rules off above the rest"""
 
 FALLBACK_COLOURS = (
     "0173B2",
@@ -41,13 +55,16 @@ FALLBACK_COLOURS = (
 """Hex colours given one per acquisition where an acquisition's family has no colour of its own"""
 
 VARIANT_STYLES = (
-    "mark=o, mark size=1.4pt, mark repeat=12, mark phase=7",
-    "mark=*, mark size=1.4pt, mark repeat=12, mark phase=1",
-    "dashed, mark=square*, mark size=1.4pt, mark repeat=12, mark phase=5",
-    "densely dotted, mark=triangle*, mark size=1.7pt, mark repeat=12, mark phase=9",
-    "dash dot, mark=diamond*, mark size=1.7pt, mark repeat=12, mark phase=3",
+    "mark=*, mark size=1.8pt, mark repeat=12, mark phase=1",
+    "mark=square*, mark size=1.8pt, mark repeat=12, mark phase=4",
+    "mark=triangle*, mark size=2.2pt, mark repeat=12, mark phase=7",
+    "mark=diamond*, mark size=2.2pt, mark repeat=12, mark phase=10",
+    "dashed, mark=o, mark size=1.8pt, mark repeat=12, mark phase=2, mark options={solid}",
+    "dashed, mark=square, mark size=1.8pt, mark repeat=12, mark phase=5, mark options={solid}",
+    "dashed, mark=triangle, mark size=2.2pt, mark repeat=12, mark phase=8, mark options={solid}",
+    "dashed, mark=x, mark size=2.4pt, mark repeat=12, mark phase=11, mark options={solid}",
 )
-"""Line styles telling apart the acquisitions of one family, in the order they are drawn; a family with more members than styles is coloured one by one instead"""
+"""Line styles given one per acquisition in the order drawn; a family with more members than styles is coloured one by one instead"""
 
 ROWS_PER_CURVE = 100
 """Most x values one CSV holds; a longer curve is thinned to every k-th x with its last x kept"""
@@ -92,21 +109,20 @@ def write_figure(
     labels: dict[str, str],
     x_label: str,
     opening_x: float | None,
+    omitted: Collection[tuple[str, str]],
 ) -> None:
     """A standalone pgfplots group over `panels` as (column, y label, `linear` or `log`), one band per acquisition, legend below
 
-    Acquisitions of one family share its colour and differ by line style; a dotted rule at `opening_x` marks the shared opening.
+    Acquisitions of one family share its colour, every acquisition has its own line style, and a pair (column, acquisition) in `omitted` is not drawn.
+    A dotted rule at `opening_x` marks the shared opening.
     """
     families = [family(labels[a]) for a in acquisitions]
-    coloured = all(f in COLOURED for f in families) and max(families.count(f) for f in families) <= len(VARIANT_STYLES)
+    coloured = all(f in FAMILY_COLOURS for f in families) and max(families.count(f) for f in families) <= len(VARIANT_STYLES)
     colour = {a: families[i] if coloured else f"acq{chr(65 + i)}" for i, a in enumerate(acquisitions)}
-    # one colour per family and a style per member; past the styles, a colour per acquisition and a style per round of colours
-    style = {
-        a: VARIANT_STYLES[(families[:i].count(families[i]) if coloured else i // len(FALLBACK_COLOURS)) % len(VARIANT_STYLES)]
-        for i, a in enumerate(acquisitions)
-    }
+    # one colour per family and a style per acquisition; past the styles, a colour per acquisition and a style per round of colours
+    style = {a: VARIANT_STYLES[(i if coloured else i // len(FALLBACK_COLOURS)) % len(VARIANT_STYLES)] for i, a in enumerate(acquisitions)}
     defined = (
-        []
+        [rf"\definecolor{{{f}}}{{HTML}}{{{FAMILY_COLOURS[f]}}}" for f in dict.fromkeys(families)]
         if coloured
         else [rf"\definecolor{{{colour[a]}}}{{HTML}}{{{FALLBACK_COLOURS[i % len(FALLBACK_COLOURS)]}}}" for i, a in enumerate(acquisitions)]
     )
@@ -120,7 +136,7 @@ def write_figure(
         r"\begin{document}",
         r"\begin{tikzpicture}",
         r"\begin{groupplot}[",
-        rf"    group style={{group size={columns} by {rows}, horizontal sep=42pt, vertical sep=36pt}},",
+        rf"    group style={{group size={columns} by {rows}, horizontal sep=54pt, vertical sep=36pt}},",
         r"    panel,",
         r"  ]",
     ]
@@ -132,11 +148,15 @@ def write_figure(
             options.append(f"legend to name=legend:{path.stem}, legend columns={int(np.ceil(len(acquisitions) / legend_rows))}")
         lines.append(rf"  \nextgroupplot[{', '.join(options)}]")
         for a in acquisitions:
-            lines.append(rf"    \band[{style[a]}]{{{colour[a]}}}{{{csvs[(column, a)].relative_to(path.parent).as_posix()}}}")
+            if (column, a) in omitted:
+                continue
+            lines.append(
+                rf"    \band[every axis plot post/.style={{}}, {style[a]}]{{{colour[a]}}}{{{csvs[(column, a)].relative_to(path.parent).as_posix()}}}"
+            )
         if opening_x is not None:
             lines.append(rf"    \opening{{{opening_x:g}}}")
         if i == 0:
-            lines.append(r"    \legend{" + ", ".join(labels[a] for a in acquisitions) + "}")
+            lines.append(r"    \legend{" + ", ".join(f"{{{labels[a]}}}" for a in acquisitions) + "}")
     lines += [
         r"\end{groupplot}",
         rf"\node[anchor=north, yshift=-28pt] at ($(group c1r{rows}.south)!0.5!(group c{columns}r{rows}.south)$) {{\pgfplotslegendfromname{{legend:{path.stem}}}}};",
@@ -148,34 +168,42 @@ def write_figure(
 
 
 def _cell(values: pd.Series, digits: int, best: bool) -> str:
-    """`med [q25, q75]` over seeds, the median bold where `best`, `--` where nothing is finite"""
+    """`mean +- standard error` over seeds, the mean bold where `best`, `--` where nothing is finite"""
     finite = values[np.isfinite(values)]
     if finite.empty:
         return "--"
-    med, q25, q75 = (f"{q:.{digits}f}" for q in finite.quantile([0.5, 0.25, 0.75]))
-    return (rf"\textbf{{{med}}}" if best else med) + rf" {{\scriptsize [{q25}, {q75}]}}"
+    mean, error = f"{finite.mean():.{digits}f}", f"{finite.std(ddof=1) / np.sqrt(finite.size) if finite.size > 1 else 0.0:.{digits}f}"
+    return (rf"\textbf{{{mean}}}" if best else mean) + rf" {{\scriptsize $\pm$ {error}}}"
 
 
 def write_table(path: Path, scalars: pd.DataFrame, columns: Sequence[tuple[str, str, int, str]], labels: dict[str, str]) -> Path:
     """A booktabs tabular at `path`, a row per acquisition of `scalars` (`acquisition, seed`, and the columns), as (column, heading, digits, `min` | `max` | `none`)
 
+    Rows follow the order of `FAMILY_COLOURS` with a rule under the last of `OURS`; a heading carries an arrow toward its better end.
     Gives back the standalone document beside it that inputs the tabular.
     """
     grouped = scalars.groupby("acquisition")
-    medians = grouped[[c for c, *_ in columns]].median()
+    means = grouped[[c for c, *_ in columns]].mean()
     best = {
-        c: ("" if better == "none" or medians[c].dropna().empty else (medians[c].idxmin() if better == "min" else medians[c].idxmax()))
+        c: ("" if better == "none" or means[c].dropna().empty else (means[c].idxmin() if better == "min" else means[c].idxmax()))
         for c, _, _, better in columns
     }
-    rows = [
-        " & ".join([labels[str(a)], *(_cell(held[c], digits, a == best[c]) for c, _, digits, _ in columns)]) + r" \\" for a, held in grouped
-    ]
+    order = list(FAMILY_COLOURS)
+    ranked = sorted(
+        grouped, key=lambda pair: (order.index(f) if (f := family(labels[str(pair[0])])) in order else len(order), labels[str(pair[0])])
+    )
+    rows: list[str] = []
+    for i, (a, held) in enumerate(ranked):
+        if i > 0 and family(labels[str(ranked[i - 1][0])]) in OURS and family(labels[str(a)]) not in OURS:
+            rows.append(r"\midrule")
+        rows.append(" & ".join([labels[str(a)], *(_cell(held[c], digits, a == best[c]) for c, _, digits, _ in columns)]) + r" \\")
+    arrow = {"min": r" $\downarrow$", "max": r" $\uparrow$", "none": ""}
     path.write_text(
         "\n".join(
             [
                 r"\begin{tabular}{l" + "c" * len(columns) + "}",
                 r"\toprule",
-                " & ".join(["acquisition", *(heading for _, heading, _, _ in columns)]) + r" \\",
+                " & ".join(["method", *(heading + arrow[better] for _, heading, _, better in columns)]) + r" \\",
                 r"\midrule",
                 *rows,
                 r"\bottomrule",

@@ -34,7 +34,7 @@ from zermelo.experiments.balloon_waypoint.render.style import Style, plain_numbe
 RASTER_NAMES = ("truth", "belief", "uncertainty", "error", "acquisition")
 """What the map may be shaded by, and what the panels beside it are chosen from"""
 
-LIVE = ("simple_regret", "cumulative_regret", "rmse", "posterior_spread")
+LIVE = ("simple_regret", "average_regret", "rmse", "posterior_variance")
 """What the strip under a single episode advances through, one panel each"""
 
 TITLES = {
