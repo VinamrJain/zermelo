@@ -1,4 +1,4 @@
-"""Our two rules on the held-out frame: every planning budget and step rate, then every price of an altitude change under a budget"""
+"""Our rules on the held-out frame: every planning budget and step rate, then every price of an altitude change under each budget"""
 
 import dataclasses
 
@@ -16,26 +16,26 @@ from zermelo.experiments.balloon_waypoint.sweeps.paper.method import N_SEEDS, ou
 
 BELIEF = static_error_belief()
 
+RATE_ARMS = {
+    swept: [
+        arm(f"{name}_L{budget}_c{rate_name(rate)}", ours(name, step_rate=rate, replan_every=budget), BELIEF)
+        for name in names
+        for budget in (25, 50, 100)
+        for rate in (0.0, 0.5, 1.0, 2.0)
+    ]
+    for swept, names in (("paper_tuning", ("emi", "evi")), ("paper_tuning_esi", ("esi",)))
+}
+"""Every planning budget and step rate, the altitude budget never binding"""
+
+WEIGHT_ARMS = [
+    arm(f"{name}_w{rate_name(weight)}", ours(name, cost_weight=weight), BELIEF)
+    for name in ("emi", "evi", "esi")
+    for weight in (0.0, 0.5, 1.0, 2.0, 4.0)
+]
+
 for swept, resource_units, arms in (
-    (
-        "paper_tuning",
-        STILL_HORIZON,  # a change every time_step: the budget never binds
-        [
-            arm(f"{name}_L{budget}_c{rate_name(rate)}", ours(name, step_rate=rate, replan_every=budget), BELIEF)
-            for name in ("emi", "evi")
-            for budget in (25, 50, 100)
-            for rate in (0.0, 0.5, 1.0, 2.0)
-        ],
-    ),
-    (
-        "paper_tuning_cost_weight",
-        100,
-        [
-            arm(f"{name}_w{rate_name(weight)}", ours(name, cost_weight=weight), BELIEF)
-            for name in ("emi", "evi")
-            for weight in (0.0, 0.5, 1.0, 2.0, 4.0)
-        ],
-    ),
+    *((swept, STILL_HORIZON, arms) for swept, arms in RATE_ARMS.items()),
+    *((f"paper_tuning_cost_weight_b{budget:03d}", budget, WEIGHT_ARMS) for budget in (20, 40, 80)),
 ):
     sweep(
         swept,

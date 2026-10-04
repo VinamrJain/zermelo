@@ -1,17 +1,17 @@
-"""The rules the paper compares on still wind, and the settings our own run at"""
+"""The rules the paper compares on still wind, and the settings they run at"""
 
-from zermelo.experiments.balloon_waypoint.registry import ARRIVAL_RADIUS_KM, N_CANDIDATES, OPENING_STEPS, PLANNING_BUDGET, TARGET_CHUNK
+from zermelo.experiments.balloon_waypoint.registry import ARRIVAL_RADIUS_KM, N_CANDIDATES, OPENING_STEPS, TARGET_CHUNK
 from zermelo.experiments.balloon_waypoint.schema import MethodConfig
 from zermelo.experiments.balloon_waypoint.setup import Implementation, max_magnitude, posterior_spread, sum_magnitude, value_iteration
 
 UTILITIES = {"emi": max_magnitude, "evi": posterior_spread, "esi": sum_magnitude}
 """What each of our rules takes the expected improvement of"""
 
-TUNED_PLANNING_BUDGET = {"emi": 100, "evi": 100, "esi": 100}
-"""`L` each of our rules replans at, picked on the `paper_tuning` sweep"""
+PLANNING_BUDGET = 100
+"""`L` every rule replans at"""
 
-TUNED_STEP_RATE = {"emi": 0.0, "evi": 0.0, "esi": 0.0}
-"""`c` each of our rules charges a full-budget trip, picked on the `paper_tuning` sweep"""
+STEP_RATE = 0.0
+"""`c` each of our rules charges a full-budget trip"""
 
 TUNED_COST_WEIGHT = {"emi": 0.5, "evi": 0.0, "esi": 0.5}
 """`w`, the time_steps the planner prices one altitude change at under a budget, picked on the `paper_tuning_cost_weight` sweep"""
@@ -49,14 +49,14 @@ def mc_ei() -> MethodConfig:
 
 
 def ours(name: str, *, step_rate: float | None = None, replan_every: int | None = None, cost_weight: float = 0.0) -> MethodConfig:
-    """Expected improvement of `name`'s utility over 16 imagined walks under 16 drawn winds, at its tuned `L` and `c` unless given"""
+    """Expected improvement of `name`'s utility over 16 imagined walks under 16 drawn winds, at `PLANNING_BUDGET` and `STEP_RATE` unless given"""
     return method(
         UTILITIES[name](),
         improvement=True,
         n_fields=16,
         n_walks=16,
-        step_rate=TUNED_STEP_RATE[name] if step_rate is None else step_rate,
-        replan_every=TUNED_PLANNING_BUDGET[name] if replan_every is None else replan_every,
+        step_rate=STEP_RATE if step_rate is None else step_rate,
+        replan_every=PLANNING_BUDGET if replan_every is None else replan_every,
         cost_weight=cost_weight,
     )
 

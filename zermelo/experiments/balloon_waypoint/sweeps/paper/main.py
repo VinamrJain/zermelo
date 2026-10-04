@@ -1,4 +1,4 @@
-"""Our rules against the baselines on each still frame, with the altitude budget never binding"""
+"""Our rules against the baselines on each still frame, and the same rules planning on the true wind, the altitude budget never binding"""
 
 import dataclasses
 
@@ -37,6 +37,20 @@ for date, start_hour in STILL_FRAMES.items():
             arm("emi", ours("emi"), BELIEF),
             arm("evi", ours("evi"), BELIEF),
             arm("esi", ours("esi"), BELIEF),
-            arm("oracle_emi", ours("emi"), ORACLE),
+        ],
+    )
+    sweep(
+        f"paper_oracle_{date}",
+        problem=still(start_hour, STILL_HORIZON),
+        horizon=STILL_HORIZON,
+        claim_every=CLAIM_EVERY_STEPS,
+        recorded=RECORDED,
+        seeds=range(N_SEEDS),
+        resources=dataclasses.replace(RESOURCES, constraint="avx2&gpu-high"),
+        arms=[
+            arm("rand_target", baseline(uniform(), 0), ORACLE),
+            arm("mc_ei", mc_ei(), ORACLE),
+            arm("emi", ours("emi"), ORACLE),
+            arm("esi", ours("esi"), ORACLE),
         ],
     )

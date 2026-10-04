@@ -16,7 +16,7 @@ from zermelo.experiments.balloon_waypoint.sweeps.paper.method import N_SEEDS, TU
 
 BELIEF = static_error_belief()
 
-BUDGETS = (50, 75, 100, 125, 150, 200)
+BUDGETS = (20, 40, 60, 80, 100)
 """Altitude changes an episode of 240 time_steps may spend"""
 
 for budget in BUDGETS:
@@ -38,5 +38,7 @@ for budget in BUDGETS:
                 arm("emi", ours("emi", cost_weight=TUNED_COST_WEIGHT["emi"]), BELIEF),
                 arm("evi_w0", ours("evi"), BELIEF),
                 arm("evi", ours("evi", cost_weight=TUNED_COST_WEIGHT["evi"]), BELIEF),
+                arm("esi_w0", ours("esi"), BELIEF),
+                arm("esi", ours("esi", cost_weight=TUNED_COST_WEIGHT["esi"]), BELIEF),
             ],
         )
