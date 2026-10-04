@@ -18,12 +18,15 @@ LOG_VARIANCE_FLOOR = -12.0
 
 ACQUISITION_FAMILIES = {
     "rand_act": "RandAct",
-    "rand_wp": "RandWP",
+    "rand_wp": "RandTarget",
+    "rand_target": "RandTarget",
     "max_var": "MaxVar",
     "ucb": "UCB",
     "ei": "EI",
+    "mc_ei": "MC-EI",
     "ts": "TS",
     "forecast": "Forecast",
+    "oracle_emi": "Oracle-EMI",
     "emi": "EMI",
     "evi": "EVI",
     "esi": "ESI",

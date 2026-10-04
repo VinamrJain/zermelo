@@ -20,11 +20,13 @@ FAMILY_COLOURS = {
     "ESI": "D55E00",
     "EVI": "029E73",
     "EI": "DE8F05",
+    "MC-EI": "56B4E9",
     "UCB": "7F3C8D",
     "TS": "CC78BC",
     "MaxVar": "CA9161",
-    "RandWP": "555555",
+    "RandTarget": "555555",
     "RandAct": "A0A0A0",
+    "Oracle-EMI": "000000",
     "Forecast": "000000",
 }
 """A hex colour per acquisition family, defined in every figure under the family's own name; a table lists the families in this order"""
@@ -71,8 +73,9 @@ ROWS_PER_CURVE = 100
 
 
 def family(label: str) -> str:
-    """The acquisition family of a paper label: `EMI-L25` -> `EMI`, `ESI-L8 (wind)` -> `ESI`"""
-    return label.split("-")[0].split(" ")[0]
+    """The acquisition family of a paper label: `EMI-L25` -> `EMI`, `ESI-L8 (wind)` -> `ESI`, `MC-EI charged` -> `MC-EI`"""
+    known = [f for f in FAMILY_COLOURS if label == f or label.startswith((f + "-", f + " "))]
+    return max(known, key=len) if known else label.split("-")[0].split(" ")[0]
 
 
 def _slug(label: str) -> str:
@@ -118,11 +121,11 @@ def write_figure(
     """
     families = [family(labels[a]) for a in acquisitions]
     coloured = all(f in FAMILY_COLOURS for f in families) and max(families.count(f) for f in families) <= len(VARIANT_STYLES)
-    colour = {a: families[i] if coloured else f"acq{chr(65 + i)}" for i, a in enumerate(acquisitions)}
+    colour = {a: families[i].replace("-", "") if coloured else f"acq{chr(65 + i)}" for i, a in enumerate(acquisitions)}
     # one colour per family and a style per acquisition; past the styles, a colour per acquisition and a style per round of colours
     style = {a: VARIANT_STYLES[(i if coloured else i // len(FALLBACK_COLOURS)) % len(VARIANT_STYLES)] for i, a in enumerate(acquisitions)}
     defined = (
-        [rf"\definecolor{{{f}}}{{HTML}}{{{FAMILY_COLOURS[f]}}}" for f in dict.fromkeys(families)]
+        [rf"\definecolor{{{f.replace('-', '')}}}{{HTML}}{{{FAMILY_COLOURS[f]}}}" for f in dict.fromkeys(families)]
         if coloured
         else [rf"\definecolor{{{colour[a]}}}{{HTML}}{{{FALLBACK_COLOURS[i % len(FALLBACK_COLOURS)]}}}" for i, a in enumerate(acquisitions)]
     )
