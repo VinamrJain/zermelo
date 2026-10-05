@@ -22,6 +22,9 @@ from zermelo.interface import Domain, Embeddable, Enumerable, Function, ProductD
 # float32 is the problem side's choice, not this file's; gpjax warns per dataset
 warnings.filterwarnings("ignore", message=".*not of type float64.*", category=UserWarning)
 
+REFIT_FLOOR = 1e-3
+"""Smallest lengthscale, amplitude and noise a refit may return"""
+
 
 @functools.lru_cache(maxsize=8)
 def coordinates(positions: Domain) -> Float[Array, "n_states k"]:
@@ -453,11 +456,13 @@ class GPBelief(Belief):
         return dataclasses.replace(
             conditioned,
             kernel_factors=tuple(
-                dataclasses.replace(factor, lengthscale=tuple(jnp.asarray(k.lengthscale.value).reshape(-1).tolist()))
+                dataclasses.replace(
+                    factor, lengthscale=tuple(max(v, REFIT_FLOOR) for v in jnp.asarray(k.lengthscale.value).reshape(-1).tolist())
+                )
                 for factor, k in zip(self.kernel_factors, fitted, strict=True)
             ),
-            amplitude=jnp.sqrt(jnp.asarray(fitted[0].variance.value).reshape(())),
-            noise=jnp.asarray(tuned.likelihood.obs_stddev.value).reshape(()),
+            amplitude=jnp.maximum(jnp.sqrt(jnp.asarray(fitted[0].variance.value).reshape(())), REFIT_FLOOR),
+            noise=jnp.maximum(jnp.asarray(tuned.likelihood.obs_stddev.value).reshape(()), REFIT_FLOOR),
         )
 
     def condition(self, data: Dataset) -> "GPBelief":
