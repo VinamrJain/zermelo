@@ -11,7 +11,7 @@ from zermelo.experiments.balloon_waypoint.registry import (
     static_error_belief,
     still,
 )
-from zermelo.experiments.balloon_waypoint.setup import arm, sweep, uniform, upper_confidence
+from zermelo.experiments.balloon_waypoint.setup import arm, max_magnitude, posterior_spread, sweep, uniform, upper_confidence
 from zermelo.experiments.balloon_waypoint.sweeps.paper.method import BUDGETED_STEP_RATE, COST_WEIGHT, N_SEEDS, baseline, mc_ei, ours
 
 BELIEF = static_error_belief()
@@ -39,4 +39,14 @@ for budget in BUDGETS:
                 arm("evi_w0", ours("evi"), BELIEF),
                 arm("evi", ours("evi", step_rate=BUDGETED_STEP_RATE, cost_weight=COST_WEIGHT), BELIEF),
             ],
+        )
+        sweep(
+            f"paper_resource_extra_b{budget:03d}_{date}",
+            problem=still(start_hour, budget),
+            horizon=STILL_HORIZON,
+            claim_every=CLAIM_EVERY_STEPS,
+            recorded=RECORDED,
+            seeds=range(N_SEEDS),
+            resources=dataclasses.replace(RESOURCES, constraint="avx2&gpu-high"),
+            arms=[arm("max_var", baseline(posterior_spread(), 0), BELIEF), arm("ts", baseline(max_magnitude(), 1), BELIEF)],
         )
