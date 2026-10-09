@@ -28,6 +28,10 @@ FAMILY_COLOURS = {
     "RandAct": "A0A0A0",
     "Oracle-EMI": "000000",
     "Forecast": "000000",
+    "CE": "0173B2",
+    "Draws": "D55E00",
+    "Learned": "029E73",
+    "Oracle": "000000",
 }
 """A hex colour per acquisition family, defined in every figure under the family's own name; a table lists the families in this order"""
 
