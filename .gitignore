@@ -16,3 +16,4 @@ outputs/
 
 # the wind record: ERA5 truth and GEFS forecast, fetched rather than tracked
 zermelo/problems/balloon/data/*.npz
+zermelo/problems/ocean/data/*.npz
