@@ -5,6 +5,7 @@ from zermelo.experiments.ocean_waypoint.registry import (
     CLAIM_EVERY_STEPS,
     GULF_STREAM_2019JUN,
     HORIZON_LENGTH,
+    N_SEEDS,
     PLANNING_BUDGET,
     RECORDED,
     RESOURCES,
@@ -76,7 +77,7 @@ sweep(
     horizon=HORIZON_LENGTH,
     claim_every=CLAIM_EVERY_STEPS,
     recorded=RECORDED,
-    seeds=[0],  # one instance while the pipeline is proved; range(N_SEEDS) for the study
+    seeds=list(range(N_SEEDS)),
     resources=dataclasses.replace(RESOURCES, constraint="avx2&gpu-high"),  # 48 GB cards and up
     arms=[
         arm("direct", _direct(), ocean_current_belief()),
