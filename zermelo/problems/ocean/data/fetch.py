@@ -1,10 +1,10 @@
 """Fetch one month of the Gulf Stream box into `gulf_stream_<yyyy><mon>.npz`: `python -m zermelo.problems.ocean.data.fetch 2019 06`
 
-HYCOM GOFS 3.1 surface current (1/12 degree, 3-hourly) through its NetCDF subset service, and ERA5 10 m wind (1/4 degree)
+HYCOM GOFS 3.1 surface ocean current (1/12 degree, 3-hourly) through its NetCDF subset service, and ERA5 10 m wind (1/4 degree)
 through the Copernicus climate data store, interpolated onto the HYCOM grid points and frames.
 
 keys: latitude (n_lat), longitude (n_lon), hours (frames, since the month's first 00Z),
-      u, v, wind_u, wind_v (frames, n_lat, n_lon) in m/s, land (n_lat, n_lon); land carries zero current and zero wind
+      u, v, wind_u, wind_v (frames, n_lat, n_lon) in m/s, land (n_lat, n_lon); land carries zero ocean current and zero wind
 """
 
 import calendar
@@ -24,7 +24,7 @@ HYCOM = "https://ncss.hycom.org/thredds/ncss/GLBy0.08/expt_93.0/uv3z?var=water_u
 
 
 def hycom_day(day: str, into: Path) -> Path:
-    """One day of surface current, 3-hourly, fetched until the file opens"""
+    """One day of surface ocean current, 3-hourly, fetched until the file opens"""
     out = into / f"hycom_{day}.nc"
     box = "&".join(f"{side}={degrees}" for side, degrees in BOX.items())
     for _ in range(4):
@@ -61,22 +61,22 @@ def era5_month(year: int, month: int, into: Path) -> Path:
 
 
 def assemble(days: list[Path], era5: Path, start: np.datetime64, out: Path) -> None:
-    """The daily current files and the wind file into one npz at `out`"""
-    current = xr.concat([xr.open_dataset(day) for day in days], dim="time").isel(depth=0).load()
-    current = current.assign_coords(lon=((current.lon + 180) % 360) - 180)
+    """The daily ocean current files and the wind file into one npz at `out`"""
+    ocean_current = xr.concat([xr.open_dataset(day) for day in days], dim="time").isel(depth=0).load()
+    ocean_current = ocean_current.assign_coords(lon=((ocean_current.lon + 180) % 360) - 180)
     wind = xr.open_dataset(era5)
     wind = wind.rename({"valid_time": "time"} if "valid_time" in wind.dims else {}).sortby("latitude")
-    wind = wind.interp(latitude=current.lat, longitude=current.lon, time=current.time)
-    u, v = current.water_u.values.astype(np.float32), current.water_v.values.astype(np.float32)
+    wind = wind.interp(latitude=ocean_current.lat, longitude=ocean_current.lon, time=ocean_current.time)
+    u, v = ocean_current.water_u.values.astype(np.float32), ocean_current.water_v.values.astype(np.float32)
     wind_u, wind_v = wind.u10.values.astype(np.float32), wind.v10.values.astype(np.float32)
     land = np.isnan(u).all(axis=0)
     for field in (u, v, wind_u, wind_v):
         field[np.isnan(field)] = 0.0
     np.savez(
         out,
-        latitude=current.lat.values.astype(np.float32),
-        longitude=current.lon.values.astype(np.float32),
-        hours=((current.time.values - start) / np.timedelta64(1, "h")).astype(np.float32),
+        latitude=ocean_current.lat.values.astype(np.float32),
+        longitude=ocean_current.lon.values.astype(np.float32),
+        hours=((ocean_current.time.values - start) / np.timedelta64(1, "h")).astype(np.float32),
         u=u,
         v=v,
         wind_u=wind_u,

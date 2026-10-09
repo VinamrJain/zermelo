@@ -1,4 +1,4 @@
-"""The current a boat is carried by: how it is read, and the law an episode's own is drawn by
+"""The ocean current a boat is carried by: how it is read, and the law an episode's own is drawn by
 
 W(position) = (u, v)      u eastward, v northward, both m/s, at the grid point `position` names
 W = F + forecast_error     F the forecast the boat is given
@@ -20,21 +20,21 @@ from zermelo.problems.ocean.grid import PlaneGrid
 
 @register_dataclass
 @dataclass(frozen=True)
-class CurrentField:
+class OceanCurrent:
     """W over the whole grid, read at the grid point nearest a state's position"""
 
-    current_on_grid: Float[Array, "pos uv"]
+    ocean_current_on_grid: Float[Array, "pos uv"]
     """(u, v) at every grid point"""
 
     grid: PlaneGrid = dataclasses.field(metadata=dict(static=True))
     """What `pos` is indexed by"""
 
     def __call__(self, state: dict[str, Any]) -> Float[Array, "*batch uv"]:
-        """current_on_grid[flat index of position]"""
-        return self.current_on_grid[self.grid.flat_index(state["position"])]
+        """ocean_current_on_grid[flat index of position]"""
+        return self.ocean_current_on_grid[self.grid.flat_index(state["position"])]
 
 
-class CurrentError(ABC):
+class OceanCurrentError(ABC):
     """Where forecast_error comes from, for a truth W = F + forecast_error"""
 
     @abstractmethod
@@ -43,7 +43,7 @@ class CurrentError(ABC):
 
 
 @dataclass(frozen=True)
-class GaussianError(CurrentError):
+class GaussianError(OceanCurrentError):
     """forecast_error ~ N(0, K) over grid points, independently per component of (u, v), with
 
     K(a, b) = amplitude_ms^2 * exp(-||embed(a) - embed(b)||^2 / (2 * length_scale_km^2))
@@ -68,7 +68,7 @@ class GaussianError(CurrentError):
 
 @register_dataclass
 @dataclass(frozen=True)
-class FixedError(CurrentError):
+class FixedError(OceanCurrentError):
     """forecast_error = W - F as the data holds it, the same at every draw"""
 
     error: Float[Array, "pos uv"]
@@ -80,20 +80,20 @@ class FixedError(CurrentError):
 
 
 @dataclass(frozen=True)
-class ForecastPrior(Prior[CurrentField]):
+class ForecastPrior(Prior[OceanCurrent]):
     """W = F + forecast_error, F fixed and forecast_error taken once per episode"""
 
     forecast: Float[Array, "pos uv"]
     """F at every grid point"""
 
-    error: CurrentError
+    error: OceanCurrentError
     """Where forecast_error comes from"""
 
     grid: PlaneGrid
     """What `pos` is indexed by"""
 
-    def sample(self, domain: Domain[CurrentField], key: PRNGKeyArray) -> CurrentField:
+    def sample(self, domain: Domain[OceanCurrent], key: PRNGKeyArray) -> OceanCurrent:
         """One episode's W"""
         if not isinstance(domain, FunctionDomain):
             raise TypeError(f"a {type(domain).__name__} holds no fields, so none can be drawn from it")
-        return CurrentField(self.forecast + self.error.sample(key, self.grid), self.grid)
+        return OceanCurrent(self.forecast + self.error.sample(key, self.grid), self.grid)
