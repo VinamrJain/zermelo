@@ -92,7 +92,7 @@ def ocean_world(
         ),
         prior=ProductPrior({"position": Uniform(), "target": Uniform(), "field": ForecastPrior(forecast, error, grid)}),
         transition=transition,
-        readout=PointOceanCurrent(OceanCurrent(forecast, grid), states, grid, noise_ms),
+        readout=PointOceanCurrent(OceanCurrent(forecast, grid), states, noise_ms),
     )
 
 

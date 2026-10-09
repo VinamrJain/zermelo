@@ -1,5 +1,6 @@
 """`U(D_n)`: what a set of readings is worth"""
 
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
@@ -10,8 +11,9 @@ from jax.scipy.linalg import solve_triangular
 from jax.scipy.stats import norm
 from jaxtyping import Array, Bool, Float, Int, PRNGKeyArray
 
-from zermelo.interface import Subset
-from zermelo.methods.waypoint_bo.belief import Belief, Dataset
+from zermelo.interface import Analytic, Subset
+from zermelo.methods.waypoint_bo.belief import Belief, BeliefField, Dataset
+from zermelo.methods.waypoint_bo.planner import Planner
 
 
 class Utility(ABC):
@@ -152,3 +154,86 @@ class Uniform(Utility):
 
     def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
         return jax.random.uniform(key, data.state_index.shape[:-1])
+
+
+class TripUtility(Utility):
+    """Scores a dataset by the trip left from the state its last written row was read at to a target"""
+
+    planner: Planner
+    """What solves the trip and prices it"""
+
+    def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
+        raise TypeError(f"a {type(self).__name__} scores a trip to a target, which this call names none of")
+
+    @abstractmethod
+    def remaining(
+        self,
+        key: PRNGKeyArray,
+        belief: Belief,
+        data: Dataset,
+        transition: Analytic[Int[Array, ""], Any],
+        field: BeliefField,
+        target: Int[Array, ""],
+        actions: Int[Array, " n_actions"],
+    ) -> Float[Array, " *batch"]:
+        """Minus what the trip from each dataset's end to `target` costs, one score per leading batch axis of `data`"""
+
+
+def last_written_state(data: Dataset) -> Int[Array, " *batch"]:
+    """The state of the last written row of each dataset, or of its first row where none is written"""
+    rows = jnp.arange(data.state_index.shape[-1])
+    last = jnp.max(jnp.where(data.row_is_written, rows, -1), axis=-1)
+    return jnp.take_along_axis(data.state_index, jnp.maximum(last, 0)[..., None], axis=-1)[..., 0]
+
+
+@dataclass(frozen=True)
+class RemainingTrip(TripUtility):
+    """U(D) = -H_f(end of D, target), the hitting cost solved once under the field `f` the dataset was imagined under"""
+
+    planner: Planner
+
+    def remaining(
+        self,
+        key: PRNGKeyArray,
+        belief: Belief,
+        data: Dataset,
+        transition: Analytic[Int[Array, ""], Any],
+        field: BeliefField,
+        target: Int[Array, ""],
+        actions: Int[Array, " n_actions"],
+    ) -> Float[Array, " *batch"]:
+        policy = self.planner.plan(key, transition.kernel(field), target[None], actions)
+        return -policy.hitting_cost[last_written_state(data), 0]
+
+
+@dataclass(frozen=True)
+class LearnedTrip(TripUtility):
+    """U(D) = -H_{mu(D)}(end of D, target), the hitting cost solved under the posterior mean once `D` is folded into the belief
+
+    One belief conditioning, one kernel and one plan per dataset of the batch.
+    """
+
+    planner: Planner
+
+    def remaining(
+        self,
+        key: PRNGKeyArray,
+        belief: Belief,
+        data: Dataset,
+        transition: Analytic[Int[Array, ""], Any],
+        field: BeliefField,
+        target: Int[Array, ""],
+        actions: Int[Array, " n_actions"],
+    ) -> Float[Array, " *batch"]:
+        context = query_context(data)
+        batch = data.state_index.shape[:-1]
+        flat = jax.tree.map(
+            lambda a: a.reshape((math.prod(batch), *a.shape[len(batch) :])), data
+        )  # (prod batch, n, ...): one dataset per row
+        ends = last_written_state(flat)  # (prod batch,)
+        costs = []
+        for i in range(ends.shape[0]):
+            one = jax.tree.map(lambda a, i=i: a[i], flat)
+            kernel = transition.kernel(belief.condition(one).mean(context))
+            costs.append(self.planner.plan(key, kernel, target[None], actions).hitting_cost[ends[i], 0])
+        return -jnp.stack(costs).reshape(batch)

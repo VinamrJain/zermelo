@@ -131,8 +131,8 @@ class MethodConfig:
     steps_from: Literal["predicted", "rolled"] = MISSING
     """Whether travel is priced from the planner's table or from the walks that were rolled"""
 
-    combination: Literal["linear", "fraction"] = MISSING
-    """Whether travel subtracts from value or divides it"""
+    combination: Literal["linear", "fraction", "steps"] = MISSING
+    """Whether travel subtracts from value at `step_rate`, divides it, or subtracts as it is, the value being in steps"""
 
     n_candidates: int | None = MISSING
     """Cap on candidates scored per move (None scores every one)"""

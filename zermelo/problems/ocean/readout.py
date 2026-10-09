@@ -3,7 +3,7 @@
 reading = {position, ocean_current, target, forecast}
     position       (position,): the state the ocean current was measured at
     ocean_current  W there plus N(0, noise_ms^2 I), (u, v) in m/s
-    target         the grid point to reach
+    target         (position,): the grid point to reach, in the form `position` takes
     forecast       F, callable at any position
 """
 
@@ -15,7 +15,6 @@ from jaxtyping import PRNGKeyArray
 
 from zermelo.interface import BoxDomain, Domain, FunctionDomain, ProductDomain, Readout
 from zermelo.problems.ocean.field import OceanCurrent
-from zermelo.problems.ocean.grid import PlaneGrid
 
 
 @dataclass(frozen=True)
@@ -27,9 +26,6 @@ class PointOceanCurrent(Readout):
 
     states: ProductDomain
     """(position,): the domain a belief over the ocean current is written on"""
-
-    grid: PlaneGrid
-    """What a target is a point of"""
 
     noise_ms: float
     """Standard deviation of the reading's error per component"""
@@ -46,7 +42,7 @@ class PointOceanCurrent(Readout):
             {
                 "position": self.states,
                 "ocean_current": BoxDomain((2,)),
-                "target": self.grid,
+                "target": self.states,
                 "forecast": FunctionDomain(self.states, BoxDomain((2,))),
             }
         )
@@ -56,7 +52,7 @@ class PointOceanCurrent(Readout):
         return {
             "position": {part: state[part] for part in self.states.parts},
             "ocean_current": state["field"]({"position": state["position"]}) + self.noise_ms * jax.random.normal(key, (2,)),
-            "target": state["target"],
+            "target": {"position": state["target"]},
             "forecast": self.forecast,
         }
 

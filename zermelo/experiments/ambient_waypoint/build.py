@@ -106,6 +106,7 @@ def assemble(cfg: RunConfig) -> Episode:
             reading_key="reading",
             context_key="context",
             prior_mean_key="forecast",  # absent from this problem's reading: a zero prior mean
+            target_key=None,
             horizon=cfg.horizon,
             opening_steps=cfg.method.opening_steps,
             claim_every=cfg.claim_every,

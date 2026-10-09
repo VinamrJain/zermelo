@@ -72,6 +72,9 @@ class WaypointAgent(Agent[WaypointAgentState]):
     prior_mean_key: str | None
     """Which part of the reading carries the field's prior mean as a function (None learns about zero)"""
 
+    target_key: str | None
+    """Which part of the reading carries the state a trip utility steers to, in the form the position part takes (None steers nowhere)"""
+
     horizon: int
     """`T`: the episode's time_steps, one reading per time_step filling one buffer row"""
 
@@ -170,7 +173,8 @@ class WaypointAgent(Agent[WaypointAgentState]):
         budget_spent = agent_state.time_steps_since_waypoint >= planner.replan_every
         if bool(budget_spent | planner.arrived(self.positions, agent_state.scores.waypoint[None])[z, 0]):
             actions = self._legal_actions(obs)
-            scores = self.acquisition.choose(k_score, belief, self.transition, z, actions, self.candidates, context)
+            target = None if self.target_key is None else self.candidates.index_of(obs.reading[self.target_key])
+            scores = self.acquisition.choose(k_score, belief, self.transition, z, actions, self.candidates, context, target)
             # the walk actually taken is planned under the posterior mean, whatever field the winner was scored under
             policy = planner.plan(k_plan, self._checked_kernel(belief.mean(context)), scores.waypoint[None], actions)
             since = jnp.zeros((), jnp.int32)

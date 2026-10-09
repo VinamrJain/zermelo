@@ -1,4 +1,4 @@
-"""alpha(x) = w(x) - c cost(tau) or w(x) / cost(tau), where w(x) = E over fields and walks of [ U(D + obs(tau)) - U(D) ]"""
+"""alpha(x) = w(x) - c cost(tau), w(x) / cost(tau) or w(x) - cost(tau), where w(x) = E over fields and walks of [ U(D + obs(tau)) - U(D) ]"""
 
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -11,7 +11,7 @@ from jaxtyping import Array, Bool, Float, Int, PRNGKeyArray
 from zermelo.interface import Analytic, Subset, TransitionKernel
 from zermelo.methods.waypoint_bo.belief import Belief, Dataset
 from zermelo.methods.waypoint_bo.planner import Planner, Policy, position_of
-from zermelo.methods.waypoint_bo.utility import Utility
+from zermelo.methods.waypoint_bo.utility import TripUtility, Utility
 
 
 @register_dataclass
@@ -75,14 +75,14 @@ class Acquisition:
     steps_from: Literal["predicted", "rolled"]
     """Whether travel is counted off the hitting-time table or off the rolled walks"""
 
-    combination: Literal["linear", "fraction"]
-    """Whether travel is subtracted from the worth or divides it"""
+    combination: Literal["linear", "fraction", "steps"]
+    """Whether travel is subtracted from the worth at `step_rate`, divides it, or is subtracted as it is, the worth being in steps"""
 
     def __post_init__(self) -> None:
         if self.n_walks == 0 and self.steps_from == "rolled":
             raise ValueError("steps_from='rolled' needs walks to average; set n_walks above zero or price off the planner")
-        if (self.step_rate is None) != (self.combination == "fraction"):
-            raise ValueError("a linear combination is priced by step_rate and a fraction takes none; state exactly one of the two")
+        if (self.step_rate is None) != (self.combination != "linear"):
+            raise ValueError("a linear combination is priced by step_rate and the others take none; state exactly one of the two")
 
     def walk_cost(
         self,
@@ -114,8 +114,11 @@ class Acquisition:
         actions: Int[Array, " n_actions"],
         candidates: Subset[Any],
         context: Float[Array, " n_context"],
+        target: Int[Array, ""] | None,
     ) -> Scores:
-        """Every candidate scored under every field and walk, and the argmax over them"""
+        """Every candidate scored under every field and walk, and the argmax over them; `target` is where a trip utility steers"""
+        if isinstance(self.utility, TripUtility) and target is None:
+            raise ValueError("a trip utility scores the trip to a target, and this decision names none")
         k_indices, k_field, k_plan, k_walk, k_utility = jax.random.split(key, 5)
         candidate_indices = jnp.flatnonzero(candidates.live)
         if self.n_candidates is not None:
@@ -141,7 +144,14 @@ class Acquisition:
                 collected_readings.row_is_written,
                 collected_readings.context_value,
             )
-            base_utility = self.utility(k_score, belief, collected_under_field, candidates) if self.improvement else jnp.zeros(())  # U(D_n)
+
+            def worth_of(data: Dataset) -> Float[Array, " *batch"]:
+                """U(data), the trip to `target` where the utility scores one"""
+                if isinstance(self.utility, TripUtility):
+                    return self.utility.remaining(k_score, belief, data, transition, field, jnp.asarray(target), actions)
+                return self.utility(k_score, belief, data, candidates)
+
+            base_utility = worth_of(collected_under_field) if self.improvement else jnp.zeros(())  # U(D_n)
 
             if self.n_walks == 0:  # (1, n_candidates, 1): tau = (x), the destination and no route
                 walk, moved = candidate_indices[None, :, None], jnp.ones((1, n_scored, 1), bool)
@@ -154,7 +164,7 @@ class Acquisition:
             # obs(tau) = {(z_i, f-hat(z_i, context), context)}: the walk's states read off f-hat, every row at the decision's own context
             imagined = Dataset(walk, values[walk], moved, jnp.broadcast_to(context, (*walk.shape, context.shape[-1])))
             scored = collected_under_field.broadcast(walk.shape[:-1]).concat(imagined) if self.improvement else imagined  # D_n + obs(tau)
-            utility_term = self.utility(k_score, belief, scored, candidates) - base_utility  # (n_walks, n_candidates)
+            utility_term = worth_of(scored) - base_utility  # (n_walks, n_candidates)
             rolled = self.walk_cost(kernel, walk, moved, mean_policy, position, actions).astype(utility_term.dtype)  # cost(tau)
             utility_samples.append(utility_term)
             rolled_samples.append(rolled)
@@ -168,7 +178,12 @@ class Acquisition:
         # nothing, and the argmax then takes the lowest index.
         rate = 0.0 if self.step_rate is None else self.step_rate
         charge = jnp.zeros(()) if rate == 0.0 else rate * (jnp.max(worth) - jnp.min(worth)) / self.planner.cost_budget
-        sampled = utility - charge * spend if self.combination == "linear" else utility / jnp.maximum(spend, 1.0)
+        if self.combination == "linear":
+            sampled = utility - charge * spend
+        elif self.combination == "fraction":
+            sampled = utility / jnp.maximum(spend, 1.0)
+        else:
+            sampled = utility - spend
         value = jnp.mean(sampled, axis=(0, 1))  # alpha(x)
         expected_spend = jnp.mean(predicted, axis=(0, 1))  # H(z, x), averaged over the draws that solved it
         # a candidate already within the planner's radius spends nothing and has no route to it, so it

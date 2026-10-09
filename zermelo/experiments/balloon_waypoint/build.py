@@ -105,6 +105,7 @@ def assemble(cfg: RunConfig) -> Episode:
             reading_key="wind",
             context_key="context",
             prior_mean_key="forecast" if cfg.belief.forecast_as_prior_mean else None,
+            target_key=None,
             horizon=cfg.horizon,
             opening_steps=cfg.method.opening_steps,
             claim_every=cfg.claim_every,
