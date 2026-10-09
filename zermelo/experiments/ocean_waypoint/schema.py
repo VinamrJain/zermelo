@@ -56,7 +56,13 @@ class ProblemConfig:
     lat_max: float = MISSING
     lon_min: float = MISSING
     lon_max: float = MISSING
-    """The box of grid points, in degrees, a target is drawn from and a waypoint may be aimed at"""
+    """The box of grid points, in degrees, a waypoint may be aimed at"""
+
+    target_lat_min: float = MISSING
+    target_lat_max: float = MISSING
+    target_lon_min: float = MISSING
+    target_lon_max: float = MISSING
+    """The box of grid points, in degrees, a target is drawn from"""
 
     arrival_km: float = MISSING
     """How near the target counts as arrived"""
