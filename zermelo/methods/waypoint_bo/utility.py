@@ -207,13 +207,17 @@ class RemainingTrip(TripUtility):
 
 
 @dataclass(frozen=True)
-class LearnedTrip(TripUtility):
-    """U(D) = -H_{mu(D)}(end of D, target), the hitting cost solved under the posterior mean once `D` is folded into the belief
+class ReplannedTrip(TripUtility):
+    """U(D) = -H^{pi(D)}_f(end of D, target): the trip the plan made from `D` takes under the field `f` the dataset was imagined under
 
-    One belief conditioning, one kernel and one plan per dataset of the batch.
+    pi(D) = the plan under the posterior mean once `D` is folded into the belief. One conditioning, one plan and one
+    evaluation per dataset, `chunk` datasets at a time.
     """
 
     planner: Planner
+
+    chunk: int
+    """Datasets solved in one batch"""
 
     def remaining(
         self,
@@ -230,10 +234,54 @@ class LearnedTrip(TripUtility):
         flat = jax.tree.map(
             lambda a: a.reshape((math.prod(batch), *a.shape[len(batch) :])), data
         )  # (prod batch, n, ...): one dataset per row
-        ends = last_written_state(flat)  # (prod batch,)
-        costs = []
-        for i in range(ends.shape[0]):
-            one = jax.tree.map(lambda a, i=i: a[i], flat)
-            kernel = transition.kernel(belief.condition(one).mean(context))
-            costs.append(self.planner.plan(key, kernel, target[None], actions).hitting_cost[ends[i], 0])
-        return -jnp.stack(costs).reshape(batch)
+        true_kernel = transition.kernel(field)
+
+        def one(one_data: Dataset) -> Float[Array, ""]:
+            """H^{pi(D)}_f(end of D, target) for one dataset"""
+            act = self.planner.plan(key, transition.kernel(belief.condition(one_data).mean(context)), target[None], actions).act
+            return self.planner.evaluate(true_kernel, act, target[None], actions)[last_written_state(one_data), 0]
+
+        n = flat.state_index.shape[0]
+        costs = [jax.vmap(one)(jax.tree.map(lambda a, at=at: a[at : at + self.chunk], flat)) for at in range(0, n, self.chunk)]
+        return -jnp.concatenate(costs).reshape(batch)
+
+
+@dataclass(frozen=True)
+class InformationGain(Utility):
+    """U(D) = (m / 2) log det( I + K_n(w, w) / noise^2 ), the information the imagined rows carry about the field's m components
+
+    w = the rows of D past the belief's own buffer, a dead row made an identity row that carries nothing
+    """
+
+    reading_noise: float
+    """Standard deviation of a reading's error per component"""
+
+    def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
+        context = query_context(data)
+        n_conditioned = belief.data.state_index.shape[0]
+        imagined_states, imagined_is_live = data.state_index[..., n_conditioned:], data.row_is_written[..., n_conditioned:]
+        if imagined_states.shape[-1] == 0:
+            return jnp.zeros(imagined_states.shape[:-1])
+        m = data.state_value.shape[-1]
+        if imagined_states.ndim == 1:
+            return m * self._half_log_det(belief, imagined_states, imagined_is_live, context)
+        # one leading batch element at a time: the covariance block is (n_candidates, n_imagined, n_imagined) per walk
+        return m * jnp.stack(
+            [
+                self._half_log_det(belief, states, is_live, context)
+                for states, is_live in zip(imagined_states, imagined_is_live, strict=True)
+            ]
+        )
+
+    def _half_log_det(
+        self,
+        belief: Belief,
+        imagined_states: Int[Array, "*batch n_imagined"],
+        imagined_is_live: Bool[Array, "*batch n_imagined"],
+        context: Float[Array, " n_context"],
+    ) -> Float[Array, " *batch"]:
+        """(1/2) log det( I + K_n(w, w) / noise^2 ) over the live rows"""
+        both_live = imagined_is_live[..., :, None] & imagined_is_live[..., None, :]
+        scaled = jnp.where(both_live, belief.posterior_covariance(imagined_states, imagined_states, context) / self.reading_noise**2, 0.0)
+        chol = jnp.linalg.cholesky(scaled + jnp.eye(imagined_states.shape[-1]))
+        return jnp.sum(jnp.log(jnp.diagonal(chol, axis1=-2, axis2=-1)), axis=-1)

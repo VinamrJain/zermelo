@@ -1,4 +1,7 @@
-"""alpha(x) = w(x) - c cost(tau), w(x) / cost(tau) or w(x) - cost(tau), where w(x) = E over fields and walks of [ U(D + obs(tau)) - U(D) ]"""
+"""alpha(x) = w(x) - c cost(tau), w(x) / cost(tau) or w(x) - cost(tau), where w(x) = E over fields and walks of [ U(D + obs(tau)) - U(D) ]
+
+plus, where an information utility I is given, lambda * (max alpha - min alpha) / (max I - min I) * I(x), the ranges over the candidates
+"""
 
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -44,7 +47,7 @@ class Scores:
     """Share of the candidates scored that are worth exactly zero before travel is charged"""
 
     step_charge: Float[Array, ""]
-    """What one unit of imagined spend was charged on this pass"""
+    """What one unit of imagined spend was charged on this pass, or one unit of information was paid where that is added"""
 
     frac_reachable_candidates: Float[Array, ""]
     """Share of the candidates scored whose expected spend fell under the planner's cost budget"""
@@ -64,7 +67,13 @@ class Acquisition:
     """`M`: walks imagined per field, or the destination alone at zero"""
 
     n_candidates: int | None
-    """How many candidates to score: `None` every live one, an integer that many drawn uniformly each decision"""
+    """How many candidates to score: `None` every live one, an integer that many drawn uniformly each decision, 0 the target alone"""
+
+    information: Utility | None
+    """`I`: what the readings along a walk tell, added to the worth at `information_rate` once put in the worth's units"""
+
+    information_rate: float | None
+    """`lambda`: the most informative candidate's information is worth this share of the spread of the candidate values"""
 
     improvement: bool
     """Whether to score the collected readings and the imagined ones together, less the collected ones alone"""
@@ -83,6 +92,8 @@ class Acquisition:
             raise ValueError("steps_from='rolled' needs walks to average; set n_walks above zero or price off the planner")
         if (self.step_rate is None) != (self.combination != "linear"):
             raise ValueError("a linear combination is priced by step_rate and the others take none; state exactly one of the two")
+        if (self.information is None) != (self.information_rate is None):
+            raise ValueError("an information utility is added at information_rate; state both or neither")
 
     def walk_cost(
         self,
@@ -117,11 +128,13 @@ class Acquisition:
         target: Int[Array, ""] | None,
     ) -> Scores:
         """Every candidate scored under every field and walk, and the argmax over them; `target` is where a trip utility steers"""
-        if isinstance(self.utility, TripUtility) and target is None:
+        if (isinstance(self.utility, TripUtility) or self.n_candidates == 0) and target is None:
             raise ValueError("a trip utility scores the trip to a target, and this decision names none")
         k_indices, k_field, k_plan, k_walk, k_utility = jax.random.split(key, 5)
         candidate_indices = jnp.flatnonzero(candidates.live)
-        if self.n_candidates is not None:
+        if self.n_candidates == 0:
+            candidate_indices = jnp.asarray(target)[None]
+        elif self.n_candidates is not None:
             # a prefix of one permutation, so a shorter shortlist is a subset of every longer one
             candidate_indices = jax.random.permutation(k_indices, candidate_indices)[: self.n_candidates]
         # keyed by index, so the draws of a smaller n_walks are a subset of a larger one
@@ -129,7 +142,7 @@ class Acquisition:
         collected_readings, n_scored = belief.data, candidate_indices.shape[0]
         # pi[mu_n], solved once and reused
         mean_policy = self.planner.plan(k_plan, transition.kernel(belief.mean(context)), candidate_indices, actions)
-        utility_samples, predicted_samples, rolled_samples, first_draw_walks = [], [], [], None
+        utility_samples, predicted_samples, rolled_samples, information_samples, first_draw_walks = [], [], [], [], None
 
         # f-hat^(1..S)
         fields = [belief.mean(context)] if self.n_fields == 0 else belief.draw(k_field, self.n_fields, context)
@@ -167,6 +180,10 @@ class Acquisition:
             utility_term = worth_of(scored) - base_utility  # (n_walks, n_candidates)
             rolled = self.walk_cost(kernel, walk, moved, mean_policy, position, actions).astype(utility_term.dtype)  # cost(tau)
             utility_samples.append(utility_term)
+            if self.information is not None:
+                information_samples.append(
+                    self.information(k_score, belief, scored, candidates)
+                )  # I(D_n + obs(tau)), (n_walks, n_candidates)
             rolled_samples.append(rolled)
             predicted_samples.append(jnp.broadcast_to(mean_policy.hitting_cost[position], rolled.shape))  # H(z, x)
 
@@ -185,6 +202,12 @@ class Acquisition:
         else:
             sampled = utility - spend
         value = jnp.mean(sampled, axis=(0, 1))  # alpha(x)
+        if self.information is not None and self.information_rate is not None:
+            information = jnp.mean(jnp.stack(information_samples), axis=(0, 1))  # I(x)
+            # lambda * (max alpha - min alpha) / (max I - min I): information in the worth's units, none where I is flat
+            spread = jnp.max(information) - jnp.min(information)
+            charge = jnp.where(spread > 0.0, self.information_rate * (jnp.max(value) - jnp.min(value)) / jnp.maximum(spread, 1e-12), 0.0)
+            value = value + charge * information
         expected_spend = jnp.mean(predicted, axis=(0, 1))  # H(z, x), averaged over the draws that solved it
         # a candidate already within the planner's radius spends nothing and has no route to it, so it
         # would win every tie the cost term decides -- scored like the rest, but never chosen

@@ -117,22 +117,32 @@ class Planner(ABC):
         targets: Int[Array, " n_targets"],
         actions: Int[Array, " n_actions"],
     ) -> Policy:
-        """An act table for every target, and `K` rounds of
+        """An act table for every target, and what following it costs"""
+        act = self.act_table(key, kernel, targets, actions)
+        return Policy(act.astype(jnp.int8), self.evaluate(kernel, act, targets, actions))  # an act value fits a byte
+
+    @partial(jax.jit, static_argnums=0)
+    def evaluate(
+        self,
+        kernel: TransitionKernel[Int[Array, ""]],
+        act: Int[Array, "n_states n_targets"],
+        targets: Int[Array, " n_targets"],
+        actions: Int[Array, " n_actions"],
+    ) -> Float[Array, "n_states n_targets"]:
+        """`H^act(s, x)`: what following `act` under `kernel` costs from every state to every target, `K` rounds of
 
         h_0(s)     = 0
         h_{k+1}(s) = 0                                                     on arrival
                    = c(s, act(s)) + sum over s' of P(s' | s, act(s)) h_k(s')
         """
         stop = self.arrived(kernel.domain, targets)
-        act = self.act_table(key, kernel, targets, actions)
         rows, columns = jnp.arange(stop.shape[0])[:, None], jnp.arange(stop.shape[1])[None, :]
-        hitting = lax.fori_loop(
+        return lax.fori_loop(
             0,
             self.backups,
             lambda _, h: jnp.where(stop, 0.0, self._backup(kernel, h, actions)[position_of(actions, act), rows, columns]),
             jnp.zeros(stop.shape),
         )
-        return Policy(act.astype(jnp.int8), hitting)  # an act value fits a byte
 
     @partial(jax.jit, static_argnums=0)
     def roll(

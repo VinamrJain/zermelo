@@ -101,6 +101,8 @@ def assemble(cfg: RunConfig) -> Episode:
                 step_rate=cfg.method.step_rate,
                 steps_from=cfg.method.steps_from,
                 combination=cfg.method.combination,
+                information=None,
+                information_rate=None,
             ),
             position_key="position",
             reading_key="reading",

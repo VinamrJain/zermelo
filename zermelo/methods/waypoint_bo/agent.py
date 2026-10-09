@@ -126,7 +126,7 @@ class WaypointAgent(Agent[WaypointAgentState]):
             raise ValueError("the random walk opening is longer than the episode horizon")
         n_states = coordinates(self.positions).shape[0]
         width = self.belief.data.state_value.shape[-1]
-        n_scored = len(self._live_candidates()) if self.acquisition.n_candidates is None else self.acquisition.n_candidates
+        n_scored = len(self._live_candidates()) if self.acquisition.n_candidates is None else max(self.acquisition.n_candidates, 1)
         time_steps = 1 if self.acquisition.n_walks == 0 else self.acquisition.planner.replan_every
         blank = Scores(
             candidate_indices=jnp.zeros(n_scored, jnp.int32),
