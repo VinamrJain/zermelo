@@ -2,8 +2,8 @@
 
 Top: ||W|| shaded with its streamlines, the wind as a quiver, land masked, the track fading behind the boat, the boat as a
 triangle pointing along its heading, at the boat the wind, the ocean current, the heading through the water and the net motion as
-arrows, the target with its arrival ring, the waypoint aimed at; beside it the numbers of the move. Bottom: the forecast's error
-||F - W|| over the box, the belief's error ||mu_t - W|| as it learns, and the polar, boat speed against heading for the wind at
+arrows, the target with its arrival ring, the waypoint aimed at; beside it the numbers of the move. Bottom: the belief's error
+||mu_t - W|| and its spread (var_u + var_v)^(1/2) over the box as it learns, and the polar, boat speed against heading for the wind at
 the boat with the heading marked. Moves are interpolated over `SUBFRAMES` frames; the film ends a few moves after arrival.
 
 The heading is not recorded: it is read back as the net motion of the move less the ocean current at the point it left.
@@ -117,8 +117,6 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     stride = int(problem["grid_stride"])
     lat, lon, land = raw["latitude"][::stride].astype(float), raw["longitude"][::stride].astype(float), raw["land"][::stride, ::stride]
     frame = int(np.argmin(np.abs(raw["hours"] - problem["frame_hour"])))
-    lagged = int(np.argmin(np.abs(raw["hours"] - (problem["frame_hour"] - problem["forecast_lag_hours"]))))
-    forecast_u, forecast_v = raw["u"][lagged][::stride, ::stride].astype(float), raw["v"][lagged][::stride, ::stride].astype(float)  # F
     wind_u, wind_v = raw["wind_u"][frame][::stride, ::stride].astype(float), raw["wind_v"][frame][::stride, ::stride].astype(float)
     n_lat, n_lon = len(lat), len(lon)
     live = (
@@ -151,7 +149,6 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     truth = held["objective_state/truth"][0]  # (n_candidates, 2) as (u, v), still over the episode
     true_u, true_v = on_grid(truth[:, 0]), on_grid(truth[:, 1])
     true_speed = np.hypot(true_u, true_v)
-    forecast_error = np.where(live, np.hypot(true_u - forecast_u, true_v - forecast_v), np.nan)  # ||W - F|| over the candidates
     track, target = held["state/position"].astype(float), held["state/target"][0].astype(float)  # (T + 1, 2) and (2,) as (lat, lon)
     arrived = held["objective_state/arrived"]
     step_hours = float(problem["step_hours"])
@@ -295,13 +292,13 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     (rose_heading,) = rose.plot([], [], marker="o", ms=9, color=NET, mec="white", ls="none", zorder=5)
     (rose_wind,) = rose.plot([], [], color=WIND, lw=3)
 
-    # bottom: the forecast's error, and the belief's correction of the forecast so far
-    error_top = float(np.nanmax(forecast_error))
-    error_ax.pcolormesh(lon, lat, forecast_error, shading="nearest", cmap="magma", vmin=0, vmax=error_top)
+    # bottom: the belief's error and spread so far
+    error_top = float(np.nanmax(true_speed))
+    error_mesh = error_ax.pcolormesh(lon, lat, on_grid(np.zeros(candidates.size)), shading="nearest", cmap="magma", vmin=0, vmax=error_top)
     learned_mesh = learned_ax.pcolormesh(
         lon, lat, on_grid(np.zeros(candidates.size)), shading="nearest", cmap="magma", vmin=0, vmax=error_top
     )
-    for ax, words in ((error_ax, "forecast error  ||F - W||  (m/s)"), (learned_ax, "belief's error  ||mu - W||  (m/s)")):
+    for ax, words in ((error_ax, "belief's error  ||mu - W||  (m/s)"), (learned_ax, "belief's spread  (var_u + var_v)^(1/2)  (m/s)")):
         ax.pcolormesh(lon, lat, land_sheet, shading="nearest", cmap=land_cmap, vmin=0, vmax=1, zorder=3)
         ax.set_title(words, fontsize=12, pad=6)
         ax.plot(target[1], target[0], marker="*", ms=12, color=TARGET, mec="white", mew=0.5, zorder=6, ls="none")
@@ -348,8 +345,9 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
         if waypoints is not None:
             w = int(waypoints[t])
             aim.set_data([lon[w % n_lon]], [lat[w // n_lon]])
-        mean_t, _ = claimed(claims[t])
-        learned_mesh.set_array(on_grid(np.linalg.norm(mean_t - truth, axis=-1)).ravel())
+        mean_t, spread_t = claimed(claims[t])
+        error_mesh.set_array(on_grid(np.linalg.norm(mean_t - truth, axis=-1)).ravel())
+        learned_mesh.set_array(on_grid(spread_t).ravel())
         for line, dot in zip(small_tracks, small_boats):
             line.set_data(np.append(track[: t + 1, 1], here[1]), np.append(track[: t + 1, 0], here[0]))
             dot.set_data([here[1]], [here[0]])
