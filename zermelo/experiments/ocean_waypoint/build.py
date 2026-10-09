@@ -51,7 +51,14 @@ def assemble(cfg: RunConfig) -> Episode:
             length_scale_km=cfg.problem.error_lengthscale_km, amplitude_ms=cfg.problem.error_scale, jitter=cfg.problem.error_jitter
         )
     states = ocean_states(grid)
-    polar = Polar(cfg.problem.top_speed_ms, cfg.problem.no_go_degrees, cfg.problem.downwind_factor, cfg.problem.saturation_ms)
+    polar = Polar(
+        cfg.problem.top_speed_ms,
+        cfg.problem.no_go_degrees,
+        cfg.problem.peak_degrees,
+        cfg.problem.rise_exponent,
+        cfg.problem.downwind_factor,
+        cfg.problem.wind_scale_ms,
+    )
     transition = ocean_transition(grid, wind, polar, cfg.problem.n_headings, cfg.problem.step_hours, states)
     box = grid.inside(cfg.problem.lat_min, cfg.problem.lat_max, cfg.problem.lon_min, cfg.problem.lon_max) & ~data.land
     start_box = jnp.arange(grid.size()) == grid.flat_index(jnp.array([cfg.problem.start_lat, cfg.problem.start_lon]))

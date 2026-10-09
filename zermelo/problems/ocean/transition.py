@@ -36,19 +36,21 @@ class Polar:
     """Speed through the water at a heading, from the wind blowing there:
 
         theta        = angle between the heading and the direction the wind comes from, 0 straight into it, in degrees
-        g(theta)     = 0                                                  theta < no_go_degrees
-                     = (theta - no_go_degrees) / (90 - no_go_degrees)     no_go_degrees <= theta < 90
-                     = 1 - (1 - downwind_factor) * (theta - 90) / 90      theta >= 90
-        wind_factor  = min(1, ||U|| / saturation_ms)                      1 where saturation_ms = 0
-        speed        = top_speed_ms * g(theta) * wind_factor              m/s
+        g(theta)     = 0                                                                 theta < no_go_degrees
+                     = ((theta - no_go_degrees) / (peak_degrees - no_go_degrees)) ** rise_exponent     no_go_degrees <= theta < peak_degrees
+                     = 1 - (1 - downwind_factor) * ((theta - peak_degrees) / (180 - peak_degrees)) ** 2    theta >= peak_degrees
+        wind_factor  = 1 - exp(-||U|| / wind_scale_ms)                                   1 where wind_scale_ms = 0
+        speed        = top_speed_ms * g(theta) * wind_factor                             m/s
 
-    top_speed_ms with no_go_degrees = 0, downwind_factor = 1 and saturation_ms = 0 is a motor boat
+    top_speed_ms with no_go_degrees = 0, rise_exponent = 0, downwind_factor = 1 and wind_scale_ms = 0 is a motor boat
     """
 
     top_speed_ms: float
     no_go_degrees: float
+    peak_degrees: float
+    rise_exponent: float
     downwind_factor: float
-    saturation_ms: float
+    wind_scale_ms: float
 
     def speed(self, heading: Float[Array, "*batch 2"], wind: Float[Array, "*batch 2"]) -> Float[Array, "*batch"]:
         """`speed` at each (heading, wind), heading a unit vector (east, north) and wind (u, v) in m/s"""
@@ -56,10 +58,10 @@ class Polar:
         # the direction the wind comes from is -U; still air comes from nowhere, and the cosine is set to 0 then
         cosine = -jnp.sum(heading * wind, axis=-1) / jnp.maximum(wind_speed, 1e-12)
         theta = jnp.degrees(jnp.arccos(jnp.clip(cosine, -1.0, 1.0)))
-        upwind = jnp.clip((theta - self.no_go_degrees) / max(90.0 - self.no_go_degrees, 1e-12), 0.0, 1.0)
-        downwind = 1.0 - (1.0 - self.downwind_factor) * (theta - 90.0) / 90.0
-        wind_factor = jnp.minimum(1.0, wind_speed / self.saturation_ms) if self.saturation_ms > 0 else jnp.ones_like(wind_speed)
-        return self.top_speed_ms * jnp.where(theta < 90.0, upwind, downwind) * wind_factor
+        rise = jnp.clip((theta - self.no_go_degrees) / max(self.peak_degrees - self.no_go_degrees, 1e-12), 0.0, 1.0) ** self.rise_exponent
+        fall = 1.0 - (1.0 - self.downwind_factor) * ((theta - self.peak_degrees) / max(180.0 - self.peak_degrees, 1e-12)) ** 2
+        wind_factor = 1.0 - jnp.exp(-wind_speed / self.wind_scale_ms) if self.wind_scale_ms > 0 else jnp.ones_like(wind_speed)
+        return self.top_speed_ms * jnp.where(theta < self.peak_degrees, rise, fall) * wind_factor
 
 
 @dataclass(frozen=True)

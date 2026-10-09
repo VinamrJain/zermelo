@@ -32,13 +32,19 @@ class ProblemConfig:
     """Speed through the water at the best heading in enough wind (m/s)"""
 
     no_go_degrees: float = MISSING
-    """Half-angle of the cone about the wind the boat cannot sail into"""
+    """Angle off the wind below which the boat makes no way"""
+
+    peak_degrees: float = MISSING
+    """Angle off the wind at which the boat is fastest"""
+
+    rise_exponent: float = MISSING
+    """Power the speed rises with from the no-go angle to the peak; below 1 it rises fast at first"""
 
     downwind_factor: float = MISSING
-    """Speed straight downwind as a fraction of `top_speed_ms`"""
+    """Speed straight downwind as a fraction of the peak"""
 
-    saturation_ms: float = MISSING
-    """Wind speed from which the boat sails at `top_speed_ms` (0 ignores the wind's speed)"""
+    wind_scale_ms: float = MISSING
+    """Wind speed at which the boat reaches 1 - 1/e of `top_speed_ms` (0 ignores the wind's speed)"""
 
     noise_ms: float = MISSING
     """Standard deviation of a reading's error per component (m/s)"""
