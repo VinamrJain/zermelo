@@ -153,6 +153,7 @@ def value_iteration(replan_every: int, radius: float, target_chunk: int | None, 
     return _built(
         "zermelo.methods.waypoint_bo.planner.ValueIteration",
         replan_every=replan_every,
+        backups=replan_every,
         radius=radius,
         target_chunk=target_chunk,
         cost_weight=cost_weight,
@@ -164,6 +165,7 @@ def greedy(replan_every: int, radius: float, target_chunk: int | None, cost_weig
     return _built(
         "zermelo.methods.waypoint_bo.planner.Greedy",
         replan_every=replan_every,
+        backups=replan_every,
         radius=radius,
         target_chunk=target_chunk,
         cost_weight=cost_weight,
@@ -175,6 +177,7 @@ def random_walk(replan_every: int, radius: float, target_chunk: int | None, cost
     return _built(
         "zermelo.methods.waypoint_bo.planner.RandomWalk",
         replan_every=replan_every,
+        backups=replan_every,
         radius=radius,
         target_chunk=target_chunk,
         cost_weight=cost_weight,

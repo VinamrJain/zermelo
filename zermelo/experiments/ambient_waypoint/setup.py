@@ -140,6 +140,7 @@ def value_iteration(replan_every: int, radius: float, target_chunk: int | None) 
     return _built(
         "zermelo.methods.waypoint_bo.planner.ValueIteration",
         replan_every=replan_every,
+        backups=replan_every,
         radius=radius,
         target_chunk=target_chunk,
         cost_weight=0.0,
@@ -158,6 +159,7 @@ def random_walk(replan_every: int, radius: float, target_chunk: int | None) -> I
     return _built(
         "zermelo.methods.waypoint_bo.planner.RandomWalk",
         replan_every=replan_every,
+        backups=replan_every,
         radius=radius,
         target_chunk=target_chunk,
         cost_weight=0.0,

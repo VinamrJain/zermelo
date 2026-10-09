@@ -28,7 +28,7 @@ class Policy:
     """The action's value, as the transition takes it"""
 
     hitting_cost: Float[Array, "n_states n_targets"]
-    """`H^pi(s, x) = c(s, pi(s)) + sum over s' of P(s' | s, pi(s)) H^pi(s', x)`, zero on arrival and truncated at `replan_every` time_steps"""
+    """`H^pi(s, x) = c(s, pi(s)) + sum over s' of P(s' | s, pi(s)) H^pi(s', x)`, zero on arrival and truncated at `backups` time_steps"""
 
 
 @dataclass(frozen=True)
@@ -36,7 +36,10 @@ class Planner(ABC):
     """Turns a kernel and a set of targets into an act table, and evaluates what following it costs"""
 
     replan_every: int
-    """`L`: a waypoint is chosen anew after this many time_steps, and a route is planned, costed and rolled over at most as many"""
+    """`L`: a waypoint is chosen anew after this many time_steps, and a route is rolled over at most as many"""
+
+    backups: int
+    """`K`: rounds of backup a plan is solved with, and the time_steps a hitting cost is truncated at"""
 
     radius: float
     """`rho`: how close to a target counts as arrived, on embedded coordinates"""
@@ -54,8 +57,8 @@ class Planner(ABC):
 
     @property
     def cost_budget(self) -> float:
-        """`B = L * (1 + w)`: the most a route of `L` time_steps costs"""
-        return self.replan_every * (1.0 + self.cost_weight)
+        """`B = K * (1 + w)`: the most a hitting cost can read"""
+        return self.backups * (1.0 + self.cost_weight)
 
     @abstractmethod
     def act_table(
@@ -114,7 +117,7 @@ class Planner(ABC):
         targets: Int[Array, " n_targets"],
         actions: Int[Array, " n_actions"],
     ) -> Policy:
-        """An act table for every target, and `L` rounds of
+        """An act table for every target, and `K` rounds of
 
         h_0(s)     = 0
         h_{k+1}(s) = 0                                                     on arrival
@@ -125,7 +128,7 @@ class Planner(ABC):
         rows, columns = jnp.arange(stop.shape[0])[:, None], jnp.arange(stop.shape[1])[None, :]
         hitting = lax.fori_loop(
             0,
-            self.replan_every,
+            self.backups,
             lambda _, h: jnp.where(stop, 0.0, self._backup(kernel, h, actions)[position_of(actions, act), rows, columns]),
             jnp.zeros(stop.shape),
         )
@@ -158,7 +161,7 @@ class Planner(ABC):
 
 @dataclass(frozen=True)
 class ValueIteration(Planner):
-    """`L` rounds of
+    """`K` rounds of
 
         v_0(s)     = 0
         v_{k+1}(s) = 0                                                          on arrival
@@ -176,10 +179,7 @@ class ValueIteration(Planner):
     ) -> Int[Array, "n_states n_targets"]:
         stop = self.arrived(kernel.domain, targets)
         values = lax.fori_loop(
-            0,
-            self.replan_every,
-            lambda _, v: jnp.where(stop, 0.0, jnp.min(self._backup(kernel, v, actions), axis=0)),
-            jnp.zeros(stop.shape),
+            0, self.backups, lambda _, v: jnp.where(stop, 0.0, jnp.min(self._backup(kernel, v, actions), axis=0)), jnp.zeros(stop.shape)
         )
         return actions[jnp.argmin(self._backup(kernel, values, actions), axis=0)]
 
