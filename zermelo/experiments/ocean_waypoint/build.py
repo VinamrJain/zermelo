@@ -15,9 +15,9 @@ from zermelo.methods.waypoint_bo.acquisition import Acquisition
 from zermelo.methods.waypoint_bo.agent import WaypointAgent, posterior_moments
 from zermelo.methods.waypoint_bo.belief import BeliefKernel, GPBelief, OracleBelief
 from zermelo.problems.ocean import (
-    CurrentError,
     FixedError,
     GaussianError,
+    OceanCurrentError,
     Polar,
     load_ocean,
     ocean_objective,
@@ -30,8 +30,8 @@ from zermelo.run.episode import Episode
 WHITELIST = ("zermelo.*", "gpjax.*")
 """Which modules a setting may name"""
 
-CURRENT_COMPONENTS = 2
-"""(u, v): what a belief over the current is wide in"""
+OCEAN_CURRENT_COMPONENTS = 2
+"""(u, v): what a belief over the ocean current is wide in"""
 
 
 def assemble(cfg: RunConfig) -> Episode:
@@ -40,10 +40,10 @@ def assemble(cfg: RunConfig) -> Episode:
     data = load_ocean(Path(__file__).resolve().parents[3] / cfg.problem.data_path, cfg.problem.grid_stride)
     grid = data.grid
     frame = data.frame(cfg.problem.frame_hour)
-    truth, wind = data.current[frame], data.wind[frame]  # (pos, uv) each
-    error: CurrentError
+    truth, wind = data.ocean_current[frame], data.wind[frame]  # (pos, uv) each
+    error: OceanCurrentError
     if cfg.problem.forecast_lag_hours > 0:
-        predicted = data.current[data.frame(cfg.problem.frame_hour - cfg.problem.forecast_lag_hours)]
+        predicted = data.ocean_current[data.frame(cfg.problem.frame_hour - cfg.problem.forecast_lag_hours)]
         error = FixedError(truth - predicted)
     else:  # W is the forecast, so the drawn error is what makes them differ
         predicted = truth
@@ -55,18 +55,18 @@ def assemble(cfg: RunConfig) -> Episode:
     transition = ocean_transition(grid, wind, polar, cfg.problem.n_headings, cfg.problem.step_hours, states)
     box = grid.inside(cfg.problem.lat_min, cfg.problem.lat_max, cfg.problem.lon_min, cfg.problem.lon_max) & ~data.land
     start_box = jnp.arange(grid.size()) == grid.flat_index(jnp.array([cfg.problem.start_lat, cfg.problem.start_lon]))
-    world = ocean_world(grid, states, predicted, error, transition, cfg.problem.noise_ms, start_box)
-    objective = ocean_objective(states, box)
+    world = ocean_world(grid, states, predicted, error, transition, cfg.problem.noise_ms, start_box, box)
+    objective = ocean_objective(states, grid, box, cfg.problem.arrival_km)
     candidates = objective.candidates
     context = world.readout.context
     belief = (
-        # the current of the world the episode runs in, drawn on its key
-        OracleBelief.empty(states, cfg.horizon, CURRENT_COMPONENTS, world.reset(k_world)[0]["field"], context)
+        # the ocean current of the world the episode runs in, drawn on its key
+        OracleBelief.empty(states, cfg.horizon, OCEAN_CURRENT_COMPONENTS, world.reset(k_world)[0]["field"], context)
         if cfg.belief.oracle
         else GPBelief.empty(
             states,
             cfg.horizon,  # one row per move, the readings an episode folds in
-            CURRENT_COMPONENTS,
+            OCEAN_CURRENT_COMPONENTS,
             n_context=sum(context.values()),
             kernel_factors=tuple(BeliefKernel.of(get_class(f.kernel), f.parts, f.lengthscale) for f in cfg.belief.kernel_factors),
             context=context,
@@ -99,7 +99,7 @@ def assemble(cfg: RunConfig) -> Episode:
                 combination=cfg.method.combination,
             ),
             position_key="position",
-            reading_key="current",
+            reading_key="ocean_current",
             context_key="context",
             prior_mean_key="forecast" if cfg.belief.forecast_as_prior_mean else None,
             horizon=cfg.horizon,

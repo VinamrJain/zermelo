@@ -8,7 +8,7 @@ GULF_STREAM_2019JUN = ProblemConfig(
     data_path="zermelo/problems/ocean/data/gulf_stream_2019jun.npz",
     grid_stride=2,  # 1/6 degree: about 18 km between grid points
     frame_hour=360.0,  # 2019-06-16 00Z
-    forecast_lag_hours=48.0,  # F is the current two days before
+    forecast_lag_hours=48.0,  # F is the ocean current two days before
     step_hours=3.0,
     n_headings=8,
     top_speed_ms=1.5,  # about 3 knots
@@ -25,6 +25,7 @@ GULF_STREAM_2019JUN = ProblemConfig(
     lon_max=-55.0,
     start_lat=37.0,
     start_lon=-65.0,
+    arrival_km=20.0,
 )
 """The Gulf Stream after Cape Hatteras, one frame of June 2019 held still, a sailboat of Saildrone speed"""
 
@@ -49,14 +50,14 @@ def error_belief() -> BeliefConfig:
     return _belief(True, place_km=40.0, amplitude=0.38)
 
 
-def current_belief() -> BeliefConfig:
+def ocean_current_belief() -> BeliefConfig:
     """Learns W about zero: correlated over 55 km, spread 0.48 m/s"""
     return _belief(False, place_km=55.0, amplitude=0.48)
 
 
 def oracle_belief() -> BeliefConfig:
-    """The true current itself, the fitted settings stated and unread"""
-    return dataclasses.replace(current_belief(), oracle=True)
+    """The true ocean current itself, the fitted settings stated and unread"""
+    return dataclasses.replace(ocean_current_belief(), oracle=True)
 
 
 PLANNING_BUDGET = 50
@@ -73,8 +74,9 @@ CLAIM_EVERY_STEPS = 1
 
 RECORDED = {
     "state/position": 1,
-    "objective_state/best_possible_speed": 1,
-    "objective_state/speed": 1,
+    "state/target": 1,
+    "objective_state/arrived": 1,
+    "objective_state/steps_to_arrival": 1,
     "objective_state/truth": 1,
     "objective_state/claim": CLAIM_EVERY_STEPS,
     "agent_state/time_steps_since_waypoint": 1,

@@ -23,7 +23,7 @@ WORLD = dataclasses.replace(
 
 
 def _belief(oracle: bool) -> BeliefConfig:
-    """The model an arm holds: the drawn error's own numbers, or the true current itself"""
+    """The model an arm holds: the drawn error's own numbers, or the true ocean current itself"""
     (place,) = error_belief().kernel_factors
     return dataclasses.replace(
         error_belief(),

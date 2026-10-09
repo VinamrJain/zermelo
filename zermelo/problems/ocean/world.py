@@ -1,4 +1,4 @@
-"""A boat problem, assembled from one frame of a current and the wind over it"""
+"""A boat problem, assembled from one frame of a ocean current and the wind over it"""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,21 +8,21 @@ import numpy as np
 from jaxtyping import Array, Bool, Float
 
 from zermelo.interface import BoxDomain, FunctionDomain, ProductDomain, ProductPrior, Uniform, World
-from zermelo.problems.ocean.field import CurrentError, CurrentField, ForecastPrior
+from zermelo.problems.ocean.field import ForecastPrior, OceanCurrent, OceanCurrentError
 from zermelo.problems.ocean.grid import PlaneGrid
-from zermelo.problems.ocean.objective import CurrentSearch
-from zermelo.problems.ocean.readout import PointCurrent
+from zermelo.problems.ocean.objective import ReachTarget
+from zermelo.problems.ocean.readout import PointOceanCurrent
 from zermelo.problems.ocean.transition import OceanTransition, Polar
 
 
 @dataclass(frozen=True)
 class OceanData:
-    """The data: W the current and U the wind at every frame, and which grid points are land
+    """The data: W the ocean current and U the wind at every frame, and which grid points are land
 
     hour    hours since the data's own start, one per frame
     """
 
-    current: Float[Array, "frames pos uv"]
+    ocean_current: Float[Array, "frames pos uv"]
     wind: Float[Array, "frames pos uv"]
     hour: Float[Array, " frames"]
     land: Bool[Array, " pos"]
@@ -37,7 +37,7 @@ class OceanData:
 
 
 def load_ocean(path: Path, grid_stride: int) -> OceanData:
-    """The data stored at `path`, keeping every `grid_stride`-th row and column; land carries zero current and zero wind"""
+    """The data stored at `path`, keeping every `grid_stride`-th row and column; land carries zero ocean current and zero wind"""
     raw = np.load(path)
     lat, lon = raw["latitude"][::grid_stride], raw["longitude"][::grid_stride]
     grid = PlaneGrid(
@@ -79,20 +79,23 @@ def ocean_world(
     grid: PlaneGrid,
     states: ProductDomain,
     forecast: Float[Array, "pos uv"],
-    error: CurrentError,
+    error: OceanCurrentError,
     transition: OceanTransition,
     noise_ms: float,
     start_box: Bool[Array, " pos"],
+    target_box: Bool[Array, " pos"],
 ) -> World:
-    """The problem a forecast poses: the boat starts at a grid point `start_box` marks, and the current is that forecast plus an error"""
+    """The problem a forecast poses: the boat starts at a grid point `start_box` marks, its target is drawn uniformly from `target_box`, and the ocean current is that forecast plus an error"""
     return World(
-        state_domain=ProductDomain({"position": grid.narrow(start_box), "field": FunctionDomain(states, BoxDomain((2,)))}),
-        prior=ProductPrior({"position": Uniform(), "field": ForecastPrior(forecast, error, grid)}),
+        state_domain=ProductDomain(
+            {"position": grid.narrow(start_box), "target": grid.narrow(target_box), "field": FunctionDomain(states, BoxDomain((2,)))}
+        ),
+        prior=ProductPrior({"position": Uniform(), "target": Uniform(), "field": ForecastPrior(forecast, error, grid)}),
         transition=transition,
-        readout=PointCurrent(CurrentField(forecast, grid), states, noise_ms),
+        readout=PointOceanCurrent(OceanCurrent(forecast, grid), states, grid, noise_ms),
     )
 
 
-def ocean_objective(states: ProductDomain, box: Bool[Array, " pos"]) -> CurrentSearch:
-    """What the episode is scored on: the speed of the current, over the grid points `box` marks"""
-    return CurrentSearch(states.narrow(box))
+def ocean_objective(states: ProductDomain, grid: PlaneGrid, box: Bool[Array, " pos"], arrival_km: float) -> ReachTarget:
+    """What the episode is scored on: reaching the target, with waypoints and claims over the grid points `box` marks"""
+    return ReachTarget(states.narrow(box), grid, arrival_km)

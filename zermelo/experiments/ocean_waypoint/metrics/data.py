@@ -1,7 +1,7 @@
 """Every number one launch is reported by, read off its records
 
-g_t          max over candidates x of ||W(x, t)||, the fastest current on offer at time_step t (m/s)
-b_t          the current speed stood in at time_step t, 0 outside the candidate box (m/s)
+arrived_t    1 once the boat is within arrival_km of the target, 0 before
+W(c)         (u, v) at every candidate c, the truth
 mu_t, v_t    (mu_u, mu_v) and (log var_u, log var_v) claimed at every candidate after time_step t
 """
 
@@ -12,6 +12,8 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+
+from zermelo.problems.ocean import KM_PER_DEGREE
 
 LOG_VARIANCE_FLOOR = -12.0
 """Smallest log variance a claim is read at"""
@@ -37,28 +39,27 @@ DRAWN_ARMS: tuple[str, ...] | None = None
 """The arms the figure draws, in legend order; None draws every arm of the launch. Every arm appears in the table"""
 
 CURVES = {
-    "simple_regret": ("simple regret", "linear"),
-    "average_regret": ("average regret", "linear"),
+    "distance_to_target": ("distance to target (km)", "linear"),
+    "arrived": ("arrived", "linear"),
     "rmse": ("RMSE", "linear"),
     "posterior_variance": ("posterior variance", "linear"),
 }
-"""What an arm achieved, a value per time_step in m/s (the variance in m^2/s^2), as the words naming it and the scale it is drawn on"""
+"""What an arm achieved, a value per time_step (distance in km, RMSE in m/s, the variance in m^2/s^2), as the words naming it and the scale it is drawn on"""
 
 TABLE_COLUMNS = (
-    ("simple_regret", "simple regret", 1, "min"),
-    ("cumulative_regret", "cumulative regret", 0, "min"),
+    ("steps_to_arrival", "steps to arrival", 0, "min"),
+    ("arrived", r"arrived \%", 0, "max"),
     ("rmse", "RMSE", 2, "min"),
     ("posterior_variance", "posterior variance", 2, "min"),
-    ("arrival_share", r"arrival \%", 0, "max"),
-    ("in_box_share", r"in box \%", 0, "max"),
+    ("arrival_share", r"waypoint arrival \%", 0, "max"),
     ("seconds", "time (s)", 0, "none"),
 )
 """The table's columns: the scalar, its heading, its digits, and which end is better"""
 
-CURVE_CHANNELS = ("objective_state/best_possible_speed", "objective_state/speed", "objective_state/truth", "objective_state/claim")
+CURVE_CHANNELS = ("objective_state/arrived", "objective_state/steps_to_arrival", "objective_state/truth", "objective_state/claim")
 """What the curves are computed from, as the names a record holds them under"""
 
-TABLE_CHANNELS = CURVE_CHANNELS + ("agent_state/time_steps_since_waypoint", "reward", "time_per_episode")
+TABLE_CHANNELS = CURVE_CHANNELS + ("state/position", "state/target", "agent_state/time_steps_since_waypoint", "reward", "time_per_episode")
 
 
 def channels(run: Path, wanted: Sequence[str]) -> dict[str, Any]:
@@ -73,7 +74,7 @@ def settings(name: str) -> dict[str, str]:
 
 
 def acquisition_label(arm: str) -> str:
-    """The paper's label for `arm`: `core_emi_L25` -> `EMI-L25`, `tuning_esi_L8_current_cw0p25_sr0p5` -> `ESI-L8 (current) cw=0.25 sr=0.5`"""
+    """The paper's label for `arm`: `core_emi_L25` -> `EMI-L25`, `tuning_esi_L8_current_cw0p25_sr0p5` -> `ESI-L8 (ocean current) cw=0.25 sr=0.5`"""
     tokens = arm.split("_")
     for start in range(len(tokens)):
         for width in (2, 1):
@@ -85,8 +86,8 @@ def acquisition_label(arm: str) -> str:
                         label += f"-{token}"
                     elif token == "error":
                         pass
-                    elif token == "current":
-                        label += " (current)"
+                    elif token == "ocean_current":
+                        label += " (ocean current)"
                     elif token[:2] in ("cw", "sr"):
                         label += f" {token[:2]}={token[2:].replace('p', '.')}"
                     else:
@@ -95,10 +96,10 @@ def acquisition_label(arm: str) -> str:
     return arm.replace("_", " ")
 
 
-def claimed_speed(claim: Any) -> tuple[Any, Any]:
-    """The speed a claim predicts and the spread it holds: `||mu||` and `(sum_i exp(v_i))^(1/2)`"""
+def claimed(claim: Any) -> tuple[Any, Any]:
+    """The (u, v) a claim predicts and the spread it holds: `mu` and `(sum_i exp(v_i))^(1/2)`"""
     mean, log_variance = claim[..., 0:2], np.maximum(claim[..., 2:4], LOG_VARIANCE_FLOOR)
-    return np.linalg.norm(mean, axis=-1), np.sqrt(np.sum(np.exp(log_variance), axis=-1))
+    return mean, np.sqrt(np.sum(np.exp(log_variance), axis=-1))
 
 
 def at_each_snapshot(claim: Any, snapshots: int, claim_every: int) -> Any:
@@ -109,23 +110,22 @@ def at_each_snapshot(claim: Any, snapshots: int, claim_every: int) -> Any:
 def episode_curves(held: dict[str, Any], claim_every: int) -> dict[str, Any]:
     """What one episode achieved, a value per time_step
 
-    simple_regret     min over u <= t of (g_u - b_u)
-    cumulative_regret sum over u <= t of (g_u - b_u)
-    average_regret    cumulative_regret / t
-    rmse              sqrt(mean over candidates of (||W|| - ||mu_t||)^2)
+    distance_to_target  ||position - target|| on the plane tangent at the box's middle latitude, km
+    arrived             1 once within arrival_km of the target
+    rmse                sqrt(mean over candidates and components of (W - mu_t)^2)
     posterior_variance  mean over candidates of exp(v_t,u) + exp(v_t,v)
     """
-    best_possible_speed = held["objective_state/best_possible_speed"][1:]  # (time_steps,) g_t
-    flown = held["objective_state/speed"][1:]  # (time_steps,) b_t
-    truth = held["objective_state/truth"][1:]  # (time_steps, candidates) ||W|| at each candidate
-    claim = at_each_snapshot(held["objective_state/claim"], flown.size + 1, claim_every)[1:]
-    speed, spread = claimed_speed(claim)  # (time_steps, candidates) each
-    regret = best_possible_speed - flown
+    arrived = held["objective_state/arrived"][1:]  # (time_steps,)
+    position, target = held["state/position"][1:], held["state/target"][1:]  # (time_steps, 2) as (lat, lon) degrees
+    km_per_degree = KM_PER_DEGREE * np.array([1.0, np.cos(np.radians(np.mean(target[:, 0])))])
+    distance = np.linalg.norm((position - target) * km_per_degree, axis=-1)
+    truth = held["objective_state/truth"][1:]  # (time_steps, candidates, 2)
+    claim = at_each_snapshot(held["objective_state/claim"], arrived.size + 1, claim_every)[1:]
+    mean, spread = claimed(claim)  # (time_steps, candidates, 2) and (time_steps, candidates)
     return {
-        "simple_regret": np.minimum.accumulate(regret),
-        "cumulative_regret": np.cumsum(regret),
-        "average_regret": np.cumsum(regret) / np.arange(1, regret.size + 1),
-        "rmse": np.sqrt(np.mean((speed - truth) ** 2, axis=-1)),
+        "distance_to_target": distance,
+        "arrived": arrived,
+        "rmse": np.sqrt(np.mean((mean - truth) ** 2, axis=(-2, -1))),
         "posterior_variance": np.mean(spread**2, axis=-1),
     }
 
@@ -179,19 +179,19 @@ def tables(runs: list[tuple[str, int, Path, dict[str, Any]]]) -> tuple[pd.DataFr
         held = channels(run, TABLE_CHANNELS)
         achieved = episode_curves(held, int(config["claim_every"]))
         legs = episode_legs(held, config)
-        hours = float(config["problem"]["step_hours"]) * np.arange(1, held["objective_state/speed"].size)
+        hours = float(config["problem"]["step_hours"]) * np.arange(1, held["objective_state/arrived"].size)
         curves.append(pd.DataFrame({"acquisition": arm, "seed": seed, "x": hours, **achieved}))
         scalars.append(
             {
                 "acquisition": arm,
                 "seed": seed,
                 **{name: float(values[-1]) for name, values in achieved.items()},
+                "steps_to_arrival": float(held["objective_state/steps_to_arrival"][-1]),
                 **{
                     name: float("nan") if config.get("method") is None else float(achieved[name][-1])
                     for name in ("rmse", "posterior_variance")
                 },
                 "arrival_share": 100.0 * float(np.mean(legs["arrived"])) if legs["arrived"].size else float("nan"),
-                "in_box_share": 100.0 * float(np.mean(held["objective_state/speed"][1:] > 0)),
                 "seconds": float(held["time_per_episode"]),
             }
         )

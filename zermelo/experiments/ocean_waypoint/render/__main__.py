@@ -1,7 +1,7 @@
 """One still per arm of a launch: `python -m zermelo.experiments.ocean_waypoint.render <sweep name or launch directory> [--seed N]`
 
 Three panels, over the candidate box in degrees:
-    truth      ||W|| at every grid point, the boat's track, the waypoints it aimed at
+    truth      ||W|| at every grid point, the boat's track, the target, the waypoints it aimed at
     claimed    ||mu_T|| at every candidate at the last move
     spread     sqrt(exp(v_T,u) + exp(v_T,v)) at every candidate at the last move
 """
@@ -16,15 +16,18 @@ import numpy as np
 matplotlib.use("Agg")  # no display on a compute node
 import matplotlib.pyplot as plt  # noqa: E402
 
-from zermelo.experiments.ocean_waypoint.metrics.data import channels, claimed_speed, latest_launch, settings  # noqa: E402
+from zermelo.experiments.ocean_waypoint.metrics.data import channels, claimed, latest_launch, settings  # noqa: E402
 
 SWEEPS = Path("results") / __package__.split(".")[-2]
 """Where a sweep named rather than pointed at is looked for: this experiment's own results"""
 
 CHANNELS = (
     "state/position",
+    "state/target",
     "objective_state/truth",
     "objective_state/claim",
+    "objective_state/arrived",
+    "objective_state/steps_to_arrival",
     "agent_state/scores.waypoint",
     "agent_state/scores.candidate_indices",
 )
@@ -59,10 +62,11 @@ def still(run: Path, out: Path) -> None:
         sheet[candidates] = per_candidate
         return sheet.reshape(n_lat, n_lon)
 
-    speed, spread = claimed_speed(held["objective_state/claim"][-1])  # (n_candidates,) each
+    mean, spread = claimed(held["objective_state/claim"][-1])  # (n_candidates, 2) and (n_candidates,)
+    speed = np.linalg.norm(mean, axis=-1)
     track = held["state/position"]  # (time_steps + 1, 2) as (lat, lon)
     sheets = [
-        ("true current speed (m/s)", on_grid(held["objective_state/truth"][-1])),
+        ("true ocean current speed (m/s)", on_grid(np.linalg.norm(held["objective_state/truth"][-1], axis=-1))),
         ("claimed speed (m/s)", on_grid(speed)),
         ("claimed spread (m/s)", on_grid(spread)),
     ]
@@ -74,6 +78,7 @@ def still(run: Path, out: Path) -> None:
         ax.plot(track[:, 1], track[:, 0], "w.-", lw=1, ms=3)
         ax.plot(track[0, 1], track[0, 0], "wo", ms=6, mfc="none")
         ax.plot(track[-1, 1], track[-1, 0], "r*", ms=9)
+        ax.plot(held["state/target"][0, 1], held["state/target"][0, 0], "m*", ms=12, mec="w", label="target")
         ax.set_aspect(1 / np.cos(np.radians(np.mean(lat))))
         ax.set_xlabel("lon")
     if "agent_state/scores.waypoint" in held:  # an arm with a rule: every waypoint it aimed at
@@ -81,7 +86,12 @@ def still(run: Path, out: Path) -> None:
         axes[0].plot(lon[aimed % n_lon], lat[aimed // n_lon], "x", color="orange", ms=6, label="waypoints")
         axes[0].legend(loc="lower right", fontsize=8)
     axes[0].set_ylabel("lat")
-    fig.suptitle(f"{run.parent.parent.name} / {run.name}: {track.shape[0] - 1} moves of {problem['step_hours']} h", fontsize=10)
+    fig.suptitle(
+        f"{run.parent.parent.name} / {run.name}: {track.shape[0] - 1} moves of {problem['step_hours']} h, arrived at step {int(held['objective_state/steps_to_arrival'][-1])}"
+        if held["objective_state/arrived"][-1]
+        else f"{run.parent.parent.name} / {run.name}: {track.shape[0] - 1} moves of {problem['step_hours']} h, never arrived",
+        fontsize=10,
+    )
     fig.savefig(out, dpi=120)
     plt.close(fig)
 

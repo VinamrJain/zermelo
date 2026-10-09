@@ -1,30 +1,31 @@
-"""A boat sails an unknown current, steering by heading, its speed through the water set by a known wind.
+"""A boat sails an unknown ocean current to a target, steering by heading, its speed through the water set by a known wind.
 
-state = (position, field)
+state = (position, target, field)
     position    (lat, lon) degrees of the grid point the boat is at
-    field       W, the current carrying it: W(position) = (u, v) in m/s
+    target      (lat, lon) degrees of the grid point to reach, drawn once per episode
+    field       W, the ocean current carrying it: W(position) = (u, v) in m/s
 action in {0, ..., n_headings}      a heading 2 pi k / n_headings from east, or drifting
 
 position' ~ the grid points around a step along (through_water + W), step_hours long
 W = F + forecast_error              the truth is the forecast F the boat is given, plus the error it carries
-reward = ||W(state)||               counted on a candidate, a latitude-longitude box of grid points
+reward = -1 until within arrival_km of target, 0 from then on
 
 A plan and a belief are written over position alone
 """
 
-from zermelo.problems.ocean.field import CurrentError, CurrentField, FixedError, ForecastPrior, GaussianError
+from zermelo.problems.ocean.field import FixedError, ForecastPrior, GaussianError, OceanCurrent, OceanCurrentError
 from zermelo.problems.ocean.grid import KM_PER_DEGREE, PlaneGrid
-from zermelo.problems.ocean.objective import CurrentSearch
-from zermelo.problems.ocean.readout import PointCurrent
+from zermelo.problems.ocean.objective import ReachTarget
+from zermelo.problems.ocean.readout import PointOceanCurrent
 from zermelo.problems.ocean.transition import Act, OceanKernel, OceanTransition, Polar
 from zermelo.problems.ocean.world import OceanData, load_ocean, ocean_objective, ocean_states, ocean_transition, ocean_world
 
 __all__ = [
     "KM_PER_DEGREE",
     "Act",
-    "CurrentError",
-    "CurrentField",
-    "CurrentSearch",
+    "OceanCurrentError",
+    "OceanCurrent",
+    "ReachTarget",
     "FixedError",
     "ForecastPrior",
     "GaussianError",
@@ -32,7 +33,7 @@ __all__ = [
     "OceanKernel",
     "OceanTransition",
     "PlaneGrid",
-    "PointCurrent",
+    "PointOceanCurrent",
     "Polar",
     "load_ocean",
     "ocean_objective",

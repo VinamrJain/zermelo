@@ -11,7 +11,7 @@ class ProblemConfig:
     """The world one episode runs in"""
 
     data_path: str = MISSING
-    """Where the current and the wind are read from, relative to the package"""
+    """Where the ocean current and the wind are read from, relative to the package"""
 
     grid_stride: int = MISSING
     """Every how many of the data's rows and columns the grid keeps, 1 keeping all"""
@@ -56,7 +56,10 @@ class ProblemConfig:
     lat_max: float = MISSING
     lon_min: float = MISSING
     lon_max: float = MISSING
-    """The box of grid points, in degrees, the candidates sit on"""
+    """The box of grid points, in degrees, a target is drawn from and a waypoint may be aimed at"""
+
+    arrival_km: float = MISSING
+    """How near the target counts as arrived"""
 
     start_lat: float = MISSING
     start_lon: float = MISSING
@@ -79,16 +82,16 @@ class BeliefKernelConfig:
 
 @dataclass
 class BeliefConfig:
-    """A method's own model of the current"""
+    """A method's own model of the ocean current"""
 
     oracle: bool = MISSING
-    """Whether the method is handed the true current instead of fitting one"""
+    """Whether the method is handed the true ocean current instead of fitting one"""
 
     kernel_factors: list[BeliefKernelConfig] = MISSING
     """The factors the kernel is a product of"""
 
     forecast_as_prior_mean: bool = MISSING
-    """Whether the belief learns the current about the forecast, or about zero"""
+    """Whether the belief learns the ocean current about the forecast, or about zero"""
 
     amplitude: float = MISSING
     """Standard deviation the belief assumes of what it learns"""
