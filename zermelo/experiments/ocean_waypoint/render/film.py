@@ -2,8 +2,8 @@
 
 Top: ||W|| shaded with its streamlines, the wind as a quiver, land masked, the track fading behind the boat, the boat as a
 triangle pointing along its heading, at the boat the wind, the ocean current, the heading through the water and the net motion as
-arrows, the target with its arrival ring, the waypoint aimed at; beside it the numbers of the move. Bottom: the belief's error
-||mu_t - W|| and its spread (var_u + var_v)^(1/2) over the box as it learns, and the polar, boat speed against heading for the wind at
+arrows, the target with its arrival ring, the waypoint aimed at and the walk imagined to it; beside it the numbers of the move.
+Bottom: the belief's mean speed ||mu_t|| on the truth's scale, its spread (var_u + var_v)^(1/2) on the prior's, and the polar, boat speed against heading for the wind at
 the boat with the heading marked. Moves are interpolated over `SUBFRAMES` frames; the film ends a few moves after arrival.
 
 The heading is not recorded: it is read back as the net motion of the move less the ocean current at the point it left.
@@ -111,6 +111,7 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
             "objective_state/claim",
             "objective_state/arrived",
             "agent_state/scores.waypoint",
+            "agent_state/scores.imagined_walk_to_waypoint",
         ),
     )
     raw = np.load(Path(problem["data_path"]))
@@ -158,6 +159,7 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     last = min(track.shape[0] - 1, int(np.argmax(arrived)) + AFTER_ARRIVAL) if arrived.any() else track.shape[0] - 1
     claims = held["objective_state/claim"]  # (T + 1, n_candidates, 4)
     waypoints = held.get("agent_state/scores.waypoint")
+    walks = held.get("agent_state/scores.imagined_walk_to_waypoint")  # (T + 1, L) flat indices, the last repeated past the end
 
     # per move: the velocities at the point it left, (east, north) m/s
     net = np.diff(track, axis=0)[:, ::-1] * km_per_degree[::-1] / (3.6 * step_hours)  # (T, 2): the move as a velocity
@@ -240,6 +242,7 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     main.plot(target[1], target[0], marker="*", ms=20, color=TARGET, mec="white", mew=0.8, zorder=6, ls="none")
     main.plot(track[0, 1], track[0, 0], marker="o", ms=9, mfc="none", mec="white", mew=1.5, zorder=6, ls="none")
     (aim,) = main.plot([], [], marker="x", ms=11, color="#ffa726", mew=2.2, zorder=6, ls="none")
+    (route,) = main.plot([], [], color="#ffa726", lw=1.8, ls="--", alpha=0.9, zorder=5.5)  # the walk imagined to the waypoint
     trail = [main.plot([], [], color=TRACK, lw=2.8, alpha=0.0, zorder=5, solid_capstyle="round")[0] for _ in range(TRAIL)]
     (done,) = main.plot([], [], color=TRACK, lw=1.4, alpha=0.45, zorder=4)  # the track older than the trail
     (glow,) = main.plot([], [], marker="o", ms=30, color=TRACK, alpha=0.25, zorder=6.5, ls="none")
@@ -254,6 +257,7 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
             Line2D([], [], color=NET, lw=2.5, label="net motion"),
             Line2D([], [], marker="*", ms=14, color=TARGET, mec="white", ls="none", label="target, 20 km ring"),
             Line2D([], [], marker="x", ms=10, color="#ffa726", mew=2, ls="none", label="waypoint aimed at"),
+            Line2D([], [], color="#ffa726", lw=1.8, ls="--", label="walk imagined to it"),
         ],
         loc="lower left", fontsize=12, frameon=False, labelcolor="#e6e6e6", handlelength=2.5,
     )  # fmt: skip
@@ -292,19 +296,22 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     (rose_heading,) = rose.plot([], [], marker="o", ms=9, color=NET, mec="white", ls="none", zorder=5)
     (rose_wind,) = rose.plot([], [], color=WIND, lw=3)
 
-    # bottom: the belief's error and spread so far
-    error_top = float(np.nanmax(true_speed))
-    error_mesh = error_ax.pcolormesh(lon, lat, on_grid(np.zeros(candidates.size)), shading="nearest", cmap="magma", vmin=0, vmax=error_top)
-    learned_mesh = learned_ax.pcolormesh(
-        lon, lat, on_grid(np.zeros(candidates.size)), shading="nearest", cmap="magma", vmin=0, vmax=error_top
-    )
-    for ax, words in ((error_ax, "belief's error  ||mu - W||  (m/s)"), (learned_ax, "belief's spread  (var_u + var_v)^(1/2)  (m/s)")):
+    # bottom: what the belief holds so far, its mean on the truth's scale and its spread on the prior's
+    prior_spread = float(np.sqrt(2.0)) * float(config["belief"]["amplitude"])  # (var_u + var_v)^(1/2) before any reading
+    blank = on_grid(np.zeros(candidates.size))
+    error_mesh = error_ax.pcolormesh(lon, lat, blank, shading="nearest", cmap="YlGnBu_r", vmin=0, vmax=np.nanmax(true_speed))
+    learned_mesh = learned_ax.pcolormesh(lon, lat, blank, shading="nearest", cmap="viridis", vmin=0, vmax=prior_spread)
+    for ax, mesh, words in (
+        (error_ax, error_mesh, "belief's mean speed  ||mu||  (m/s)"),
+        (learned_ax, learned_mesh, "belief's spread  (var_u + var_v)^(1/2)  (m/s)"),
+    ):
         ax.pcolormesh(lon, lat, land_sheet, shading="nearest", cmap=land_cmap, vmin=0, vmax=1, zorder=3)
         ax.set_title(words, fontsize=12, pad=6)
         ax.plot(target[1], target[0], marker="*", ms=12, color=TARGET, mec="white", mew=0.5, zorder=6, ls="none")
-    bar = fig.colorbar(learned_mesh, ax=learned_ax, fraction=0.035, pad=0.01)
-    bar.set_label("m/s", fontsize=10)
-    bar.ax.tick_params(labelsize=9, colors="#bbbbbb")
+        bar = fig.colorbar(mesh, ax=ax, orientation="horizontal", fraction=0.06, pad=0.22, shrink=0.85)
+        bar.ax.tick_params(labelsize=9, colors="#bbbbbb")
+    bar.set_ticks([0, prior_spread / 2, prior_spread])
+    bar.set_ticklabels(["0", f"{prior_spread / 2:.2f}", f"{prior_spread:.2f} prior"])
     small_tracks = [ax.plot([], [], color=TRACK, lw=1.3, alpha=0.9, zorder=5)[0] for ax in (error_ax, learned_ax)]
     small_boats = [ax.plot([], [], marker="o", ms=5, color="white", zorder=6, ls="none")[0] for ax in (error_ax, learned_ax)]
 
@@ -346,8 +353,15 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
             w = int(waypoints[t])
             aim.set_data([lon[w % n_lon]], [lat[w // n_lon]])
         mean_t, spread_t = claimed(claims[t])
-        error_mesh.set_array(on_grid(np.linalg.norm(mean_t - truth, axis=-1)).ravel())
+        error_mesh.set_array(on_grid(np.linalg.norm(mean_t, axis=-1)).ravel())
         learned_mesh.set_array(on_grid(spread_t).ravel())
+        if walks is not None:
+            steps = walks[t]
+            kept = np.r_[True, steps[1:] != steps[:-1]]  # the walk ends where its index stops changing
+            path = steps[kept]
+            route.set_data(np.r_[here[1], lon[path % n_lon]], np.r_[here[0], lat[path // n_lon]]) if path.size > 1 else route.set_data(
+                [], []
+            )
         for line, dot in zip(small_tracks, small_boats):
             line.set_data(np.append(track[: t + 1, 1], here[1]), np.append(track[: t + 1, 0], here[0]))
             dot.set_data([here[1]], [here[0]])
