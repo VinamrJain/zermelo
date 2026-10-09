@@ -6,7 +6,7 @@ version = "0.1.0"
 
 [tasks]
 
-check = "ruff format --check && ruff check && mypy && lint-imports && python -c 'import zermelo.experiments.ambient_waypoint.sweeps, zermelo.experiments.balloon_waypoint.sweeps'"
+check = "ruff format --check && ruff check && mypy && lint-imports && python -c 'import zermelo.experiments.ambient_waypoint.sweeps, zermelo.experiments.balloon_waypoint.sweeps, zermelo.experiments.ocean_waypoint.sweeps'"
 format = "ruff format && ruff check --fix"
 
 [tasks.smoke]

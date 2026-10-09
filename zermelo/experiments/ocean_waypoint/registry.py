@@ -1,0 +1,103 @@
+"""The world every study runs on, and the numbers every sweep of it holds equal"""
+
+import dataclasses
+
+from zermelo.experiments.ocean_waypoint.schema import BeliefConfig, BeliefKernelConfig, ProblemConfig, Resources
+
+GULF_STREAM_2019JUN = ProblemConfig(
+    data_path="zermelo/problems/ocean/data/gulf_stream_2019jun.npz",
+    grid_stride=2,  # 1/6 degree: about 18 km between grid points
+    frame_hour=360.0,  # 2019-06-16 00Z
+    forecast_lag_hours=48.0,  # F is the current two days before
+    step_hours=3.0,
+    n_headings=8,
+    top_speed_ms=1.5,  # about 3 knots
+    no_go_degrees=45.0,
+    downwind_factor=0.7,
+    saturation_ms=8.0,
+    noise_ms=0.1,
+    error_scale=0.0,
+    error_lengthscale_km=100.0,
+    error_jitter=1e-4,
+    lat_min=35.0,
+    lat_max=42.0,
+    lon_min=-75.0,
+    lon_max=-55.0,
+    start_lat=37.0,
+    start_lon=-65.0,
+)
+"""The Gulf Stream after Cape Hatteras, one frame of June 2019 held still, a sailboat of Saildrone speed"""
+
+
+def _belief(forecast_as_prior_mean: bool, place_km: float, amplitude: float) -> BeliefConfig:
+    """A belief at the correlation length and spread of what it learns, no refitting"""
+    return BeliefConfig(
+        oracle=False,
+        forecast_as_prior_mean=forecast_as_prior_mean,
+        kernel_factors=[BeliefKernelConfig(kernel="gpjax.kernels.Matern52", parts=["position"], lengthscale=[place_km] * 2)],
+        amplitude=amplitude,
+        noise=0.1,
+        n_features=256,
+        refit=False,
+        refit_steps=100,  # unread while refitting is off, and stated anyway
+    )
+
+
+# Correlation lengths and standard deviations to be measured over the box, June 2019; placeholders until then
+def error_belief() -> BeliefConfig:
+    """Learns W - F about the forecast"""
+    return _belief(True, place_km=60.0, amplitude=0.3)
+
+
+def current_belief() -> BeliefConfig:
+    """Learns W about zero"""
+    return _belief(False, place_km=100.0, amplitude=0.5)
+
+
+def oracle_belief() -> BeliefConfig:
+    """The true current itself, the fitted settings stated and unread"""
+    return dataclasses.replace(current_belief(), oracle=True)
+
+
+PLANNING_BUDGET = 50
+"""`L`: a replan fires every `L` moves, costs `L` backups, and truncates a hitting time at `L` steps"""
+
+ARRIVAL_RADIUS_KM = 20.0
+"""`rho`: how near a waypoint counts as arrived, inside positions about 18 km apart"""
+
+HORIZON_LENGTH = 160
+"""time_steps in an episode: 20 days at 3 hours each"""
+
+CLAIM_EVERY_STEPS = 1
+"""Moves between re-readings of the claim off a belief"""
+
+RECORDED = {
+    "state/position": 1,
+    "objective_state/best_possible_speed": 1,
+    "objective_state/speed": 1,
+    "objective_state/truth": 1,
+    "objective_state/claim": CLAIM_EVERY_STEPS,
+    "agent_state/time_steps_since_waypoint": 1,
+    "agent_state/scores.predicted_step_cost": 1,
+    "agent_state/scores.frac_zero_value_candidates": 1,
+    "agent_state/scores.frac_reachable_candidates": 1,
+    "agent_state/scores.waypoint": 1,
+    "agent_state/scores.imagined_walk_to_waypoint": 1,
+    "agent_state/scores.candidate_indices": 1,
+    "agent_state/scores.acquisition_value": 1,
+}
+"""What a record stores, and the moves between the snapshots it keeps of each. The forecast is read from `data_path` instead"""
+
+N_SEEDS = 10
+"""Instances every arm is run on, seeded `0` to `N_SEEDS - 1`"""
+
+RESOURCES = Resources(
+    cpus=2,
+    mem_gb=16,
+    timeout_min=120,
+    gres="gpu:1",
+    partition="default_partition",
+    constraint="avx2&(gpu-high|gpu-mid)",
+    array_parallelism=64,
+)
+"""What one cell of a sweep is given; `avx2` and the GPU classes are node features. A sweep wanting more states its own with `dataclasses.replace`"""
