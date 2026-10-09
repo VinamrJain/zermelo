@@ -1,4 +1,6 @@
-"""One still per arm of a launch: `python -m zermelo.experiments.ocean_waypoint.render <sweep name or launch directory> [--seed N]`
+"""One still per arm of a launch, or one film per arm sent to the scheduler
+
+    python -m zermelo.experiments.ocean_waypoint.render <sweep name, launch directory or run directory> [--seed N] [--film [--local]]
 
 Three panels, over the candidate box in degrees:
     truth      ||W|| at every grid point, the boat's track, the target, the waypoints it aimed at
@@ -6,8 +8,8 @@ Three panels, over the candidate box in degrees:
     spread     sqrt(exp(v_T,u) + exp(v_T,v)) at every candidate at the last move
 """
 
+import argparse
 import json
-import sys
 from pathlib import Path
 
 import matplotlib
@@ -17,6 +19,7 @@ matplotlib.use("Agg")  # no display on a compute node
 import matplotlib.pyplot as plt  # noqa: E402
 
 from zermelo.experiments.ocean_waypoint.metrics.data import channels, claimed, latest_launch, settings  # noqa: E402
+from zermelo.experiments.ocean_waypoint.render.film import film, send  # noqa: E402
 
 SWEEPS = Path("results") / __package__.split(".")[-2]
 """Where a sweep named rather than pointed at is looked for: this experiment's own results"""
@@ -96,17 +99,33 @@ def still(run: Path, out: Path) -> None:
     plt.close(fig)
 
 
-asked = Path(sys.argv[1])
-where = asked if asked.exists() else SWEEPS / asked
+parse = argparse.ArgumentParser(prog="render", description="Draw recorded ocean episodes.")
+parse.add_argument("target", type=Path, help="a sweep name, a launch directory, or one run directory")
+parse.add_argument("--seed", type=int, default=0, help="which seed's arms to draw")
+parse.add_argument("--film", action="store_true", help="write video instead of a still")
+parse.add_argument("--local", action="store_true", help="draw the film here rather than sending it to the scheduler")
+parse.add_argument("--fps", type=int, default=12, help="frames a second the film plays at")
+parse.add_argument("--dpi", type=int, default=120, help="how finely a frame is drawn")
+parse.add_argument("--still", type=int, help="film only: one frame at this move as a png, drawn here")
+given = parse.parse_args()
+where = given.target if given.target.exists() else SWEEPS / given.target
 if not where.is_dir():
-    sys.exit(f"no sweep or launch directory at {asked}, and none at {SWEEPS / asked}")
-launch = latest_launch(where)
-seed = int(sys.argv[sys.argv.index("--seed") + 1]) if "--seed" in sys.argv else 0
-drawn = 0
-for marker in sorted(launch.glob("*/record.npz")):
-    varied = settings(marker.parent.name)
-    if int(varied.get("seed", 0)) == seed:
-        (launch / "stills").mkdir(exist_ok=True)
-        still(marker.parent, launch / "stills" / f"{varied.get('arm', marker.parent.name)}.png")
-        drawn += 1
-print(f"drew {drawn} stills under {launch / 'stills'}")
+    raise SystemExit(f"no sweep, launch or run directory at {given.target}, and none at {SWEEPS / given.target}")
+if (where / "record.npz").exists():
+    launch, runs = where.parent.parent, [where]
+else:
+    launch = latest_launch(where)
+    runs = [
+        marker.parent for marker in sorted(launch.glob("*/record.npz")) if int(settings(marker.parent.name).get("seed", 0)) == given.seed
+    ]
+if given.film and not (given.local or given.still is not None):
+    print(send(runs, launch / "films", f"--fps {given.fps} --dpi {given.dpi}"))
+elif given.film:
+    for run in runs:
+        (launch / "films").mkdir(exist_ok=True)
+        film(run, launch / "films" / f"{settings(run.name).get('arm', run.name)}.mp4", fps=given.fps, dpi=given.dpi, still=given.still)
+else:
+    (launch / "stills").mkdir(exist_ok=True)
+    for run in runs:
+        still(run, launch / "stills" / f"{settings(run.name).get('arm', run.name)}.png")
+    print(f"drew {len(runs)} stills under {launch / 'stills'}")
