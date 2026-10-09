@@ -1,6 +1,7 @@
 """alpha(x) = w(x) - c cost(tau), w(x) / cost(tau) or w(x) - cost(tau), where w(x) = E over fields and walks of [ U(D + obs(tau)) - U(D) ]
 
-plus, where an information utility I is given, lambda * (max alpha - min alpha) / (max I - min I) * I(x), the ranges over the candidates
+plus, where an information utility I is given, lambda * L / (max I - min I) * I(x), the range over the candidates within L steps, for L the planner's
+replan_every, and only such a candidate may win then
 """
 
 from dataclasses import dataclass
@@ -73,7 +74,7 @@ class Acquisition:
     """`I`: what the readings along a walk tell, added to the worth at `information_rate` once put in the worth's units"""
 
     information_rate: float | None
-    """`lambda`: the most informative candidate's information is worth this share of the spread of the candidate values"""
+    """`lambda`: the most informative candidate within L steps is credited this many L of travel"""
 
     improvement: bool
     """Whether to score the collected readings and the imagined ones together, less the collected ones alone"""
@@ -202,16 +203,16 @@ class Acquisition:
         else:
             sampled = utility - spend
         value = jnp.mean(sampled, axis=(0, 1))  # alpha(x)
+        expected_spend = jnp.mean(predicted, axis=(0, 1))  # H(z, x), averaged over the draws that solved it
+        allowed = expected_spend > 0.0  # a candidate within the planner's radius spends nothing and would win every tie: never chosen
         if self.information is not None and self.information_rate is not None:
             information = jnp.mean(jnp.stack(information_samples), axis=(0, 1))  # I(x)
-            # lambda * (max alpha - min alpha) / (max I - min I): information in the worth's units, none where I is flat
-            spread = jnp.max(information) - jnp.min(information)
-            charge = jnp.where(spread > 0.0, self.information_rate * (jnp.max(value) - jnp.min(value)) / jnp.maximum(spread, 1e-12), 0.0)
-            value = value + charge * information
-        expected_spend = jnp.mean(predicted, axis=(0, 1))  # H(z, x), averaged over the draws that solved it
-        # a candidate already within the planner's radius spends nothing and has no route to it, so it
-        # would win every tie the cost term decides -- scored like the rest, but never chosen
-        best = jnp.argmax(jnp.where(expected_spend == 0.0, -jnp.inf, value))
+            reach = expected_spend <= self.planner.replan_every  # the candidates a walk gets to before the next decision
+            # lambda * L / (max I - min I) over the reachable candidates: information in steps, none where I is flat there
+            spread = jnp.max(jnp.where(reach, information, -jnp.inf)) - jnp.min(jnp.where(reach, information, jnp.inf))
+            charge = jnp.where(spread > 0.0, self.information_rate * self.planner.replan_every / jnp.maximum(spread, 1e-12), 0.0)
+            value, allowed = value + charge * information, allowed & reach
+        best = jnp.argmax(jnp.where(allowed, value, -jnp.inf))
         return Scores(
             candidate_indices=candidate_indices,
             acquisition_value=value,
