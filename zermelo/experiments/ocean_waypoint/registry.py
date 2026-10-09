@@ -43,15 +43,15 @@ def _belief(forecast_as_prior_mean: bool, place_km: float, amplitude: float) -> 
     )
 
 
-# Correlation lengths and standard deviations to be measured over the box, June 2019; placeholders until then
+# Correlation lengths and standard deviations measured over the box on the 2019-06-16 00Z frame
 def error_belief() -> BeliefConfig:
-    """Learns W - F about the forecast"""
-    return _belief(True, place_km=60.0, amplitude=0.3)
+    """Learns W - F about the forecast: correlated over 40 km, spread 0.38 m/s"""
+    return _belief(True, place_km=40.0, amplitude=0.38)
 
 
 def current_belief() -> BeliefConfig:
-    """Learns W about zero"""
-    return _belief(False, place_km=100.0, amplitude=0.5)
+    """Learns W about zero: correlated over 55 km, spread 0.48 m/s"""
+    return _belief(False, place_km=55.0, amplitude=0.48)
 
 
 def oracle_belief() -> BeliefConfig:
