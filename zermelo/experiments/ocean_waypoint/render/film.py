@@ -58,6 +58,7 @@ SCRIPT = """#!/bin/bash
 #SBATCH --cpus-per-task={cpus}
 #SBATCH --mem={mem_gb}G
 #SBATCH --time={timeout_min}
+#SBATCH --constraint={constraint}
 #SBATCH --array=0-{last}%{parallelism}
 #SBATCH --chdir={repository}
 #SBATCH --output={into}/film-%a.log
@@ -82,6 +83,7 @@ def send(runs: Sequence[Path], into: Path, flags: str) -> str:
             cpus=RESOURCES_PER_FILM.cpus,
             mem_gb=RESOURCES_PER_FILM.mem_gb,
             timeout_min=RESOURCES_PER_FILM.timeout_min,
+            constraint=RESOURCES_PER_FILM.constraint,
             last=len(runs) - 1,
             parallelism=RESOURCES_PER_FILM.array_parallelism,
             repository=Path.cwd().resolve(),

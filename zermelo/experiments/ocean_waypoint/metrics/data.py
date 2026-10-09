@@ -118,6 +118,7 @@ def episode_curves(held: dict[str, Any], claim_every: int) -> dict[str, Any]:
     arrived             1 once within arrival_km of the target
     rmse                sqrt(mean over candidates and components of (W - mu_t)^2)
     posterior_variance  mean over candidates of exp(v_t,u) + exp(v_t,v)
+    information         (1/2) sum over candidates and components of (v_0 - v_t), nats the claim's marginals have shed
     """
     arrived = held["objective_state/arrived"][1:]  # (time_steps,)
     position, target = held["state/position"][1:], held["state/target"][1:]  # (time_steps, 2) as (lat, lon) degrees
@@ -126,11 +127,14 @@ def episode_curves(held: dict[str, Any], claim_every: int) -> dict[str, Any]:
     truth = held["objective_state/truth"][1:]  # (time_steps, candidates, 2)
     claim = at_each_snapshot(held["objective_state/claim"], arrived.size + 1, claim_every)[1:]
     mean, spread = claimed(claim)  # (time_steps, candidates, 2) and (time_steps, candidates)
+    log_variance = np.maximum(held["objective_state/claim"][..., 2:4], LOG_VARIANCE_FLOOR)  # (snapshots, candidates, 2)
+    shed = 0.5 * np.sum(log_variance[0] - log_variance, axis=(-2, -1))  # (snapshots,)
     return {
         "distance_to_target": distance,
         "arrived": arrived,
         "rmse": np.sqrt(np.mean((mean - truth) ** 2, axis=(-2, -1))),
         "posterior_variance": np.mean(spread**2, axis=-1),
+        "information": at_each_snapshot(shed, arrived.size + 1, claim_every)[1:],
     }
 
 
@@ -193,7 +197,7 @@ def tables(runs: list[tuple[str, int, Path, dict[str, Any]]]) -> tuple[pd.DataFr
                 "steps_to_arrival": float(held["objective_state/steps_to_arrival"][-1]),
                 **{
                     name: float("nan") if config.get("method") is None else float(achieved[name][-1])
-                    for name in ("rmse", "posterior_variance")
+                    for name in ("rmse", "posterior_variance", "information")
                 },
                 "arrival_share": 100.0 * float(np.mean(legs["arrived"])) if legs["arrived"].size else float("nan"),
                 "seconds": float(held["time_per_episode"]),
