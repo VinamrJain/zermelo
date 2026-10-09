@@ -60,8 +60,8 @@ def oracle_belief() -> BeliefConfig:
     return dataclasses.replace(ocean_current_belief(), oracle=True)
 
 
-PLANNING_BUDGET = 50
-"""`L`: a replan fires every `L` moves, costs `L` backups, and truncates a hitting time at `L` steps"""
+PLANNING_BUDGET = 25
+"""`L`: a waypoint is chosen anew after this many moves, and an imagined walk is rolled over at most as many"""
 
 ARRIVAL_RADIUS_KM = 20.0
 """`rho`: how near a waypoint counts as arrived, inside positions about 18 km apart"""

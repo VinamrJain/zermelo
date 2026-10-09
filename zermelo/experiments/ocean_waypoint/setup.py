@@ -104,9 +104,18 @@ def remaining_trip(backups: int, radius: float, target_chunk: int | None, cost_w
     )
 
 
-def learned_trip(backups: int, radius: float, target_chunk: int | None, cost_weight: float) -> Implementation:
-    """Minus the hitting cost from where a walk ends to the target, under the posterior mean once the walk's readings are folded in"""
-    return _built("zermelo.methods.waypoint_bo.utility.LearnedTrip", planner=value_iteration(1, backups, radius, target_chunk, cost_weight))
+def replanned_trip(backups: int, radius: float, target_chunk: int | None, cost_weight: float, chunk: int) -> Implementation:
+    """Minus what the plan made once a walk's readings are folded in costs under the field the walk was imagined under"""
+    return _built(
+        "zermelo.methods.waypoint_bo.utility.ReplannedTrip",
+        planner=value_iteration(1, backups, radius, target_chunk, cost_weight),
+        chunk=chunk,
+    )
+
+
+def information_gain(reading_noise: float) -> Implementation:
+    """(m / 2) log det(I + K_n / reading_noise^2) over a walk's readings"""
+    return _built("zermelo.methods.waypoint_bo.utility.InformationGain", reading_noise=reading_noise)
 
 
 def max_magnitude() -> Implementation:

@@ -135,7 +135,13 @@ class MethodConfig:
     """Whether travel subtracts from value at `step_rate`, divides it, or subtracts as it is, the value being in steps"""
 
     n_candidates: int | None = MISSING
-    """Cap on candidates scored per move (None scores every one)"""
+    """Cap on candidates scored per move (None scores every one, 0 the target alone)"""
+
+    information: Any = MISSING
+    """What the readings along a walk tell, as a dotted path with its own arguments, or None to add nothing"""
+
+    information_rate: float | None = MISSING
+    """`lambda`: the most informative candidate's information is worth this share of the spread of the candidate values"""
 
     opening_steps: int = MISSING
     """time_steps of uniform random walking taken before the rule starts"""

@@ -2,7 +2,16 @@ import dataclasses
 
 from zermelo.experiments.ocean_waypoint.registry import GULF_STREAM_2019JUN, RECORDED, error_belief, oracle_belief
 from zermelo.experiments.ocean_waypoint.schema import BeliefConfig, MethodConfig, Resources
-from zermelo.experiments.ocean_waypoint.setup import Implementation, arm, learned_trip, remaining_trip, sweep, uniform, value_iteration
+from zermelo.experiments.ocean_waypoint.setup import (
+    Implementation,
+    arm,
+    information_gain,
+    remaining_trip,
+    replanned_trip,
+    sweep,
+    uniform,
+    value_iteration,
+)
 
 WORLD = dataclasses.replace(
     GULF_STREAM_2019JUN,
@@ -30,25 +39,28 @@ def _belief(oracle: bool) -> BeliefConfig:
     )
 
 
-def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int) -> MethodConfig:
+def _method(
+    utility: Implementation, *, n_fields: int, n_walks: int, n_candidates: int | None, information: Implementation | None
+) -> MethodConfig:
     """One rule on a value-iteration planner, travel priced in steps, at the settings the arms differ in"""
     return MethodConfig(
         utility=utility,
         planner=value_iteration(replan_every=3, backups=BACKUPS, radius=60.0, target_chunk=None, cost_weight=0.0),
-        improvement=improvement,
+        improvement=True,
         n_fields=n_fields,
         n_walks=n_walks,
         combination="steps",
         step_rate=None,
         steps_from="predicted",
-        n_candidates=8,
+        n_candidates=n_candidates,
+        information=information,
+        information_rate=None if information is None else 1.0,
         opening_steps=2,  # two uniform moves, leaving eight the rule decides
     )
 
 
-def _trip(learned: bool) -> Implementation:
-    """A trip utility solving with the planner's own numbers"""
-    return (learned_trip if learned else remaining_trip)(backups=BACKUPS, radius=60.0, target_chunk=None, cost_weight=0.0)
+REMAINING = remaining_trip(backups=BACKUPS, radius=60.0, target_chunk=None, cost_weight=0.0)
+"""-H_mu(end of walk, target)"""
 
 
 # One entry per device the runs can run on; `smoke_gpu` asks for an accelerator and a gpu-high node
@@ -68,11 +80,25 @@ for name, resources in (
         seeds=[0],
         resources=resources,
         arms=[
-            arm("ce", _method(_trip(False), improvement=False, n_fields=0, n_walks=0), _belief(oracle=False)),
-            arm("draws", _method(_trip(False), improvement=False, n_fields=2, n_walks=0), _belief(oracle=False)),
-            arm("learned", _method(_trip(True), improvement=True, n_fields=2, n_walks=2), _belief(oracle=False)),
-            arm("rand_wp", _method(uniform(), improvement=False, n_fields=0, n_walks=0), _belief(oracle=False)),
+            arm("direct", _method(REMAINING, n_fields=0, n_walks=0, n_candidates=0, information=None), _belief(oracle=False)),
+            arm(
+                "info",
+                _method(REMAINING, n_fields=0, n_walks=2, n_candidates=8, information=information_gain(WORLD.noise_ms)),
+                _belief(oracle=False),
+            ),
+            arm(
+                "eti",
+                _method(
+                    replanned_trip(backups=BACKUPS, radius=60.0, target_chunk=None, cost_weight=0.0, chunk=4),
+                    n_fields=2,
+                    n_walks=2,
+                    n_candidates=3,
+                    information=None,
+                ),
+                _belief(oracle=False),
+            ),
+            arm("rand_wp", _method(uniform(), n_fields=0, n_walks=0, n_candidates=8, information=None), _belief(oracle=False)),
             arm("rand_act", None, _belief(oracle=False)),  # no rule at all
-            arm("oracle", _method(_trip(False), improvement=False, n_fields=0, n_walks=0), _belief(oracle=True)),
+            arm("oracle", _method(REMAINING, n_fields=0, n_walks=0, n_candidates=0, information=None), _belief(oracle=True)),
         ],
     )
