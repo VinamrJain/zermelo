@@ -112,7 +112,7 @@ where = given.target if given.target.exists() else SWEEPS / given.target
 if not where.is_dir():
     raise SystemExit(f"no sweep, launch or run directory at {given.target}, and none at {SWEEPS / given.target}")
 if (where / "record.npz").exists():
-    launch, runs = where.parent.parent, [where]
+    launch, runs = where.parent, [where]
 else:
     launch = latest_launch(where)
     runs = [
