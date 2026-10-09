@@ -111,14 +111,14 @@ def at_each_snapshot(claim: Any, snapshots: int, claim_every: int) -> Any:
     return claim[np.minimum(np.arange(snapshots) // claim_every, claim.shape[0] - 1)]
 
 
-def episode_curves(held: dict[str, Any], claim_every: int) -> dict[str, Any]:
+def episode_curves(held: dict[str, Any], claim_every: int, prior_log_variance: float) -> dict[str, Any]:
     """What one episode achieved, a value per time_step
 
     distance_to_target  ||position - target|| on the plane tangent at the box's middle latitude, km
     arrived             1 once within arrival_km of the target
     rmse                sqrt(mean over candidates and components of (W - mu_t)^2)
     posterior_variance  mean over candidates of exp(v_t,u) + exp(v_t,v)
-    information         (1/2) sum over candidates and components of (v_0 - v_t), nats the claim's marginals have shed
+    information         (1/2) sum over candidates and components of (prior_log_variance - v_t), nats the claim's marginals have shed since the prior
     """
     arrived = held["objective_state/arrived"][1:]  # (time_steps,)
     position, target = held["state/position"][1:], held["state/target"][1:]  # (time_steps, 2) as (lat, lon) degrees
@@ -128,7 +128,7 @@ def episode_curves(held: dict[str, Any], claim_every: int) -> dict[str, Any]:
     claim = at_each_snapshot(held["objective_state/claim"], arrived.size + 1, claim_every)[1:]
     mean, spread = claimed(claim)  # (time_steps, candidates, 2) and (time_steps, candidates)
     log_variance = np.maximum(held["objective_state/claim"][..., 2:4], LOG_VARIANCE_FLOOR)  # (snapshots, candidates, 2)
-    shed = 0.5 * np.sum(log_variance[0] - log_variance, axis=(-2, -1))  # (snapshots,)
+    shed = 0.5 * np.sum(prior_log_variance - log_variance, axis=(-2, -1))  # (snapshots,)
     return {
         "distance_to_target": distance,
         "arrived": arrived,
@@ -185,7 +185,7 @@ def tables(runs: list[tuple[str, int, Path, dict[str, Any]]]) -> tuple[pd.DataFr
     scalars: list[dict[str, Any]] = []
     for arm, seed, run, config in runs:
         held = channels(run, TABLE_CHANNELS)
-        achieved = episode_curves(held, int(config["claim_every"]))
+        achieved = episode_curves(held, int(config["claim_every"]), 2.0 * float(np.log(config["belief"]["amplitude"])))
         legs = episode_legs(held, config)
         hours = float(config["problem"]["step_hours"]) * np.arange(1, held["objective_state/arrived"].size)
         curves.append(pd.DataFrame({"acquisition": arm, "seed": seed, "x": hours, **achieved}))
