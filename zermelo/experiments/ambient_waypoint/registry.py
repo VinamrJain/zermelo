@@ -66,14 +66,11 @@ RECORDED = {
     "objective_state/truth": 1,
     "objective_state/claim": CLAIM_EVERY_STEPS,
     "agent_state/time_steps_since_waypoint": 1,
-    "agent_state/scores.predicted_step_cost": 1,
-    "agent_state/scores.frac_zero_value_candidates": 1,
-    "agent_state/scores.frac_reachable_candidates": 1,
     "agent_state/scores.waypoint": 1,
     "agent_state/scores.imagined_walk_to_waypoint": 1,
     "agent_state/scores.candidate_indices": 1,
     "agent_state/scores.acquisition_value": 1,
-    "agent_state/policy.act": 1,
+    "agent_state/scores.route.act": 1,
 }
 """What a record stores, and the moves between the snapshots it keeps of each"""
 

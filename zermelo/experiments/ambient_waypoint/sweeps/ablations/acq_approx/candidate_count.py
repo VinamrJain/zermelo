@@ -25,7 +25,6 @@ def _method(n_candidates: int | None) -> MethodConfig:
         n_walks=16,
         combination="linear",
         step_rate=0.5,
-        steps_from="predicted",
         n_candidates=n_candidates,
         opening_steps=OPENING_STEPS,
     )

@@ -32,7 +32,6 @@ def _method(
         n_walks=n_walks,
         combination="linear",
         step_rate=step_rate,
-        steps_from="predicted",
         n_candidates=N_CANDIDATES,
         opening_steps=OPENING_STEPS,
     )

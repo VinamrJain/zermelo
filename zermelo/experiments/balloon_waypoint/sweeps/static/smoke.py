@@ -20,7 +20,6 @@ def _method(utility: Implementation) -> MethodConfig:
         n_walks=2,
         combination="linear",
         step_rate=1.0,
-        steps_from="predicted",
         n_candidates=16,
         opening_steps=0,
     )

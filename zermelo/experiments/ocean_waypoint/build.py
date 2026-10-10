@@ -110,7 +110,6 @@ def assemble(cfg: RunConfig) -> Episode:
                 n_candidates=cfg.method.n_candidates,
                 improvement=cfg.method.improvement,
                 step_rate=cfg.method.step_rate,
-                steps_from=cfg.method.steps_from,
                 combination=cfg.method.combination,
                 information=None if cfg.method.information is None else instantiate(cfg.method.information, _target_whitelist_=WHITELIST),
                 information_rate=cfg.method.information_rate,

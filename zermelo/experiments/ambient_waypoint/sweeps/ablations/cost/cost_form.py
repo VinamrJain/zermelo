@@ -27,7 +27,6 @@ def _method(*, combination: Literal["linear", "fraction"], step_rate: float | No
         n_walks=16,
         combination=combination,
         step_rate=step_rate,
-        steps_from="predicted",
         n_candidates=None,
         opening_steps=OPENING_STEPS,
     )

@@ -37,7 +37,6 @@ def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walk
         n_walks=n_walks,
         combination="linear",
         step_rate=step_rate,
-        steps_from="predicted",
         n_candidates=None,
         opening_steps=OPENING_STEPS,
     )

@@ -99,7 +99,6 @@ def assemble(cfg: RunConfig) -> Episode:
                 n_candidates=cfg.method.n_candidates,
                 improvement=cfg.method.improvement,
                 step_rate=cfg.method.step_rate,
-                steps_from=cfg.method.steps_from,
                 combination=cfg.method.combination,
                 information=None,
                 information_rate=None,

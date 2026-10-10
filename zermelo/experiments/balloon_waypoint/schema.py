@@ -115,7 +115,6 @@ class MethodConfig:
     step_rate: float | None = MISSING
     """`lambda`: a full-budget trip costs this share of the spread of the candidate values"""
 
-    steps_from: Literal["predicted", "rolled"] = MISSING
     """Whether travel is priced from the planner's table or from the walks that were rolled"""
 
     combination: Literal["linear", "fraction"] = MISSING

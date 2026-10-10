@@ -39,7 +39,6 @@ METHOD = MethodConfig(
     n_walks=16,
     combination="linear",
     step_rate=0.5,
-    steps_from="predicted",
     n_candidates=None,
     opening_steps=OPENING_STEPS,
 )

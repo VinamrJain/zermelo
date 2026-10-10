@@ -54,7 +54,6 @@ def _method(
         n_walks=n_walks,
         combination="steps",
         step_rate=None,
-        steps_from="predicted",
         n_candidates=n_candidates,
         information=information,
         information_rate=information_rate,
