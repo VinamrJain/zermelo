@@ -1,4 +1,4 @@
-"""alpha(x) = w(x) - c H(z, x), w(x) / H(z, x) or w(x) - H(z, x), where w(x) = E over fields and walks of [ U(D + obs(tau)) - U(D) ]
+"""alpha(x) = w(x) - c H(z, x) or w(x) - H(z, x), where w(x) = E over fields and walks of [ U(D + obs(tau)) - U(D) ]
 
 plus, where an information utility I is given, lambda * L / (max I - min I) * I(x), the range over the candidates within L steps, for L the planner's
 replan_every, and only such a candidate may win then
@@ -67,12 +67,12 @@ class Acquisition:
     step_rate: float | None
     """`lambda`: a full-budget trip costs this share of the spread of the candidate values"""
 
-    combination: Literal["linear", "fraction", "steps"]
-    """Whether travel is subtracted from the worth at `step_rate`, divides it, or is subtracted as it is, the worth being in steps"""
+    combination: Literal["linear", "steps"]
+    """Whether travel is subtracted from the worth at `step_rate`, or as it is, the worth being in steps"""
 
     def __post_init__(self) -> None:
-        if (self.step_rate is None) != (self.combination != "linear"):
-            raise ValueError("a linear combination is priced by step_rate and the others take none; state exactly one of the two")
+        if (self.step_rate is None) != (self.combination == "steps"):
+            raise ValueError("a linear combination is priced by step_rate and steps takes none; state exactly one of the two")
         if (self.information is None) != (self.information_rate is None):
             raise ValueError("an information utility is added at information_rate; state both or neither")
 
@@ -150,12 +150,7 @@ class Acquisition:
         # nothing, and the argmax then takes the lowest index.
         rate = 0.0 if self.step_rate is None else self.step_rate
         charge = jnp.zeros(()) if rate == 0.0 else rate * (jnp.max(worth) - jnp.min(worth)) / self.planner.cost_budget
-        if self.combination == "linear":  # alpha(x)
-            value = worth - charge * expected_spend
-        elif self.combination == "fraction":
-            value = worth / jnp.maximum(expected_spend, 1.0)
-        else:
-            value = worth - expected_spend
+        value = worth - charge * expected_spend if self.combination == "linear" else worth - expected_spend  # alpha(x)
         allowed = expected_spend > 0.0  # a candidate within the planner's radius spends nothing and would win every tie: never chosen
         if self.information is not None and self.information_rate is not None:
             information = jnp.mean(jnp.stack(information_samples), axis=(0, 1))  # I(x)

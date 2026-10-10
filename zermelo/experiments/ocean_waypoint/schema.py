@@ -145,7 +145,7 @@ class MethodConfig:
 
     """Whether travel is priced from the planner's table or from the walks that were rolled"""
 
-    combination: Literal["linear", "fraction", "steps"] = MISSING
+    combination: Literal["linear", "steps"] = MISSING
     """Whether travel subtracts from value at `step_rate`, divides it, or subtracts as it is, the value being in steps"""
 
     n_candidates: int | None = MISSING
