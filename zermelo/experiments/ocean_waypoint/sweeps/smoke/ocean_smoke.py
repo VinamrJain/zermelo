@@ -5,6 +5,7 @@ from zermelo.experiments.ocean_waypoint.schema import BeliefConfig, MethodConfig
 from zermelo.experiments.ocean_waypoint.setup import (
     Implementation,
     arm,
+    max_magnitude,
     posterior_spread,
     region_information,
     sweep,
@@ -87,6 +88,27 @@ sweep(
         arm("evi", _method(total_variance(), n_fields=0, n_walks=2, n_candidates=8), _belief(oracle=False)),
         arm("eii", _method(region_information(WORLD.noise_ms), n_fields=0, n_walks=2, n_candidates=8), _belief(oracle=False)),
         arm("max_var", _method(posterior_spread(), n_fields=0, n_walks=0, n_candidates=8), _belief(oracle=False)),
+        arm("rand_act", None, _belief(oracle=False)),
+    ],
+)
+
+# The search objective on the same coarse grid, the fields drawn and the walks kept few
+sweep(
+    "smoke_search",
+    problem=dataclasses.replace(WORLD, objective="search"),
+    horizon=10,
+    claim_every=1,
+    recorded={
+        **RECORDED,
+        "objective_state/claim": 1,
+        "objective_state/best_observed_magnitude": 1,
+        "objective_state/best_possible_magnitude": 1,
+    },
+    seeds=[0],
+    resources=Resources(cpus=1, mem_gb=8, timeout_min=20, gres=None, partition="dean", constraint="avx2", array_parallelism=10),
+    arms=[
+        arm("emi", _method(max_magnitude(), n_fields=2, n_walks=2, n_candidates=8), _belief(oracle=False)),
+        arm("mc_ei", _method(max_magnitude(), n_fields=2, n_walks=0, n_candidates=8), _belief(oracle=False)),
         arm("rand_act", None, _belief(oracle=False)),
     ],
 )

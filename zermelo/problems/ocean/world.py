@@ -10,7 +10,7 @@ from jaxtyping import Array, Bool, Float
 from zermelo.interface import BoxDomain, FunctionDomain, ProductDomain, ProductPrior, Uniform, World
 from zermelo.problems.ocean.field import ForecastPrior, OceanCurrent, OceanCurrentError
 from zermelo.problems.ocean.grid import PlaneGrid
-from zermelo.problems.ocean.objective import LearnRegion, ReachTarget
+from zermelo.problems.ocean.objective import LearnRegion, ReachTarget, SearchMagnitude
 from zermelo.problems.ocean.readout import PointOceanCurrent
 from zermelo.problems.ocean.transition import OceanTransition, Polar
 
@@ -104,3 +104,8 @@ def ocean_objective(states: ProductDomain, grid: PlaneGrid, box: Bool[Array, " p
 def learn_objective(states: ProductDomain, box: Bool[Array, " pos"], prior_log_variance: float) -> LearnRegion:
     """What the episode is scored on: information about the ocean current over the grid points `box` marks, waypoints aimed inside it"""
     return LearnRegion(states.narrow(box), prior_log_variance)
+
+
+def search_objective(states: ProductDomain, box: Bool[Array, " pos"]) -> SearchMagnitude:
+    """What the episode is scored on: the fastest ocean current stood on over the grid points `box` marks, waypoints aimed inside it"""
+    return SearchMagnitude(states.narrow(box))

@@ -1,0 +1,59 @@
+import dataclasses
+
+from zermelo.experiments.ocean_waypoint.registry import (
+    ARRIVAL_RADIUS_KM,
+    CLAIM_EVERY_STEPS,
+    GULF_STREAM_2019JUN,
+    HORIZON_LENGTH,
+    N_SEEDS,
+    PLANNING_BUDGET,
+    RECORDED,
+    RESOURCES,
+    ocean_current_belief,
+)
+from zermelo.experiments.ocean_waypoint.schema import MethodConfig
+from zermelo.experiments.ocean_waypoint.setup import Implementation, arm, max_magnitude, sweep, uniform, upper_confidence, value_iteration
+
+WORLD = dataclasses.replace(GULF_STREAM_2019JUN, objective="search")
+"""The same frame, scored on the fastest ocean current stood on inside the target box, which is also where a waypoint may be aimed"""
+
+N_FIELDS = 16
+"""`N` fields drawn from the posterior per decision"""
+
+N_WALKS = 16
+"""`M` walks the path-aware rule imagines per candidate under each drawn field"""
+
+
+def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int) -> MethodConfig:
+    """One rule on a value-iteration planner, travel not priced"""
+    return MethodConfig(
+        utility=utility,
+        planner=value_iteration(replan_every=PLANNING_BUDGET, radius=ARRIVAL_RADIUS_KM, target_chunk=None, cost_weight=0.0),
+        improvement=improvement,
+        n_fields=n_fields,
+        n_walks=n_walks,
+        penalty_rate=0.0,
+        n_candidates=None,
+        opening_steps=0,
+    )
+
+
+sweep(
+    "search",
+    problem=WORLD,
+    horizon=HORIZON_LENGTH,
+    claim_every=CLAIM_EVERY_STEPS,
+    recorded={**RECORDED, "objective_state/best_observed_magnitude": 1, "objective_state/best_possible_magnitude": 1},
+    seeds=list(range(N_SEEDS)),
+    resources=dataclasses.replace(RESOURCES, constraint="avx2&gpu-high"),  # 48 GB cards and up
+    arms=[
+        # E over fields f and walks tau of max(0, max over z in tau of ||f(z)|| - beta_n)
+        arm("emi", _method(max_magnitude(), improvement=True, n_fields=N_FIELDS, n_walks=N_WALKS), ocean_current_belief()),
+        # E over fields f of max(0, ||f(x)|| - beta_n) at the destination alone
+        arm("mc_ei", _method(max_magnitude(), improvement=True, n_fields=N_FIELDS, n_walks=0), ocean_current_belief()),
+        arm("ucb", _method(upper_confidence(2.0), improvement=False, n_fields=0, n_walks=0), ocean_current_belief()),
+        arm("ts", _method(max_magnitude(), improvement=False, n_fields=1, n_walks=0), ocean_current_belief()),
+        arm("rand_wp", _method(uniform(), improvement=False, n_fields=0, n_walks=0), ocean_current_belief()),
+        arm("rand_act", None, ocean_current_belief()),  # no rule at all
+    ],
+)
