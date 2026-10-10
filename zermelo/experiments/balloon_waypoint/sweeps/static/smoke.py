@@ -18,8 +18,7 @@ def _method(utility: Implementation) -> MethodConfig:
         improvement=True,
         n_fields=2,
         n_walks=2,
-        combination="linear",
-        step_rate=1.0,
+        penalty_rate=1.0,
         n_candidates=16,
         opening_steps=0,
     )

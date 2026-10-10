@@ -16,7 +16,7 @@ HORIZON = 500
 """Moves an episode makes here: ten planning budgets"""
 
 
-def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, step_rate: float) -> MethodConfig:
+def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, penalty_rate: float) -> MethodConfig:
     """This sweep's held values"""
     return MethodConfig(
         utility=utility,
@@ -24,8 +24,7 @@ def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walk
         improvement=improvement,
         n_fields=n_fields,
         n_walks=n_walks,
-        combination="linear",
-        step_rate=step_rate,
+        penalty_rate=penalty_rate,
         n_candidates=None,
         opening_steps=OPENING_STEPS,
     )
@@ -46,13 +45,13 @@ for name, resources in (
         arms=[
             arm(
                 "eui_fields16_walks16_rate0p5",  # the pathwise sampler runs on this arm
-                _method(max_magnitude(), improvement=True, n_fields=16, n_walks=16, step_rate=0.5),
+                _method(max_magnitude(), improvement=True, n_fields=16, n_walks=16, penalty_rate=0.5),
                 matched_belief(AMBIENT1_CONTROL1),
             ),
             # no draws and no walks: this arm times the planner alone
             arm(
                 "random_search",
-                _method(uniform(), improvement=False, n_fields=0, n_walks=0, step_rate=0.0),
+                _method(uniform(), improvement=False, n_fields=0, n_walks=0, penalty_rate=0.0),
                 matched_belief(AMBIENT1_CONTROL1),
             ),
         ],

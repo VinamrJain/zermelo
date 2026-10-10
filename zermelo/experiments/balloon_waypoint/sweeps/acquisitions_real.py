@@ -30,7 +30,7 @@ BELIEF = error_belief()
 
 
 def _method(
-    utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, step_rate: float, cost_weight: float
+    utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, penalty_rate: float, cost_weight: float
 ) -> MethodConfig:
     """This sweep's held values"""
     return MethodConfig(
@@ -39,8 +39,7 @@ def _method(
         improvement=improvement,
         n_fields=n_fields,
         n_walks=n_walks,
-        combination="linear",
-        step_rate=step_rate,
+        penalty_rate=penalty_rate,
         n_candidates=N_CANDIDATES,
         opening_steps=OPENING_STEPS,
     )
@@ -56,21 +55,25 @@ sweep(
     resources=RESOURCES,
     arms=[
         arm("random_act", None, BELIEF),  # no rule at all: acts uniformly and claims the prior
-        arm("random_search", _method(uniform(), improvement=False, n_fields=0, n_walks=0, step_rate=0.0, cost_weight=0.25), BELIEF),
-        arm("max_variance", _method(posterior_spread(), improvement=False, n_fields=0, n_walks=0, step_rate=0.0, cost_weight=0.25), BELIEF),
-        arm("ucb2", _method(upper_confidence(2.0), improvement=False, n_fields=0, n_walks=0, step_rate=0.0, cost_weight=0.25), BELIEF),
-        arm("mc_ei16", _method(max_magnitude(), improvement=True, n_fields=16, n_walks=0, step_rate=0.0, cost_weight=0.25), BELIEF),
-        arm("thompson", _method(max_magnitude(), improvement=False, n_fields=1, n_walks=0, step_rate=0.0, cost_weight=0.25), BELIEF),
+        arm("random_search", _method(uniform(), improvement=False, n_fields=0, n_walks=0, penalty_rate=0.0, cost_weight=0.25), BELIEF),
+        arm(
+            "max_variance",
+            _method(posterior_spread(), improvement=False, n_fields=0, n_walks=0, penalty_rate=0.0, cost_weight=0.25),
+            BELIEF,
+        ),
+        arm("ucb2", _method(upper_confidence(2.0), improvement=False, n_fields=0, n_walks=0, penalty_rate=0.0, cost_weight=0.25), BELIEF),
+        arm("mc_ei16", _method(max_magnitude(), improvement=True, n_fields=16, n_walks=0, penalty_rate=0.0, cost_weight=0.25), BELIEF),
+        arm("thompson", _method(max_magnitude(), improvement=False, n_fields=1, n_walks=0, penalty_rate=0.0, cost_weight=0.25), BELIEF),
         # the rule this study proposes: a step costs 1 + 0.25 * the resource it spends
         arm(
             "eui_fields16_walks16_rate0p5",
-            _method(max_magnitude(), improvement=True, n_fields=16, n_walks=16, step_rate=0.5, cost_weight=0.25),
+            _method(max_magnitude(), improvement=True, n_fields=16, n_walks=16, penalty_rate=0.5, cost_weight=0.25),
             BELIEF,
         ),
         # the same rule charging the step alone, isolating what the resource term buys
         arm(
             "eui_fields16_walks16_rate0p5_no_resource",
-            _method(max_magnitude(), improvement=True, n_fields=16, n_walks=16, step_rate=0.5, cost_weight=0.0),
+            _method(max_magnitude(), improvement=True, n_fields=16, n_walks=16, penalty_rate=0.5, cost_weight=0.0),
             BELIEF,
         ),
     ],

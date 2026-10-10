@@ -28,7 +28,7 @@ BELIEF = matched_belief(AMBIENT1_CONTROL1)
 """The same model on every arm, matched to the truth"""
 
 
-def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, step_rate: float) -> MethodConfig:
+def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, penalty_rate: float) -> MethodConfig:
     """This sweep's held values"""
     return MethodConfig(
         utility=utility,
@@ -36,8 +36,7 @@ def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walk
         improvement=improvement,
         n_fields=n_fields,
         n_walks=n_walks,
-        combination="linear",
-        step_rate=step_rate,
+        penalty_rate=penalty_rate,
         n_candidates=None,
         opening_steps=OPENING_STEPS,
     )
@@ -53,12 +52,12 @@ sweep(
     resources=dataclasses.replace(RESOURCES, mem_gb=16, timeout_min=480, array_parallelism=40),
     arms=[
         arm("random_act", None, BELIEF),  # no rule at all: acts uniformly and claims the prior
-        arm("random_search", _method(uniform(), improvement=False, n_fields=0, n_walks=0, step_rate=0.0), BELIEF),
-        arm("max_variance", _method(posterior_spread(), improvement=False, n_fields=0, n_walks=0, step_rate=0.0), BELIEF),
-        arm("ucb2", _method(upper_confidence(2.0), improvement=False, n_fields=0, n_walks=0, step_rate=0.0), BELIEF),
-        arm("ei", _method(expected_improvement(), improvement=False, n_fields=0, n_walks=0, step_rate=0.0), BELIEF),
-        arm("mc_ei16", _method(max_magnitude(), improvement=True, n_fields=16, n_walks=0, step_rate=0.0), BELIEF),
-        arm("thompson", _method(max_magnitude(), improvement=False, n_fields=1, n_walks=0, step_rate=0.0), BELIEF),
-        arm("eui_fields16_walks16_rate0p5", _method(max_magnitude(), improvement=True, n_fields=16, n_walks=16, step_rate=0.5), BELIEF),
+        arm("random_search", _method(uniform(), improvement=False, n_fields=0, n_walks=0, penalty_rate=0.0), BELIEF),
+        arm("max_variance", _method(posterior_spread(), improvement=False, n_fields=0, n_walks=0, penalty_rate=0.0), BELIEF),
+        arm("ucb2", _method(upper_confidence(2.0), improvement=False, n_fields=0, n_walks=0, penalty_rate=0.0), BELIEF),
+        arm("ei", _method(expected_improvement(), improvement=False, n_fields=0, n_walks=0, penalty_rate=0.0), BELIEF),
+        arm("mc_ei16", _method(max_magnitude(), improvement=True, n_fields=16, n_walks=0, penalty_rate=0.0), BELIEF),
+        arm("thompson", _method(max_magnitude(), improvement=False, n_fields=1, n_walks=0, penalty_rate=0.0), BELIEF),
+        arm("eui_fields16_walks16_rate0p5", _method(max_magnitude(), improvement=True, n_fields=16, n_walks=16, penalty_rate=0.5), BELIEF),
     ],
 )

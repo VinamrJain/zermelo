@@ -23,8 +23,7 @@ def _method(n_candidates: int | None) -> MethodConfig:
         improvement=True,
         n_fields=16,
         n_walks=16,
-        combination="linear",
-        step_rate=0.5,
+        penalty_rate=0.5,
         n_candidates=n_candidates,
         opening_steps=OPENING_STEPS,
     )

@@ -33,7 +33,7 @@ BELIEFS = {"error": error_belief(), "wind": wind_belief()}
 
 
 def _method(
-    utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, step_rate: float, replan_every: int, cost_weight: float
+    utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, penalty_rate: float, replan_every: int, cost_weight: float
 ) -> MethodConfig:
     """One acquisition on a value-iteration planner, at the settings the acquisitions differ in"""
     return MethodConfig(
@@ -42,8 +42,7 @@ def _method(
         improvement=improvement,
         n_fields=n_fields,
         n_walks=n_walks,
-        combination="linear",
-        step_rate=step_rate,
+        penalty_rate=penalty_rate,
         n_candidates=N_CANDIDATES,
         opening_steps=OPENING_STEPS,
     )
@@ -52,21 +51,21 @@ def _method(
 COST_WEIGHT = 0.0
 """Price of one altitude change in time_steps: none, the `tuning` sweep steering only at zero"""
 
-STEP_RATE = 1.0
+PENALTY_RATE = 1.0
 """Share of the spread of worth a full-budget trip costs, the `tuning` sweep's best"""
 
 
 def _baseline(utility: Implementation, n_fields: int) -> MethodConfig:
     """A rule reading the posterior (or `n_fields` draws of it) at the candidates, charging no travel"""
     return _method(
-        utility, improvement=False, n_fields=n_fields, n_walks=0, step_rate=0.0, replan_every=PLANNING_BUDGET, cost_weight=COST_WEIGHT
+        utility, improvement=False, n_fields=n_fields, n_walks=0, penalty_rate=0.0, replan_every=PLANNING_BUDGET, cost_weight=COST_WEIGHT
     )
 
 
-def _ours(utility: Implementation, *, step_rate: float = STEP_RATE, replan_every: int = PLANNING_BUDGET) -> MethodConfig:
+def _ours(utility: Implementation, *, penalty_rate: float = PENALTY_RATE, replan_every: int = PLANNING_BUDGET) -> MethodConfig:
     """Expected improvement of `utility` over 16 imagined walks under 16 drawn fields"""
     return _method(
-        utility, improvement=True, n_fields=16, n_walks=16, step_rate=step_rate, replan_every=replan_every, cost_weight=COST_WEIGHT
+        utility, improvement=True, n_fields=16, n_walks=16, penalty_rate=penalty_rate, replan_every=replan_every, cost_weight=COST_WEIGHT
     )
 
 
@@ -93,7 +92,7 @@ sweep(
                 improvement=False,
                 n_fields=0,
                 n_walks=16,
-                step_rate=STEP_RATE,
+                penalty_rate=PENALTY_RATE,
                 replan_every=PLANNING_BUDGET,
                 cost_weight=COST_WEIGHT,
             ),

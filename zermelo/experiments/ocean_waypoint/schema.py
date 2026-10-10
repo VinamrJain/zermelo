@@ -140,22 +140,11 @@ class MethodConfig:
     improvement: bool = MISSING
     """Whether a candidate is scored by the increment it would add rather than its level"""
 
-    step_rate: float | None = MISSING
-    """`lambda`: a full-budget trip costs this share of the spread of the candidate values"""
-
-    """Whether travel is priced from the planner's table or from the walks that were rolled"""
-
-    combination: Literal["linear", "steps"] = MISSING
-    """Whether travel subtracts from value at `step_rate`, divides it, or subtracts as it is, the value being in steps"""
+    penalty_rate: float = MISSING
+    """`lambda`: a full-budget trip is charged this share of the spread of the candidate values (zero charges nothing)"""
 
     n_candidates: int | None = MISSING
     """Cap on candidates scored per move (None scores every one, 0 the target alone)"""
-
-    information: Any = MISSING
-    """What the readings along a walk tell, as a dotted path with its own arguments, or None to add nothing"""
-
-    information_rate: float | None = MISSING
-    """`lambda`: the most informative candidate's information is worth this share of the spread of the candidate values"""
 
     opening_steps: int = MISSING
     """time_steps of uniform random walking taken before the rule starts"""

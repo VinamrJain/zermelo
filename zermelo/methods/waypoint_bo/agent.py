@@ -72,6 +72,9 @@ class WaypointAgent(Agent[WaypointAgentState]):
     target_key: str | None
     """Which part of the reading carries the state a trip utility steers to, in the form the position part takes (None steers nowhere)"""
 
+    budget_column: int | None
+    """Which column of the context row carries the budget left to spend on steps, None where the problem keeps none"""
+
     horizon: int
     """`T`: the episode's time_steps, one reading per time_step filling one buffer row"""
 
@@ -123,7 +126,7 @@ class WaypointAgent(Agent[WaypointAgentState]):
             acquisition_value=jnp.zeros(n_scored),
             waypoint=jnp.zeros((), jnp.int32),
             imagined_walk_to_waypoint=jnp.zeros(time_steps, jnp.int32),
-            route=Policy(jnp.zeros((n_states, 1), jnp.int8), jnp.zeros((n_states, 1))),
+            route=Policy(jnp.zeros((n_states, 1), jnp.int8), jnp.zeros((n_states, 1)), jnp.zeros((n_states, 1))),
         )
         context = self._context(obs)
         prior_mean = obs.reading[self.prior_mean_key] if self.prior_mean_key is not None and self.prior_mean_key in obs.reading else None
@@ -152,7 +155,8 @@ class WaypointAgent(Agent[WaypointAgentState]):
         if bool(budget_spent | planner.arrived(self.positions, agent_state.scores.waypoint[None])[z, 0]):
             actions = self._legal_actions(obs)
             target = None if self.target_key is None else self.candidates.index_of(obs.reading[self.target_key])
-            scores = self.acquisition.choose(k_score, belief, self.transition, z, actions, self.candidates, context, target)
+            budget_left = None if self.budget_column is None else context[self.budget_column]
+            scores = self.acquisition.choose(k_score, belief, self.transition, z, actions, self.candidates, context, target, budget_left)
             since = jnp.zeros((), jnp.int32)
         else:
             scores, since = agent_state.scores, agent_state.time_steps_since_waypoint + 1

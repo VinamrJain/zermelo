@@ -25,8 +25,7 @@ def _method(*, n_fields: int, n_walks: int) -> MethodConfig:
         improvement=True,
         n_fields=n_fields,
         n_walks=n_walks,
-        combination="linear",
-        step_rate=0.5,
+        penalty_rate=0.5,
         n_candidates=None,
         opening_steps=OPENING_STEPS,
     )

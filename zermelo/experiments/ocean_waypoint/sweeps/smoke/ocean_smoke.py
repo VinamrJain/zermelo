@@ -5,11 +5,8 @@ from zermelo.experiments.ocean_waypoint.schema import BeliefConfig, MethodConfig
 from zermelo.experiments.ocean_waypoint.setup import (
     Implementation,
     arm,
-    information_gain,
     posterior_spread,
     region_information,
-    remaining_trip,
-    replanned_trip,
     sweep,
     total_variance,
     uniform,
@@ -26,9 +23,6 @@ WORLD = dataclasses.replace(
 )
 """The world on a coarse grid, the forecast being the truth under a drawn error"""
 
-BACKUPS = 30
-"""`K`: rounds of backup, and the steps a hitting cost is truncated at"""
-
 
 def _belief(oracle: bool) -> BeliefConfig:
     """The model an arm holds: the drawn error's own numbers, or the true ocean current itself"""
@@ -42,27 +36,18 @@ def _belief(oracle: bool) -> BeliefConfig:
     )
 
 
-def _method(
-    utility: Implementation, *, n_fields: int, n_walks: int, n_candidates: int | None, information: Implementation | None
-) -> MethodConfig:
-    """One rule on a value-iteration planner, travel priced in steps, at the settings the arms differ in"""
+def _method(utility: Implementation, *, n_fields: int, n_walks: int, n_candidates: int | None) -> MethodConfig:
+    """One rule on a value-iteration planner, only the candidates within reach scored, at the settings the arms differ in"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(replan_every=3, backups=BACKUPS, radius=60.0, target_chunk=None, cost_weight=0.0),
+        planner=value_iteration(replan_every=3, radius=60.0, target_chunk=None, cost_weight=0.0),
         improvement=True,
         n_fields=n_fields,
         n_walks=n_walks,
-        combination="steps",
-        step_rate=None,
+        penalty_rate=0.0,
         n_candidates=n_candidates,
-        information=information,
-        information_rate=None if information is None else 1.0,
         opening_steps=2,  # two uniform moves, leaving eight the rule decides
     )
-
-
-REMAINING = remaining_trip(backups=BACKUPS, radius=60.0, target_chunk=None, cost_weight=0.0)
-"""-H_mu(end of walk, target)"""
 
 
 # One entry per device the runs can run on; `smoke_gpu` asks for an accelerator and a gpu-high node
@@ -82,26 +67,10 @@ for name, resources in (
         seeds=[0],
         resources=resources,
         arms=[
-            arm("direct", _method(REMAINING, n_fields=0, n_walks=0, n_candidates=0, information=None), _belief(oracle=False)),
-            arm(
-                "info",
-                _method(REMAINING, n_fields=0, n_walks=2, n_candidates=8, information=information_gain(WORLD.noise_ms)),
-                _belief(oracle=False),
-            ),
-            arm(
-                "eti",
-                _method(
-                    replanned_trip(backups=BACKUPS, radius=60.0, target_chunk=None, cost_weight=0.0, chunk=4),
-                    n_fields=2,
-                    n_walks=2,
-                    n_candidates=3,
-                    information=None,
-                ),
-                _belief(oracle=False),
-            ),
-            arm("rand_wp", _method(uniform(), n_fields=0, n_walks=0, n_candidates=8, information=None), _belief(oracle=False)),
+            arm("direct", _method(uniform(), n_fields=0, n_walks=0, n_candidates=0), _belief(oracle=False)),
+            arm("rand_wp", _method(uniform(), n_fields=0, n_walks=0, n_candidates=8), _belief(oracle=False)),
             arm("rand_act", None, _belief(oracle=False)),  # no rule at all
-            arm("oracle", _method(REMAINING, n_fields=0, n_walks=0, n_candidates=0, information=None), _belief(oracle=True)),
+            arm("oracle", _method(uniform(), n_fields=0, n_walks=0, n_candidates=0), _belief(oracle=True)),
         ],
     )
 
@@ -115,13 +84,9 @@ sweep(
     seeds=[0],
     resources=Resources(cpus=1, mem_gb=8, timeout_min=20, gres=None, partition="dean", constraint="avx2", array_parallelism=10),
     arms=[
-        arm("evi", _method(total_variance(), n_fields=0, n_walks=2, n_candidates=8, information=None), _belief(oracle=False)),
-        arm(
-            "eii",
-            _method(region_information(WORLD.noise_ms), n_fields=0, n_walks=2, n_candidates=8, information=None),
-            _belief(oracle=False),
-        ),
-        arm("max_var", _method(posterior_spread(), n_fields=0, n_walks=0, n_candidates=8, information=None), _belief(oracle=False)),
+        arm("evi", _method(total_variance(), n_fields=0, n_walks=2, n_candidates=8), _belief(oracle=False)),
+        arm("eii", _method(region_information(WORLD.noise_ms), n_fields=0, n_walks=2, n_candidates=8), _belief(oracle=False)),
+        arm("max_var", _method(posterior_spread(), n_fields=0, n_walks=0, n_candidates=8), _belief(oracle=False)),
         arm("rand_act", None, _belief(oracle=False)),
     ],
 )

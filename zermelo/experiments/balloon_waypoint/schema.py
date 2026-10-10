@@ -112,13 +112,8 @@ class MethodConfig:
     improvement: bool = MISSING
     """Whether a candidate is scored by the increment it would add rather than its level"""
 
-    step_rate: float | None = MISSING
-    """`lambda`: a full-budget trip costs this share of the spread of the candidate values"""
-
-    """Whether travel is priced from the planner's table or from the walks that were rolled"""
-
-    combination: Literal["linear"] = MISSING
-    """Whether travel subtracts from value or divides it"""
+    penalty_rate: float = MISSING
+    """`lambda`: a full-budget trip is charged this share of the spread of the candidate values (zero charges nothing)"""
 
     n_candidates: int | None = MISSING
     """Cap on candidates scored per move (None scores every one)"""

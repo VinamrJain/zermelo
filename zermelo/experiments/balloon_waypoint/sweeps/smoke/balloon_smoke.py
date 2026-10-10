@@ -50,8 +50,7 @@ def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walk
         improvement=improvement,
         n_fields=n_fields,
         n_walks=n_walks,
-        combination="linear",
-        step_rate=0.5,
+        penalty_rate=0.5,
         n_candidates=16,
         opening_steps=3,  # three uniform moves, leaving three the rule decides
     )

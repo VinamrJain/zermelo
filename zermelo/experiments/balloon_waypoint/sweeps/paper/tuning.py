@@ -18,7 +18,7 @@ BELIEF = static_error_belief()
 
 RATE_ARMS = {
     swept: [
-        arm(f"{name}_L{budget}_c{rate_name(rate)}", ours(name, step_rate=rate, replan_every=budget), BELIEF)
+        arm(f"{name}_L{budget}_c{rate_name(rate)}", ours(name, penalty_rate=rate, replan_every=budget), BELIEF)
         for name in names
         for budget in (25, 50, 100)
         for rate in (0.0, 0.5, 1.0, 2.0)
@@ -28,7 +28,7 @@ RATE_ARMS = {
 """Every planning budget and step rate, the altitude budget never binding"""
 
 WEIGHT_ARMS = [
-    arm(f"{name}_c{rate_name(rate)}_w{rate_name(weight)}", ours(name, step_rate=rate, cost_weight=weight), BELIEF)
+    arm(f"{name}_c{rate_name(rate)}_w{rate_name(weight)}", ours(name, penalty_rate=rate, cost_weight=weight), BELIEF)
     for name in ("emi", "evi", "esi")
     for rate in (0.0, 1.0)
     for weight in (0.0, 0.5, 1.0, 2.0, 4.0)

@@ -30,7 +30,7 @@ BELIEF = oracle_belief()
 
 
 def _method(
-    utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, step_rate: float, cost_weight: float
+    utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, penalty_rate: float, cost_weight: float
 ) -> MethodConfig:
     """This sweep's held values"""
     return MethodConfig(
@@ -39,8 +39,7 @@ def _method(
         improvement=improvement,
         n_fields=n_fields,
         n_walks=n_walks,
-        combination="linear",
-        step_rate=step_rate,
+        penalty_rate=penalty_rate,
         n_candidates=N_CANDIDATES,
         opening_steps=OPENING_STEPS,
     )
@@ -48,7 +47,7 @@ def _method(
 
 def _sampled(utility: Implementation, *, improvement: bool) -> MethodConfig:
     """`utility` at this sweep's draw counts and charge"""
-    return _method(utility, improvement=improvement, n_fields=16, n_walks=16, step_rate=0.5, cost_weight=0.25)
+    return _method(utility, improvement=improvement, n_fields=16, n_walks=16, penalty_rate=0.5, cost_weight=0.25)
 
 
 sweep(
@@ -65,6 +64,6 @@ sweep(
         arm("posterior_spread", _sampled(posterior_spread(), improvement=False), BELIEF),
         arm("ucb2", _sampled(upper_confidence(2.0), improvement=False), BELIEF),
         # a charge would bias a uniform draw, which spans [0, 1] whatever the field
-        arm("random_search", _method(uniform(), improvement=False, n_fields=0, n_walks=0, step_rate=0.0, cost_weight=0.0), BELIEF),
+        arm("random_search", _method(uniform(), improvement=False, n_fields=0, n_walks=0, penalty_rate=0.0, cost_weight=0.0), BELIEF),
     ],
 )

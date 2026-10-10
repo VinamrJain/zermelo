@@ -97,22 +97,6 @@ def _built(path: str, **arguments: Any) -> Implementation:
 # --- utilities: which quantity of a belief a rule maximizes --------------------------------------------------------
 
 
-def remaining_trip(backups: int, radius: float, target_chunk: int | None, cost_weight: float) -> Implementation:
-    """Minus the hitting cost from where a walk ends to the target, under the field the walk was imagined under"""
-    return _built(
-        "zermelo.methods.waypoint_bo.utility.RemainingTrip", planner=value_iteration(1, backups, radius, target_chunk, cost_weight)
-    )
-
-
-def replanned_trip(backups: int, radius: float, target_chunk: int | None, cost_weight: float, chunk: int) -> Implementation:
-    """Minus what the plan made once a walk's readings are folded in costs under the field the walk was imagined under"""
-    return _built(
-        "zermelo.methods.waypoint_bo.utility.ReplannedTrip",
-        planner=value_iteration(1, backups, radius, target_chunk, cost_weight),
-        chunk=chunk,
-    )
-
-
 def information_gain(reading_noise: float) -> Implementation:
     """(m / 2) log det(I + K_n / reading_noise^2) over a walk's readings"""
     return _built("zermelo.methods.waypoint_bo.utility.InformationGain", reading_noise=reading_noise)
@@ -161,24 +145,22 @@ def uniform() -> Implementation:
 # --- planners: how the actor is carried to a waypoint, and how that walk is priced ----------------------------------
 
 
-def value_iteration(replan_every: int, backups: int, radius: float, target_chunk: int | None, cost_weight: float) -> Implementation:
-    """`v_0 = 0`, `v_{k+1}(s) = 0 on arrival, else min over a of c(s, a) + sum over s' of P(s' | s, a) v_k(s')`, `backups` rounds"""
+def value_iteration(replan_every: int, radius: float, target_chunk: int | None, cost_weight: float) -> Implementation:
+    """`v_0 = 0`, `v_{k+1}(s) = 0 on arrival, else min over a of c(s, a) + sum over s' of P(s' | s, a) v_k(s')`, `replan_every` rounds"""
     return _built(
         "zermelo.methods.waypoint_bo.planner.ValueIteration",
         replan_every=replan_every,
-        backups=backups,
         radius=radius,
         target_chunk=target_chunk,
         cost_weight=cost_weight,
     )
 
 
-def greedy(replan_every: int, backups: int, radius: float, target_chunk: int | None, cost_weight: float) -> Implementation:
+def greedy(replan_every: int, radius: float, target_chunk: int | None, cost_weight: float) -> Implementation:
     """One backup on the distance to the target: the act whose next cell is nearest it in expectation"""
     return _built(
         "zermelo.methods.waypoint_bo.planner.Greedy",
         replan_every=replan_every,
-        backups=backups,
         radius=radius,
         target_chunk=target_chunk,
         cost_weight=cost_weight,

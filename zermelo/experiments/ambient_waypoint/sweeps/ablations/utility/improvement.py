@@ -15,7 +15,7 @@ from zermelo.experiments.ambient_waypoint.setup import arm, max_magnitude, sweep
 BELIEF = matched_belief(AMBIENT1_CONTROL1)
 
 
-def _method(*, improvement: bool, step_rate: float) -> MethodConfig:
+def _method(*, improvement: bool, penalty_rate: float) -> MethodConfig:
     """This sweep's held values"""
     return MethodConfig(
         utility=max_magnitude(),
@@ -23,8 +23,7 @@ def _method(*, improvement: bool, step_rate: float) -> MethodConfig:
         improvement=improvement,
         n_fields=16,
         n_walks=16,
-        combination="linear",
-        step_rate=step_rate,
+        penalty_rate=penalty_rate,
         n_candidates=None,
         opening_steps=OPENING_STEPS,
     )
@@ -39,7 +38,7 @@ sweep(
     seeds=range(N_SEEDS),
     resources=RESOURCES,
     arms=[
-        arm(f"{scored}_rate{name}", _method(improvement=scored == "increment", step_rate=rate), BELIEF)
+        arm(f"{scored}_rate{name}", _method(improvement=scored == "increment", penalty_rate=rate), BELIEF)
         for scored in ("level", "increment")
         for name, rate in (("0", 0.0), ("0p5", 0.5))
     ],

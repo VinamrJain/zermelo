@@ -10,14 +10,16 @@ UTILITIES = {"emi": max_magnitude, "evi": posterior_spread, "esi": sum_magnitude
 PLANNING_BUDGET = 25
 """`L` every rule replans at"""
 
-STEP_RATE = 0.0
+PENALTY_RATE = 0.0
 """`c` each of our rules charges a full-budget trip"""
 
 TUNING_SEEDS = range(100, 105)
 """Instances the settings above are picked on, disjoint from the ones reported"""
 
 
-def method(utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, step_rate: float, replan_every: int) -> MethodConfig:
+def method(
+    utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, penalty_rate: float, replan_every: int
+) -> MethodConfig:
     """One acquisition on a value-iteration planner, at the settings the acquisitions differ in"""
     return MethodConfig(
         utility=utility,
@@ -25,8 +27,7 @@ def method(utility: Implementation, *, improvement: bool, n_fields: int, n_walks
         improvement=improvement,
         n_fields=n_fields,
         n_walks=n_walks,
-        combination="linear",
-        step_rate=step_rate,
+        penalty_rate=penalty_rate,
         n_candidates=None,
         opening_steps=OPENING_STEPS,
     )
@@ -34,22 +35,22 @@ def method(utility: Implementation, *, improvement: bool, n_fields: int, n_walks
 
 def baseline(utility: Implementation, n_fields: int) -> MethodConfig:
     """A rule reading the posterior (or `n_fields` draws of it) at the candidates, charging no travel"""
-    return method(utility, improvement=False, n_fields=n_fields, n_walks=0, step_rate=0.0, replan_every=PLANNING_BUDGET)
+    return method(utility, improvement=False, n_fields=n_fields, n_walks=0, penalty_rate=0.0, replan_every=PLANNING_BUDGET)
 
 
 def mc_ei() -> MethodConfig:
     """Expected improvement of the largest magnitude at the target alone, over 16 drawn fields and no walk"""
-    return method(max_magnitude(), improvement=True, n_fields=16, n_walks=0, step_rate=0.0, replan_every=PLANNING_BUDGET)
+    return method(max_magnitude(), improvement=True, n_fields=16, n_walks=0, penalty_rate=0.0, replan_every=PLANNING_BUDGET)
 
 
-def ours(name: str, *, step_rate: float | None = None, replan_every: int | None = None) -> MethodConfig:
-    """Expected improvement of `name`'s utility over 16 imagined walks under 16 drawn fields, at `STEP_RATE` and `PLANNING_BUDGET` unless given"""
+def ours(name: str, *, penalty_rate: float | None = None, replan_every: int | None = None) -> MethodConfig:
+    """Expected improvement of `name`'s utility over 16 imagined walks under 16 drawn fields, at `PENALTY_RATE` and `PLANNING_BUDGET` unless given"""
     return method(
         UTILITIES[name](),
         improvement=True,
         n_fields=16,
         n_walks=16,
-        step_rate=STEP_RATE if step_rate is None else step_rate,
+        penalty_rate=PENALTY_RATE if penalty_rate is None else penalty_rate,
         replan_every=PLANNING_BUDGET if replan_every is None else replan_every,
     )
 

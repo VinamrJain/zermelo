@@ -1,11 +1,12 @@
-"""alpha(x) = w(x) - c H(z, x) or w(x) - H(z, x), where w(x) = E over fields and walks of [ U(D + obs(tau)) - U(D) ]
+"""x* = argmax over the reachable candidates of alpha(x), where
 
-plus, where an information utility I is given, lambda * L / (max I - min I) * I(x), the range over the candidates within L steps, for L the planner's
-replan_every, and only such a candidate may win then
+w(x)     = E over fields and walks of [ U(D + obs(tau)) - U(D) ]
+alpha(x) = w(x) - lambda * (max w - min w) * (S(z, x) + mu C(z, x)) / B        lambda = 0 scores w alone
+reachable: 0 < S(z, x) < L, and C(z, x) <= the budget left where the problem keeps one
 """
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -15,13 +16,13 @@ from jaxtyping import Array, Float, Int, PRNGKeyArray
 from zermelo.interface import Analytic, Subset
 from zermelo.methods.waypoint_bo.belief import Belief, Dataset
 from zermelo.methods.waypoint_bo.planner import Planner, Policy
-from zermelo.methods.waypoint_bo.utility import TripUtility, Utility
+from zermelo.methods.waypoint_bo.utility import Utility
 
 
 @register_dataclass
 @dataclass(frozen=True)
 class Scores:
-    """One acquisition pass: what each candidate was worth, which won, and how the pass went"""
+    """One acquisition pass: what each candidate was worth, which won, and the route to it"""
 
     candidate_indices: Int[Array, " n_candidates"]
     """The states scored, as position domain indices"""
@@ -41,7 +42,7 @@ class Scores:
 
 @dataclass(frozen=True)
 class Acquisition:
-    """Scores candidate waypoints and takes the best"""
+    """Scores the reachable candidate waypoints and takes the best"""
 
     utility: Utility
     planner: Planner
@@ -55,26 +56,11 @@ class Acquisition:
     n_candidates: int | None
     """How many candidates to score: `None` every live one, an integer that many drawn uniformly each decision, 0 the target alone"""
 
-    information: Utility | None
-    """`I`: what the readings along a walk tell, added to the worth at `information_rate` once put in the worth's units"""
-
-    information_rate: float | None
-    """`lambda`: the most informative candidate within L steps is credited this many L of travel"""
-
     improvement: bool
     """Whether to score the collected readings and the imagined ones together, less the collected ones alone"""
 
-    step_rate: float | None
-    """`lambda`: a full-budget trip costs this share of the spread of the candidate values"""
-
-    combination: Literal["linear", "steps"]
-    """Whether travel is subtracted from the worth at `step_rate`, or as it is, the worth being in steps"""
-
-    def __post_init__(self) -> None:
-        if (self.step_rate is None) != (self.combination == "steps"):
-            raise ValueError("a linear combination is priced by step_rate and steps takes none; state exactly one of the two")
-        if (self.information is None) != (self.information_rate is None):
-            raise ValueError("an information utility is added at information_rate; state both or neither")
+    penalty_rate: float
+    """`lambda`: a full-budget trip is charged this share of the spread of the candidate values. Zero charges nothing"""
 
     def choose(
         self,
@@ -86,10 +72,11 @@ class Acquisition:
         candidates: Subset[Any],
         context: Float[Array, " n_context"],
         target: Int[Array, ""] | None,
+        budget_left: Float[Array, ""] | None,
     ) -> Scores:
-        """Every candidate scored under every field and walk, and the argmax over them; `target` is where a trip utility steers"""
-        if (isinstance(self.utility, TripUtility) or self.n_candidates == 0) and target is None:
-            raise ValueError("a trip utility scores the trip to a target, and this decision names none")
+        """Every candidate scored under every field and walk, and the argmax over the reachable ones; `target` is the one candidate at `n_candidates = 0`"""
+        if self.n_candidates == 0 and target is None:
+            raise ValueError("the target alone is scored, and this decision names none")
         k_indices, k_field, k_walk, k_utility = jax.random.split(key, 4)
         candidate_indices = jnp.flatnonzero(candidates.live)
         if self.n_candidates == 0:
@@ -102,7 +89,7 @@ class Acquisition:
         collected_readings, n_scored = belief.data, candidate_indices.shape[0]
         # pi[mu_n], solved once and reused
         mean_policy = self.planner.plan(transition.kernel(belief.mean(context)), candidate_indices, actions)
-        utility_samples, information_samples, first_draw_walks = [], [], None
+        utility_samples, first_draw_walks = [], None
 
         # f-hat^(1..S)
         fields = [belief.mean(context)] if self.n_fields == 0 else belief.draw(k_field, self.n_fields, context)
@@ -117,14 +104,7 @@ class Acquisition:
                 collected_readings.row_is_written,
                 collected_readings.context_value,
             )
-
-            def worth_of(data: Dataset) -> Float[Array, " *batch"]:
-                """U(data), the trip to `target` where the utility scores one"""
-                if isinstance(self.utility, TripUtility):
-                    return self.utility.remaining(k_score, belief, data, transition, field, jnp.asarray(target), actions)
-                return self.utility(k_score, belief, data, candidates)
-
-            base_utility = worth_of(collected_under_field) if self.improvement else jnp.zeros(())  # U(D_n)
+            base_utility = self.utility(k_score, belief, collected_under_field, candidates) if self.improvement else jnp.zeros(())  # U(D_n)
 
             if self.n_walks == 0:  # (1, n_candidates, 1): tau = (x), the destination and no route
                 walk, moved = candidate_indices[None, :, None], jnp.ones((1, n_scored, 1), bool)
@@ -137,33 +117,27 @@ class Acquisition:
             # obs(tau) = {(z_i, f-hat(z_i, context), context)}: the walk's states read off f-hat, every row at the decision's own context
             imagined = Dataset(walk, values[walk], moved, jnp.broadcast_to(context, (*walk.shape, context.shape[-1])))
             scored = collected_under_field.broadcast(walk.shape[:-1]).concat(imagined) if self.improvement else imagined  # D_n + obs(tau)
-            utility_samples.append(worth_of(scored) - base_utility)  # (n_walks, n_candidates)
-            if self.information is not None:
-                information_samples.append(
-                    self.information(k_score, belief, scored, candidates)
-                )  # I(D_n + obs(tau)), (n_walks, n_candidates)
+            utility_samples.append(self.utility(k_score, belief, scored, candidates) - base_utility)  # (n_walks, n_candidates)
 
-        # every stack is (n_fields, n_walks, n_candidates); averaging runs over both sample axes
-        worth = jnp.mean(jnp.stack(utility_samples), axis=(0, 1))  # w(x), one per candidate
-        expected_spend = mean_policy.hitting_cost[position]  # H(z, x)
-        # c = lambda * (max w - min w) / B, for B what a full-budget route may spend. A flat w charges
-        # nothing, and the argmax then takes the lowest index.
-        rate = 0.0 if self.step_rate is None else self.step_rate
-        charge = jnp.zeros(()) if rate == 0.0 else rate * (jnp.max(worth) - jnp.min(worth)) / self.planner.cost_budget
-        value = worth - charge * expected_spend if self.combination == "linear" else worth - expected_spend  # alpha(x)
-        allowed = expected_spend > 0.0  # a candidate within the planner's radius spends nothing and would win every tie: never chosen
-        if self.information is not None and self.information_rate is not None:
-            information = jnp.mean(jnp.stack(information_samples), axis=(0, 1))  # I(x)
-            reach = expected_spend <= self.planner.replan_every  # the candidates a walk gets to before the next decision
-            # lambda * L / (max I - min I) over the reachable candidates: information in steps, none where I is flat there
-            spread = jnp.max(jnp.where(reach, information, -jnp.inf)) - jnp.min(jnp.where(reach, information, jnp.inf))
-            charge = jnp.where(spread > 0.0, self.information_rate * self.planner.replan_every / jnp.maximum(spread, 1e-12), 0.0)
-            value, allowed = value + charge * information, allowed & reach
-        best = jnp.argmax(jnp.where(allowed, value, -jnp.inf))
+        # (n_fields, n_walks, n_candidates), averaged over both sample axes
+        worth = jnp.mean(jnp.stack(utility_samples), axis=(0, 1))  # w(x)
+        steps, spent = mean_policy.steps_to_target[position], mean_policy.budget_spent_to_target[position]  # S(z, x), C(z, x)
+        # lambda * (max w - min w) / B charges each unit of the plan's own cost-to-go S + mu C. A flat w charges nothing
+        charge = self.penalty_rate * (jnp.max(worth) - jnp.min(worth)) / self.planner.cost_budget
+        value = worth - charge * (steps + self.planner.cost_weight * spent)  # alpha(x)
+        # within the arrival ball nothing is walked, and at S = L nothing arrived before the next decision
+        reachable = (steps > 0.0) & (steps < self.planner.replan_every)
+        if budget_left is not None:
+            reachable &= spent <= budget_left
+        best = jnp.where(
+            jnp.any(reachable),
+            jnp.argmax(jnp.where(reachable, value, -jnp.inf)),
+            jnp.argmin(jnp.where(steps > 0.0, steps, jnp.inf)),  # nothing reachable: the nearest candidate
+        )
         return Scores(
             candidate_indices=candidate_indices,
             acquisition_value=value,
             waypoint=candidate_indices[best],
             imagined_walk_to_waypoint=jnp.asarray(first_draw_walks)[best],
-            route=Policy(mean_policy.act[:, best, None], mean_policy.hitting_cost[:, best, None]),
+            route=jax.tree.map(lambda table: table[:, best, None], mean_policy),
         )

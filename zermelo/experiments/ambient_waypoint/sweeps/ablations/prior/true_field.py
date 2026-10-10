@@ -28,7 +28,7 @@ MATCHED = matched_belief(AMBIENT1_CONTROL1)
 ORACLE = dataclasses.replace(MATCHED, oracle=True)
 
 
-def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, step_rate: float) -> MethodConfig:
+def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, penalty_rate: float) -> MethodConfig:
     """This sweep's held values"""
     return MethodConfig(
         utility=utility,
@@ -36,8 +36,7 @@ def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walk
         improvement=improvement,
         n_fields=n_fields,
         n_walks=n_walks,
-        combination="linear",
-        step_rate=step_rate,
+        penalty_rate=penalty_rate,
         n_candidates=None,
         opening_steps=OPENING_STEPS,
     )
@@ -45,10 +44,10 @@ def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walk
 
 RULES = {
     # a charge would bias a uniform draw, which spans [0, 1] whatever the field
-    "random_search": _method(uniform(), improvement=False, n_fields=0, n_walks=0, step_rate=0.0),
-    "ei": _method(expected_improvement(), improvement=False, n_fields=0, n_walks=0, step_rate=0.0),
-    "thompson": _method(max_magnitude(), improvement=False, n_fields=1, n_walks=0, step_rate=0.0),
-    "eui_fields16_walks16_rate0p5": _method(max_magnitude(), improvement=True, n_fields=16, n_walks=16, step_rate=0.5),
+    "random_search": _method(uniform(), improvement=False, n_fields=0, n_walks=0, penalty_rate=0.0),
+    "ei": _method(expected_improvement(), improvement=False, n_fields=0, n_walks=0, penalty_rate=0.0),
+    "thompson": _method(max_magnitude(), improvement=False, n_fields=1, n_walks=0, penalty_rate=0.0),
+    "eui_fields16_walks16_rate0p5": _method(max_magnitude(), improvement=True, n_fields=16, n_walks=16, penalty_rate=0.5),
 }
 """The rules of the headline sweep"""
 

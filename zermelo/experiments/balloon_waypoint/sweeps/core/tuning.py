@@ -21,7 +21,7 @@ BELIEFS = {"error": error_belief(), "wind": wind_belief()}
 
 
 def _method(
-    utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, step_rate: float, replan_every: int, cost_weight: float
+    utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, penalty_rate: float, replan_every: int, cost_weight: float
 ) -> MethodConfig:
     """One acquisition on a value-iteration planner, at the settings the acquisitions differ in"""
     return MethodConfig(
@@ -30,8 +30,7 @@ def _method(
         improvement=improvement,
         n_fields=n_fields,
         n_walks=n_walks,
-        combination="linear",
-        step_rate=step_rate,
+        penalty_rate=penalty_rate,
         n_candidates=N_CANDIDATES,
         opening_steps=OPENING_STEPS,
     )
@@ -47,13 +46,13 @@ sweep(
     resources=dataclasses.replace(RESOURCES, partition="default_partition"),
     arms=[
         arm(
-            f"esi_L{replan_every}_wind_cw{str(cost_weight).replace('.', 'p')}_sr{str(step_rate).replace('.', 'p')}",
+            f"esi_L{replan_every}_wind_cw{str(cost_weight).replace('.', 'p')}_sr{str(penalty_rate).replace('.', 'p')}",
             _method(
                 sum_magnitude(),
                 improvement=True,
                 n_fields=16,
                 n_walks=16,
-                step_rate=step_rate,
+                penalty_rate=penalty_rate,
                 replan_every=replan_every,
                 cost_weight=cost_weight,
             ),
@@ -61,7 +60,7 @@ sweep(
         )
         for replan_every in (10, 25, 50)
         for cost_weight in (0.0, 0.5, 1.0, 2.0)
-        for step_rate in (0.0, 0.5, 1.0, 2.0)
+        for penalty_rate in (0.0, 0.5, 1.0, 2.0)
     ],
 )
 """Expected sum-of-speed improvement under the wind belief, over the leg length, the price of an altitude change and the price of travel"""
