@@ -7,7 +7,7 @@ from typing import Any
 
 import jax
 import jax.numpy as jnp
-from jax.scipy.linalg import solve_triangular
+from jax.scipy.linalg import cho_solve, solve_triangular
 from jax.scipy.stats import norm
 from jaxtyping import Array, Bool, Float, Int, PRNGKeyArray
 
@@ -246,6 +246,18 @@ class ReplannedTrip(TripUtility):
         return -jnp.concatenate(costs).reshape(batch)
 
 
+def half_log_det(covariance: Float[Array, "*batch n n"], noise: float) -> Float[Array, " *batch"]:
+    """(1/2) log det( I + covariance / noise^2 )"""
+    chol = jnp.linalg.cholesky(covariance / noise**2 + jnp.eye(covariance.shape[-1]))
+    return jnp.sum(jnp.log(jnp.diagonal(chol, axis1=-2, axis2=-1)), axis=-1)
+
+
+def imagined_rows(belief: Belief, data: Dataset) -> tuple[Int[Array, "*batch n_imagined"], Bool[Array, "*batch n_imagined"]]:
+    """The rows of `data` past the belief's own buffer, and which of them are written"""
+    n_conditioned = belief.data.state_index.shape[0]
+    return data.state_index[..., n_conditioned:], data.row_is_written[..., n_conditioned:]
+
+
 @dataclass(frozen=True)
 class InformationGain(Utility):
     """U(D) = (m / 2) log det( I + K_n(w, w) / noise^2 ), the information the imagined rows carry about the field's m components
@@ -258,30 +270,48 @@ class InformationGain(Utility):
 
     def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
         context = query_context(data)
-        n_conditioned = belief.data.state_index.shape[0]
-        imagined_states, imagined_is_live = data.state_index[..., n_conditioned:], data.row_is_written[..., n_conditioned:]
+        imagined_states, imagined_is_live = imagined_rows(belief, data)
         if imagined_states.shape[-1] == 0:
             return jnp.zeros(imagined_states.shape[:-1])
-        m = data.state_value.shape[-1]
-        if imagined_states.ndim == 1:
-            return m * self._half_log_det(belief, imagined_states, imagined_is_live, context)
-        # one leading batch element at a time: the covariance block is (n_candidates, n_imagined, n_imagined) per walk
-        return m * jnp.stack(
-            [
-                self._half_log_det(belief, states, is_live, context)
-                for states, is_live in zip(imagined_states, imagined_is_live, strict=True)
-            ]
-        )
-
-    def _half_log_det(
-        self,
-        belief: Belief,
-        imagined_states: Int[Array, "*batch n_imagined"],
-        imagined_is_live: Bool[Array, "*batch n_imagined"],
-        context: Float[Array, " n_context"],
-    ) -> Float[Array, " *batch"]:
-        """(1/2) log det( I + K_n(w, w) / noise^2 ) over the live rows"""
         both_live = imagined_is_live[..., :, None] & imagined_is_live[..., None, :]
-        scaled = jnp.where(both_live, belief.posterior_covariance(imagined_states, imagined_states, context) / self.reading_noise**2, 0.0)
-        chol = jnp.linalg.cholesky(scaled + jnp.eye(imagined_states.shape[-1]))
-        return jnp.sum(jnp.log(jnp.diagonal(chol, axis1=-2, axis2=-1)), axis=-1)
+        among_imagined = jnp.where(both_live, belief.posterior_covariance(imagined_states, imagined_states, context), 0.0)
+        return data.state_value.shape[-1] * half_log_det(among_imagined, self.reading_noise)
+
+
+@dataclass(frozen=True)
+class RegionInformation(Utility):
+    """U(D) = (m / 2) [ log det( I + K_n(w, w) / noise^2 ) - log det( I + S / noise^2 ) ], the information the imagined rows carry
+    about the field's m components at the candidate states C
+
+    S = K_n(w, w) - K_n(w, C) [K_n(C, C) + 1e-6 I]^-1 K_n(C, w)
+    w = the rows of D past the belief's own buffer, a dead row made an identity row that carries nothing
+    """
+
+    reading_noise: float
+    """Standard deviation of a reading's error per component"""
+
+    def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
+        context = query_context(data)
+        imagined_states, imagined_is_live = imagined_rows(belief, data)
+        if imagined_states.shape[-1] == 0:
+            return jnp.zeros(imagined_states.shape[:-1])
+        candidate_states = jnp.flatnonzero(candidates.live)  # (n_candidates,)
+        among_candidates = belief.posterior_covariance(candidate_states, candidate_states, context)
+        chol_candidates = jnp.linalg.cholesky(among_candidates + 1e-6 * jnp.eye(candidate_states.shape[0]))
+        inverse_candidates = cho_solve((chol_candidates, True), jnp.eye(candidate_states.shape[0]))  # [K_n(C, C) + 1e-6 I]^-1
+
+        def one(states: Int[Array, "*batch n_imagined"], is_live: Bool[Array, "*batch n_imagined"]) -> Float[Array, " *batch"]:
+            """The bracket, one per leading batch element"""
+            both_live = is_live[..., :, None] & is_live[..., None, :]
+            among_imagined = jnp.where(both_live, belief.posterior_covariance(states, states, context), 0.0)
+            to_candidates = jnp.where(
+                is_live[..., :, None], belief.posterior_covariance(states, candidate_states, context), 0.0
+            )  # (*batch, n_imagined, n_candidates)
+            explained = jnp.einsum("...ic,cd,...jd->...ij", to_candidates, inverse_candidates, to_candidates)
+            return half_log_det(among_imagined, self.reading_noise) - half_log_det(among_imagined - explained, self.reading_noise)
+
+        m = data.state_value.shape[-1]
+        if imagined_states.ndim <= 2:
+            return m * one(imagined_states, imagined_is_live)
+        # one leading batch element at a time: the block to the candidates is (n_candidates, n_imagined, n_candidates) per walk
+        return m * jnp.stack([one(states, is_live) for states, is_live in zip(imagined_states, imagined_is_live, strict=True)])

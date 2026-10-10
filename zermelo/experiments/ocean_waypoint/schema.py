@@ -77,6 +77,9 @@ class ProblemConfig:
     start_lon: float = MISSING
     """Where the boat starts, snapped to the grid"""
 
+    objective: Literal["reach", "learn"] = MISSING
+    """What the episode is scored on: reaching a target drawn from the target box, or learning the ocean current over that box"""
+
 
 @dataclass
 class BeliefKernelConfig:

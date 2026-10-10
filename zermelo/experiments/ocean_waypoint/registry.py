@@ -32,6 +32,7 @@ GULF_STREAM_2019JUN = ProblemConfig(
     start_lat=37.0,
     start_lon=-65.0,
     arrival_km=20.0,
+    objective="reach",
 )
 """The Gulf Stream after Cape Hatteras, one frame of June 2019 held still, a sailboat of Saildrone speed"""
 

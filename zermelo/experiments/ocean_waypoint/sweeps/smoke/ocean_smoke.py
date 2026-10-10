@@ -6,9 +6,12 @@ from zermelo.experiments.ocean_waypoint.setup import (
     Implementation,
     arm,
     information_gain,
+    posterior_spread,
+    region_information,
     remaining_trip,
     replanned_trip,
     sweep,
+    total_variance,
     uniform,
     value_iteration,
 )
@@ -102,3 +105,24 @@ for name, resources in (
             arm("oracle", _method(REMAINING, n_fields=0, n_walks=0, n_candidates=0, information=None), _belief(oracle=True)),
         ],
     )
+
+# The learning objective on the same coarse grid, the walks the two path-aware rules imagine kept short
+sweep(
+    "smoke_learn",
+    problem=dataclasses.replace(WORLD, objective="learn"),
+    horizon=10,
+    claim_every=1,
+    recorded={**RECORDED, "objective_state/claim": 1, "objective_state/information": 1},
+    seeds=[0],
+    resources=Resources(cpus=1, mem_gb=8, timeout_min=20, gres=None, partition="dean", constraint="avx2", array_parallelism=10),
+    arms=[
+        arm("evi", _method(total_variance(), n_fields=0, n_walks=2, n_candidates=8, information=None), _belief(oracle=False)),
+        arm(
+            "eii",
+            _method(region_information(WORLD.noise_ms), n_fields=0, n_walks=2, n_candidates=8, information=None),
+            _belief(oracle=False),
+        ),
+        arm("max_var", _method(posterior_spread(), n_fields=0, n_walks=0, n_candidates=8, information=None), _belief(oracle=False)),
+        arm("rand_act", None, _belief(oracle=False)),
+    ],
+)

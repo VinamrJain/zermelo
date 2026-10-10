@@ -19,6 +19,7 @@ from zermelo.problems.ocean import (
     GaussianError,
     OceanCurrentError,
     Polar,
+    learn_objective,
     load_ocean,
     ocean_objective,
     ocean_states,
@@ -66,7 +67,11 @@ def assemble(cfg: RunConfig) -> Episode:
         cfg.problem.target_lat_min, cfg.problem.target_lat_max, cfg.problem.target_lon_min, cfg.problem.target_lon_max
     )
     world = ocean_world(grid, states, predicted, error, transition, cfg.problem.noise_ms, start_box, target_box)
-    objective = ocean_objective(states, grid, box, cfg.problem.arrival_km)
+    objective = (
+        ocean_objective(states, grid, box, cfg.problem.arrival_km)
+        if cfg.problem.objective == "reach"
+        else learn_objective(states, target_box, 2.0 * float(jnp.log(cfg.belief.amplitude)))  # the region of interest is the target box
+    )
     candidates = objective.candidates
     context = world.readout.context
     belief = (

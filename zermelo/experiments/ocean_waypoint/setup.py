@@ -118,6 +118,11 @@ def information_gain(reading_noise: float) -> Implementation:
     return _built("zermelo.methods.waypoint_bo.utility.InformationGain", reading_noise=reading_noise)
 
 
+def region_information(reading_noise: float) -> Implementation:
+    """(m / 2) [log det(I + K_n(w, w) / reading_noise^2) - log det(I + S / reading_noise^2)] over a walk's readings w, S its covariance given the candidates"""
+    return _built("zermelo.methods.waypoint_bo.utility.RegionInformation", reading_noise=reading_noise)
+
+
 def max_magnitude() -> Implementation:
     """The largest reading magnitude among the cells scored"""
     return _built("zermelo.methods.waypoint_bo.utility.MaxMagnitude")
