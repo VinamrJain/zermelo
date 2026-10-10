@@ -30,7 +30,7 @@ from matplotlib.projections.polar import PolarAxes  # noqa: E402
 
 from zermelo.experiments.ocean_waypoint.metrics.data import channels, claimed  # noqa: E402
 from zermelo.experiments.ocean_waypoint.schema import Resources  # noqa: E402
-from zermelo.problems.ocean import KM_PER_DEGREE  # noqa: E402
+from zermelo.problems.ocean import KM_PER_DEGREE, PlaneGrid  # noqa: E402
 from zermelo.problems.ocean.transition import Polar  # noqa: E402
 
 SUBFRAMES = 6
@@ -97,6 +97,14 @@ def send(runs: Sequence[Path], into: Path, flags: str) -> str:
     return f"{said.stdout.strip()}, {len(runs)} film{'s' if len(runs) != 1 else ''} from {script}"
 
 
+def candidate_box(problem: dict, lat: np.ndarray, lon: np.ndarray, land: np.ndarray) -> np.ndarray:
+    """(n_lat * n_lon,): the grid points a claim is scored on, the target box when the episode learns the region and the whole box otherwise"""
+    grid = PlaneGrid(len(lat), len(lon), float(lat[0]), float(lon[0]), float(lat[1] - lat[0]), float(lon[1] - lon[0]))
+    where = "target_" if problem.get("objective") == "learn" else ""  # a record from before the field is a reaching one
+    inside = grid.inside(problem[f"{where}lat_min"], problem[f"{where}lat_max"], problem[f"{where}lon_min"], problem[f"{where}lon_max"])
+    return np.asarray(inside) & ~land.reshape(-1)
+
+
 def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None:
     """The episode recorded at `run` written to `out` as video, or the frame at move `still` as a png beside it"""
 
@@ -110,6 +118,7 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
             "objective_state/truth",
             "objective_state/claim",
             "objective_state/arrived",
+            "objective_state/information",
             "agent_state/scores.waypoint",
             "agent_state/scores.imagined_walk_to_waypoint",
         ),
@@ -120,13 +129,7 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     frame = int(np.argmin(np.abs(raw["hours"] - problem["frame_hour"])))
     wind_u, wind_v = raw["wind_u"][frame][::stride, ::stride].astype(float), raw["wind_v"][frame][::stride, ::stride].astype(float)
     n_lat, n_lon = len(lat), len(lon)
-    live = (
-        (lat[:, None] >= problem["lat_min"])
-        & (lat[:, None] <= problem["lat_max"])
-        & (lon[None, :] >= problem["lon_min"])
-        & (lon[None, :] <= problem["lon_max"])
-    ) & ~land
-    candidates = np.flatnonzero(live.reshape(-1))
+    candidates = np.flatnonzero(candidate_box(problem, lat, lon, land))
     polar = Polar(
         problem["top_speed_ms"],
         problem["no_go_degrees"],
@@ -151,7 +154,8 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     true_u, true_v = on_grid(truth[:, 0]), on_grid(truth[:, 1])
     true_speed = np.hypot(true_u, true_v)
     track, target = held["state/position"].astype(float), held["state/target"][0].astype(float)  # (T + 1, 2) and (2,) as (lat, lon)
-    arrived = held["objective_state/arrived"]
+    reaching = "objective_state/arrived" in held  # else the episode is scored on what it learned, and the target is unread
+    arrived = held["objective_state/arrived"] if reaching else np.zeros(track.shape[0], bool)
     step_hours = float(problem["step_hours"])
     cos_mid = np.cos(np.radians(np.mean(lat)))
     km_per_degree = np.array([KM_PER_DEGREE, KM_PER_DEGREE * cos_mid])  # per degree of (lat, lon)
@@ -227,19 +231,20 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     cbar.set_label("true ocean current speed (m/s)", fontsize=11)
     cbar.ax.tick_params(labelsize=10, colors="#bbbbbb")
     ring_km = float(problem["arrival_km"])
-    main.add_patch(
-        Ellipse(
-            (target[1], target[0]),
-            2 * ring_km / km_per_degree[1],
-            2 * ring_km / km_per_degree[0],
-            fill=False,
-            ec=TARGET,
-            lw=1.6,
-            ls="--",
-            zorder=5,
+    if reaching:
+        main.add_patch(
+            Ellipse(
+                (target[1], target[0]),
+                2 * ring_km / km_per_degree[1],
+                2 * ring_km / km_per_degree[0],
+                fill=False,
+                ec=TARGET,
+                lw=1.6,
+                ls="--",
+                zorder=5,
+            )
         )
-    )
-    main.plot(target[1], target[0], marker="*", ms=20, color=TARGET, mec="white", mew=0.8, zorder=6, ls="none")
+        main.plot(target[1], target[0], marker="*", ms=20, color=TARGET, mec="white", mew=0.8, zorder=6, ls="none")
     main.plot(track[0, 1], track[0, 0], marker="o", ms=9, mfc="none", mec="white", mew=1.5, zorder=6, ls="none")
     (aim,) = main.plot([], [], marker="x", ms=11, color="#ffa726", mew=2.2, zorder=6, ls="none")
     (route,) = main.plot([], [], color="#ffa726", lw=1.8, ls="--", alpha=0.9, zorder=5.5)  # the walk imagined to the waypoint
@@ -255,7 +260,7 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
             Line2D([], [], color=CURRENT, lw=2.5, label="ocean current"),
             Line2D([], [], color=HEADING, lw=2.5, label="heading (through water)"),
             Line2D([], [], color=NET, lw=2.5, label="net motion"),
-            Line2D([], [], marker="*", ms=14, color=TARGET, mec="white", ls="none", label="target, 20 km ring"),
+            *([Line2D([], [], marker="*", ms=14, color=TARGET, mec="white", ls="none", label="target, 20 km ring")] if reaching else []),
             Line2D([], [], marker="x", ms=10, color="#ffa726", mew=2, ls="none", label="waypoint aimed at"),
             Line2D([], [], color="#ffa726", lw=1.8, ls="--", label="walk imagined to it"),
         ],
@@ -307,7 +312,8 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     ):
         ax.pcolormesh(lon, lat, land_sheet, shading="nearest", cmap=land_cmap, vmin=0, vmax=1, zorder=3)
         ax.set_title(words, fontsize=12, pad=6)
-        ax.plot(target[1], target[0], marker="*", ms=12, color=TARGET, mec="white", mew=0.5, zorder=6, ls="none")
+        if reaching:
+            ax.plot(target[1], target[0], marker="*", ms=12, color=TARGET, mec="white", mew=0.5, zorder=6, ls="none")
         bar = fig.colorbar(mesh, ax=ax, orientation="horizontal", fraction=0.06, pad=0.22, shrink=0.85)
         bar.ax.tick_params(labelsize=9, colors="#bbbbbb")
     bar.set_ticks([0, prior_spread / 2, prior_spread])
@@ -379,8 +385,12 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
         day, hour = divmod(t * step_hours, 24)
         caption.set_text(
             f"move {t:3d}   day {int(day)} {int(hour):02d}:00\n"
-            f"{np.linalg.norm((here - target) * km_per_degree):6.0f} km to target\n"
-            f"wind     {np.linalg.norm(wind[m]):4.1f} m/s\n"
+            + (
+                f"{np.linalg.norm((here - target) * km_per_degree):6.0f} km to target\n"
+                if reaching
+                else f"{held['objective_state/information'][t]:6.0f} nats learned\n"
+            )
+            + f"wind     {np.linalg.norm(wind[m]):4.1f} m/s\n"
             f"current  {np.linalg.norm(current[m]):4.1f} m/s\n"
             f"boat     {np.linalg.norm(through[m]):4.1f} m/s\n"
             f"net      {np.linalg.norm(net[m]):4.1f} m/s"

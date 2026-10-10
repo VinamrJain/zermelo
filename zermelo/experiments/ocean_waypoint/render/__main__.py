@@ -19,7 +19,7 @@ matplotlib.use("Agg")  # no display on a compute node
 import matplotlib.pyplot as plt  # noqa: E402
 
 from zermelo.experiments.ocean_waypoint.metrics.data import channels, claimed, latest_launch, settings  # noqa: E402
-from zermelo.experiments.ocean_waypoint.render.film import film, send  # noqa: E402
+from zermelo.experiments.ocean_waypoint.render.film import candidate_box, film, send  # noqa: E402
 
 SWEEPS = Path("results") / __package__.split(".")[-2]
 """Where a sweep named rather than pointed at is looked for: this experiment's own results"""
@@ -30,6 +30,7 @@ CHANNELS = (
     "objective_state/truth",
     "objective_state/claim",
     "objective_state/arrived",
+    "objective_state/information",
     "objective_state/steps_to_arrival",
     "agent_state/scores.waypoint",
     "agent_state/scores.candidate_indices",
@@ -51,13 +52,8 @@ def still(run: Path, out: Path) -> None:
     lat, lon, land = grid_of(config)
     n_lat, n_lon = len(lat), len(lon)
     problem = config["problem"]
-    live = (
-        (lat[:, None] >= problem["lat_min"])
-        & (lat[:, None] <= problem["lat_max"])
-        & (lon[None, :] >= problem["lon_min"])
-        & (lon[None, :] <= problem["lon_max"])
-    ) & ~land  # (n_lat, n_lon): the candidate box, as `ocean_objective` marks it
-    candidates = np.flatnonzero(live.reshape(-1))
+    candidates = np.flatnonzero(candidate_box(problem, lat, lon, land))
+    reaching = "objective_state/arrived" in held  # else the episode is scored on what it learned, and the target is unread
 
     def on_grid(per_candidate: np.ndarray) -> np.ndarray:
         """A value per candidate laid onto the grid, nan elsewhere"""
@@ -81,7 +77,8 @@ def still(run: Path, out: Path) -> None:
         ax.plot(track[:, 1], track[:, 0], "w.-", lw=1, ms=3)
         ax.plot(track[0, 1], track[0, 0], "wo", ms=6, mfc="none")
         ax.plot(track[-1, 1], track[-1, 0], "r*", ms=9)
-        ax.plot(held["state/target"][0, 1], held["state/target"][0, 0], "m*", ms=12, mec="w", label="target")
+        if reaching:
+            ax.plot(held["state/target"][0, 1], held["state/target"][0, 0], "m*", ms=12, mec="w", label="target")
         ax.set_aspect(1 / np.cos(np.radians(np.mean(lat))))
         ax.set_xlabel("lon")
     if "agent_state/scores.waypoint" in held:  # an arm with a rule: every waypoint it aimed at
@@ -91,8 +88,9 @@ def still(run: Path, out: Path) -> None:
     axes[0].set_ylabel("lat")
     fig.suptitle(
         f"{run.parent.parent.name} / {run.name}: {track.shape[0] - 1} moves of {problem['step_hours']} h, arrived at step {int(held['objective_state/steps_to_arrival'][-1])}"
-        if held["objective_state/arrived"][-1]
-        else f"{run.parent.parent.name} / {run.name}: {track.shape[0] - 1} moves of {problem['step_hours']} h, never arrived",
+        if reaching and held["objective_state/arrived"][-1]
+        else f"{run.parent.parent.name} / {run.name}: {track.shape[0] - 1} moves of {problem['step_hours']} h, "
+        + ("never arrived" if reaching else f"{held['objective_state/information'][-1]:.0f} nats learned"),
         fontsize=10,
     )
     fig.savefig(out, dpi=120)
