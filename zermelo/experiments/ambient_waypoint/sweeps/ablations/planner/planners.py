@@ -12,7 +12,7 @@ from zermelo.experiments.ambient_waypoint.registry import (
     matched_belief,
 )
 from zermelo.experiments.ambient_waypoint.schema import MethodConfig
-from zermelo.experiments.ambient_waypoint.setup import Implementation, arm, greedy, max_magnitude, random_walk, sweep, value_iteration
+from zermelo.experiments.ambient_waypoint.setup import Implementation, arm, greedy, max_magnitude, sweep, value_iteration
 
 BELIEF = matched_belief(AMBIENT1_CONTROL1)
 
@@ -32,7 +32,7 @@ def _method(planner: Implementation) -> MethodConfig:
     )
 
 
-PLANNERS: dict[str, Any] = {"value_iteration": value_iteration, "greedy": greedy, "random_walk": random_walk}
+PLANNERS: dict[str, Any] = {"value_iteration": value_iteration, "greedy": greedy}
 
 sweep(
     "planners",

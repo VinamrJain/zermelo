@@ -202,7 +202,7 @@ class RemainingTrip(TripUtility):
         target: Int[Array, ""],
         actions: Int[Array, " n_actions"],
     ) -> Float[Array, " *batch"]:
-        policy = self.planner.plan(key, transition.kernel(field), target[None], actions)
+        policy = self.planner.plan(transition.kernel(field), target[None], actions)
         return -policy.hitting_cost[last_written_state(data), 0]
 
 
@@ -238,7 +238,7 @@ class ReplannedTrip(TripUtility):
 
         def one(one_data: Dataset) -> Float[Array, ""]:
             """H^{pi(D)}_f(end of D, target) for one dataset"""
-            act = self.planner.plan(key, transition.kernel(belief.condition(one_data).mean(context)), target[None], actions).act
+            act = self.planner.plan(transition.kernel(belief.condition(one_data).mean(context)), target[None], actions).act
             return self.planner.evaluate(true_kernel, act, target[None], actions)[last_written_state(one_data), 0]
 
         n = flat.state_index.shape[0]

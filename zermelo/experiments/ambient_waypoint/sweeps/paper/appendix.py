@@ -13,7 +13,7 @@ from zermelo.experiments.ambient_waypoint.registry import (
     matched_belief,
 )
 from zermelo.experiments.ambient_waypoint.schema import BeliefConfig
-from zermelo.experiments.ambient_waypoint.setup import arm, greedy, max_magnitude, random_walk, sweep, uniform, value_iteration
+from zermelo.experiments.ambient_waypoint.setup import arm, greedy, max_magnitude, sweep, uniform, value_iteration
 from zermelo.experiments.ambient_waypoint.sweeps.paper.method import PLANNING_BUDGET, baseline, mc_ei, ours
 
 MATCHED = matched_belief(AMBIENT1_CONTROL1)
@@ -39,7 +39,7 @@ BELIEFS = {
 }
 """The belief every arm of the prior study holds, the last four refitting their kernel numbers as they go"""
 
-PLANNERS = {"value_iteration": value_iteration, "greedy": greedy, "random_walk": random_walk}
+PLANNERS = {"value_iteration": value_iteration, "greedy": greedy}
 
 for swept, arms in (
     (

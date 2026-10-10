@@ -183,15 +183,3 @@ def greedy(replan_every: int, backups: int, radius: float, target_chunk: int | N
         target_chunk=target_chunk,
         cost_weight=cost_weight,
     )
-
-
-def random_walk(replan_every: int, backups: int, radius: float, target_chunk: int | None, cost_weight: float) -> Implementation:
-    """One uniform act per cell, drawn when the plan is made and the same for every target"""
-    return _built(
-        "zermelo.methods.waypoint_bo.planner.RandomWalk",
-        replan_every=replan_every,
-        backups=backups,
-        radius=radius,
-        target_chunk=target_chunk,
-        cost_weight=cost_weight,
-    )

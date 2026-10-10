@@ -62,11 +62,7 @@ class Planner(ABC):
 
     @abstractmethod
     def solve(
-        self,
-        key: PRNGKeyArray,
-        kernel: TransitionKernel[Int[Array, ""]],
-        targets: Int[Array, " n_targets"],
-        actions: Int[Array, " n_actions"],
+        self, kernel: TransitionKernel[Int[Array, ""]], targets: Int[Array, " n_targets"], actions: Int[Array, " n_actions"]
     ) -> Policy:
         """The act to take at each state when steering to each target, and what following it costs"""
 
@@ -92,18 +88,14 @@ class Planner(ABC):
         return jnp.stack([jnp.reshape(self.cost(kernel, jnp.asarray(a)), (-1, 1)) + step(values, jnp.asarray(a)) for a in actions])
 
     def plan(
-        self,
-        key: PRNGKeyArray,
-        kernel: TransitionKernel[Int[Array, ""]],
-        targets: Int[Array, " n_targets"],
-        actions: Int[Array, " n_actions"],
+        self, kernel: TransitionKernel[Int[Array, ""]], targets: Int[Array, " n_targets"], actions: Int[Array, " n_actions"]
     ) -> Policy:
         """An act table and a hitting cost for every target, solved `target_chunk` targets at a time"""
         step = targets.shape[0] if self.target_chunk is None else self.target_chunk
         if targets.shape[0] <= step:
-            return self._plan_block(key, kernel, targets, actions)
+            return self._plan_block(kernel, targets, actions)
         # every target is its own problem, so a block of columns is the whole answer for those columns
-        blocks = [self._plan_block(key, kernel, targets[at : at + step], actions) for at in range(0, targets.shape[0], step)]
+        blocks = [self._plan_block(kernel, targets[at : at + step], actions) for at in range(0, targets.shape[0], step)]
         return Policy(
             jnp.concatenate([block.act for block in blocks], axis=1),  # (n_states, n_targets)
             jnp.concatenate([block.hitting_cost for block in blocks], axis=1),  # (n_states, n_targets)
@@ -111,14 +103,10 @@ class Planner(ABC):
 
     @partial(jax.jit, static_argnums=0)
     def _plan_block(
-        self,
-        key: PRNGKeyArray,
-        kernel: TransitionKernel[Int[Array, ""]],
-        targets: Int[Array, " n_targets"],
-        actions: Int[Array, " n_actions"],
+        self, kernel: TransitionKernel[Int[Array, ""]], targets: Int[Array, " n_targets"], actions: Int[Array, " n_actions"]
     ) -> Policy:
         """`solve`, jitted, the act stored as a byte"""
-        policy = self.solve(key, kernel, targets, actions)
+        policy = self.solve(kernel, targets, actions)
         return Policy(policy.act.astype(jnp.int8), policy.hitting_cost)
 
     @partial(jax.jit, static_argnums=0)
@@ -181,11 +169,7 @@ class ValueIteration(Planner):
     """
 
     def solve(
-        self,
-        key: PRNGKeyArray,
-        kernel: TransitionKernel[Int[Array, ""]],
-        targets: Int[Array, " n_targets"],
-        actions: Int[Array, " n_actions"],
+        self, kernel: TransitionKernel[Int[Array, ""]], targets: Int[Array, " n_targets"], actions: Int[Array, " n_actions"]
     ) -> Policy:
         stop = self.arrived(kernel.domain, targets)
         values = lax.fori_loop(
@@ -204,27 +188,7 @@ class Greedy(Planner):
     """
 
     def solve(
-        self,
-        key: PRNGKeyArray,
-        kernel: TransitionKernel[Int[Array, ""]],
-        targets: Int[Array, " n_targets"],
-        actions: Int[Array, " n_actions"],
+        self, kernel: TransitionKernel[Int[Array, ""]], targets: Int[Array, " n_targets"], actions: Int[Array, " n_actions"]
     ) -> Policy:
         act = actions[jnp.argmin(self._backup(kernel, jnp.sqrt(self._squared_distance(kernel.domain, targets)), actions), axis=0)]
-        return Policy(act, self.evaluate(kernel, act, targets, actions))
-
-
-@dataclass(frozen=True)
-class RandomWalk(Planner):
-    """One uniform act per state, drawn when the plan is made and the same for every target"""
-
-    def solve(
-        self,
-        key: PRNGKeyArray,
-        kernel: TransitionKernel[Int[Array, ""]],
-        targets: Int[Array, " n_targets"],
-        actions: Int[Array, " n_actions"],
-    ) -> Policy:
-        n_states = coordinates(kernel.domain).shape[0]
-        act = jnp.broadcast_to(actions[jax.random.randint(key, (n_states, 1), 0, actions.shape[0])], (n_states, targets.shape[0]))
         return Policy(act, self.evaluate(kernel, act, targets, actions))

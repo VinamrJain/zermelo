@@ -90,7 +90,7 @@ class Acquisition:
         """Every candidate scored under every field and walk, and the argmax over them; `target` is where a trip utility steers"""
         if (isinstance(self.utility, TripUtility) or self.n_candidates == 0) and target is None:
             raise ValueError("a trip utility scores the trip to a target, and this decision names none")
-        k_indices, k_field, k_plan, k_walk, k_utility = jax.random.split(key, 5)
+        k_indices, k_field, k_walk, k_utility = jax.random.split(key, 4)
         candidate_indices = jnp.flatnonzero(candidates.live)
         if self.n_candidates == 0:
             candidate_indices = jnp.asarray(target)[None]
@@ -101,7 +101,7 @@ class Acquisition:
         walk_keys = jax.vmap(jax.random.fold_in, in_axes=(None, 0))(k_walk, jnp.arange(max(self.n_walks, 1)))
         collected_readings, n_scored = belief.data, candidate_indices.shape[0]
         # pi[mu_n], solved once and reused
-        mean_policy = self.planner.plan(k_plan, transition.kernel(belief.mean(context)), candidate_indices, actions)
+        mean_policy = self.planner.plan(transition.kernel(belief.mean(context)), candidate_indices, actions)
         utility_samples, information_samples, first_draw_walks = [], [], None
 
         # f-hat^(1..S)
