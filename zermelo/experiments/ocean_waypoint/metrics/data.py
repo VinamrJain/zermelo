@@ -1,6 +1,7 @@
 """Every number one launch is reported by, read off its records
 
 arrived_t    1 once the boat is within arrival_km of the target, 0 before
+g, b_t       max over candidates of ||W||, and the largest ||W|| stood on at a candidate by time_step t
 W(c)         (u, v) at every candidate c, the truth
 mu_t, v_t    (mu_u, mu_v) and (log var_u, log var_v) claimed at every candidate after time_step t
 """
@@ -49,6 +50,8 @@ CURVES = {
     "rmse": ("RMSE", "linear"),
     "posterior_variance": ("posterior variance", "linear"),
     "information": ("information (nats)", "linear"),
+    "simple_regret": ("simple regret (m/s)", "linear"),
+    "cumulative_regret": ("cumulative regret (m/s)", "linear"),
 }
 """What an arm achieved, a value per time_step (distance in km, RMSE in m/s, the variance in m^2/s^2), as the words naming it and the scale it is drawn on"""
 
@@ -58,12 +61,21 @@ TABLE_COLUMNS = (
     ("rmse", "RMSE", 2, "min"),
     ("posterior_variance", "posterior variance", 2, "min"),
     ("information", "information (nats)", 0, "max"),
+    ("simple_regret", "simple regret", 2, "min"),
+    ("cumulative_regret", "cumulative regret", 0, "min"),
     ("arrival_share", r"waypoint arrival \%", 0, "max"),
     ("seconds", "time (s)", 0, "none"),
 )
 """The table's columns: the scalar, its heading, its digits, and which end is better"""
 
-CURVE_CHANNELS = ("objective_state/arrived", "objective_state/steps_to_arrival", "objective_state/truth", "objective_state/claim")
+CURVE_CHANNELS = (
+    "objective_state/arrived",
+    "objective_state/steps_to_arrival",
+    "objective_state/truth",
+    "objective_state/claim",
+    "objective_state/best_observed_magnitude",
+    "objective_state/best_possible_magnitude",
+)
 """What the curves are computed from, as the names a record holds them under"""
 
 TABLE_CHANNELS = CURVE_CHANNELS + ("state/position", "state/target", "agent_state/time_steps_since_waypoint", "reward", "time_per_episode")
@@ -122,6 +134,8 @@ def episode_curves(held: dict[str, Any], claim_every: int, prior_log_variance: f
     rmse                sqrt(mean over candidates and components of (W - mu_t)^2)
     posterior_variance  mean over candidates of exp(v_t,u) + exp(v_t,v)
     information         (1/2) sum over candidates and components of (prior_log_variance - v_t), nats the claim's marginals have shed since the prior
+    simple_regret       g - b_t, nan unless the episode searches for the fastest current
+    cumulative_regret   sum over u <= t of (g - b_u)
     """
     truth = held["objective_state/truth"][1:]  # (time_steps, candidates, 2)
     arrived = held.get("objective_state/arrived", np.zeros(truth.shape[0] + 1))[1:]  # (time_steps,): never, when learning the region
@@ -132,12 +146,19 @@ def episode_curves(held: dict[str, Any], claim_every: int, prior_log_variance: f
     mean, spread = claimed(claim)  # (time_steps, candidates, 2) and (time_steps, candidates)
     log_variance = np.maximum(held["objective_state/claim"][..., 2:4], LOG_VARIANCE_FLOOR)  # (snapshots, candidates, 2)
     shed = 0.5 * np.sum(prior_log_variance - log_variance, axis=(-2, -1))  # (snapshots,)
+    regret = (
+        (held["objective_state/best_possible_magnitude"] - held["objective_state/best_observed_magnitude"])[1:]
+        if "objective_state/best_possible_magnitude" in held
+        else np.full(arrived.size, np.nan)
+    )  # (time_steps,)
     return {
         "distance_to_target": distance,
         "arrived": arrived,
         "rmse": np.sqrt(np.mean((mean - truth) ** 2, axis=(-2, -1))),
         "posterior_variance": np.mean(spread**2, axis=-1),
         "information": at_each_snapshot(shed, arrived.size + 1, claim_every)[1:],
+        "simple_regret": regret,
+        "cumulative_regret": np.cumsum(regret),
     }
 
 

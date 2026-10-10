@@ -32,6 +32,8 @@ CHANNELS = (
     "objective_state/arrived",
     "objective_state/information",
     "objective_state/steps_to_arrival",
+    "objective_state/best_observed_magnitude",
+    "objective_state/best_possible_magnitude",
     "agent_state/scores.waypoint",
     "agent_state/scores.candidate_indices",
 )
@@ -90,7 +92,13 @@ def still(run: Path, out: Path) -> None:
         f"{run.parent.parent.name} / {run.name}: {track.shape[0] - 1} moves of {problem['step_hours']} h, arrived at step {int(held['objective_state/steps_to_arrival'][-1])}"
         if reaching and held["objective_state/arrived"][-1]
         else f"{run.parent.parent.name} / {run.name}: {track.shape[0] - 1} moves of {problem['step_hours']} h, "
-        + ("never arrived" if reaching else f"{held['objective_state/information'][-1]:.0f} nats learned"),
+        + (
+            "never arrived"
+            if reaching
+            else f"{held['objective_state/information'][-1]:.0f} nats learned"
+            if "objective_state/information" in held
+            else f"best {held['objective_state/best_observed_magnitude'][-1]:.2f} of {held['objective_state/best_possible_magnitude'][-1]:.2f} m/s"
+        ),
         fontsize=10,
     )
     fig.savefig(out, dpi=120)

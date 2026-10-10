@@ -98,9 +98,9 @@ def send(runs: Sequence[Path], into: Path, flags: str) -> str:
 
 
 def candidate_box(problem: dict, lat: np.ndarray, lon: np.ndarray, land: np.ndarray) -> np.ndarray:
-    """(n_lat * n_lon,): the grid points a claim is scored on, the target box when the episode learns the region and the whole box otherwise"""
+    """(n_lat * n_lon,): the grid points a claim is scored on, the target box when the episode learns or searches the region and the whole box otherwise"""
     grid = PlaneGrid(len(lat), len(lon), float(lat[0]), float(lon[0]), float(lat[1] - lat[0]), float(lon[1] - lon[0]))
-    where = "target_" if problem.get("objective") == "learn" else ""  # a record from before the field is a reaching one
+    where = "target_" if problem.get("objective") in ("learn", "search") else ""  # a record from before the field is a reaching one
     inside = grid.inside(problem[f"{where}lat_min"], problem[f"{where}lat_max"], problem[f"{where}lon_min"], problem[f"{where}lon_max"])
     return np.asarray(inside) & ~land.reshape(-1)
 
@@ -119,6 +119,8 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
             "objective_state/claim",
             "objective_state/arrived",
             "objective_state/information",
+            "objective_state/best_observed_magnitude",
+            "objective_state/best_possible_magnitude",
             "agent_state/scores.waypoint",
             "agent_state/scores.imagined_walk_to_waypoint",
         ),
@@ -389,6 +391,8 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
                 f"{np.linalg.norm((here - target) * km_per_degree):6.0f} km to target\n"
                 if reaching
                 else f"{held['objective_state/information'][t]:6.0f} nats learned\n"
+                if "objective_state/information" in held
+                else f"best {held['objective_state/best_observed_magnitude'][t]:4.2f} of {held['objective_state/best_possible_magnitude'][t]:4.2f} m/s\n"
             )
             + f"wind     {np.linalg.norm(wind[m]):4.1f} m/s\n"
             f"current  {np.linalg.norm(current[m]):4.1f} m/s\n"
