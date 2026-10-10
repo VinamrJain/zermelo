@@ -33,7 +33,7 @@ class Policy:
 
 @dataclass(frozen=True)
 class Planner(ABC):
-    """Turns a kernel and a set of targets into an act table, and evaluates what following it costs"""
+    """Turns a kernel and a set of targets into an act table and its hitting cost, and rolls walks under it"""
 
     replan_every: int
     """`L`: a waypoint is chosen anew after this many time_steps, and a route is rolled over at most as many"""
@@ -61,14 +61,14 @@ class Planner(ABC):
         return self.backups * (1.0 + self.cost_weight)
 
     @abstractmethod
-    def act_table(
+    def solve(
         self,
         key: PRNGKeyArray,
         kernel: TransitionKernel[Int[Array, ""]],
         targets: Int[Array, " n_targets"],
         actions: Int[Array, " n_actions"],
-    ) -> Int[Array, "n_states n_targets"]:
-        """The value of the act to take at each state when steering to each target"""
+    ) -> Policy:
+        """The act to take at each state when steering to each target, and what following it costs"""
 
     def arrived(self, domain: Domain, targets: Int[Array, " n_targets"]) -> Bool[Array, "n_states n_targets"]:
         """Whether each state of `domain` is within `radius` of each target"""
@@ -117,9 +117,9 @@ class Planner(ABC):
         targets: Int[Array, " n_targets"],
         actions: Int[Array, " n_actions"],
     ) -> Policy:
-        """An act table for every target, and what following it costs"""
-        act = self.act_table(key, kernel, targets, actions)
-        return Policy(act.astype(jnp.int8), self.evaluate(kernel, act, targets, actions))  # an act value fits a byte
+        """`solve`, jitted, the act stored as a byte"""
+        policy = self.solve(key, kernel, targets, actions)
+        return Policy(policy.act.astype(jnp.int8), policy.hitting_cost)
 
     @partial(jax.jit, static_argnums=0)
     def evaluate(
@@ -177,21 +177,21 @@ class ValueIteration(Planner):
         v_{k+1}(s) = 0                                                          on arrival
                    = min over a of [ c(s, a) + sum over s' of P(s' | s, a) v_k(s') ]
 
-    then the act attaining that minimum
+    then the act attaining that minimum, and `v_K` as its hitting cost
     """
 
-    def act_table(
+    def solve(
         self,
         key: PRNGKeyArray,
         kernel: TransitionKernel[Int[Array, ""]],
         targets: Int[Array, " n_targets"],
         actions: Int[Array, " n_actions"],
-    ) -> Int[Array, "n_states n_targets"]:
+    ) -> Policy:
         stop = self.arrived(kernel.domain, targets)
         values = lax.fori_loop(
             0, self.backups, lambda _, v: jnp.where(stop, 0.0, jnp.min(self._backup(kernel, v, actions), axis=0)), jnp.zeros(stop.shape)
         )
-        return actions[jnp.argmin(self._backup(kernel, values, actions), axis=0)]
+        return Policy(actions[jnp.argmin(self._backup(kernel, values, actions), axis=0)], values)
 
 
 @dataclass(frozen=True)
@@ -203,27 +203,28 @@ class Greedy(Planner):
     for `d` the embedded distance.
     """
 
-    def act_table(
+    def solve(
         self,
         key: PRNGKeyArray,
         kernel: TransitionKernel[Int[Array, ""]],
         targets: Int[Array, " n_targets"],
         actions: Int[Array, " n_actions"],
-    ) -> Int[Array, "n_states n_targets"]:
-        return actions[jnp.argmin(self._backup(kernel, jnp.sqrt(self._squared_distance(kernel.domain, targets)), actions), axis=0)]
+    ) -> Policy:
+        act = actions[jnp.argmin(self._backup(kernel, jnp.sqrt(self._squared_distance(kernel.domain, targets)), actions), axis=0)]
+        return Policy(act, self.evaluate(kernel, act, targets, actions))
 
 
 @dataclass(frozen=True)
 class RandomWalk(Planner):
     """One uniform act per state, drawn when the plan is made and the same for every target"""
 
-    def act_table(
+    def solve(
         self,
         key: PRNGKeyArray,
         kernel: TransitionKernel[Int[Array, ""]],
         targets: Int[Array, " n_targets"],
         actions: Int[Array, " n_actions"],
-    ) -> Int[Array, "n_states n_targets"]:
+    ) -> Policy:
         n_states = coordinates(kernel.domain).shape[0]
-        drawn = actions[jax.random.randint(key, (n_states, 1), 0, actions.shape[0])]
-        return jnp.broadcast_to(drawn, (n_states, targets.shape[0]))
+        act = jnp.broadcast_to(actions[jax.random.randint(key, (n_states, 1), 0, actions.shape[0])], (n_states, targets.shape[0]))
+        return Policy(act, self.evaluate(kernel, act, targets, actions))
