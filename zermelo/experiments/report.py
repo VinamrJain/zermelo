@@ -19,6 +19,7 @@ FAMILY_COLOURS = {
     "EMI": "0173B2",
     "ESI": "D55E00",
     "EVI": "029E73",
+    "EII": "0173B2",
     "EI": "DE8F05",
     "MC-EI": "56B4E9",
     "UCB": "7F3C8D",

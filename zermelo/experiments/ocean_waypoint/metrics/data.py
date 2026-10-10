@@ -35,6 +35,7 @@ ACQUISITION_FAMILIES = {
     "oracle_emi": "Oracle-EMI",
     "emi": "EMI",
     "evi": "EVI",
+    "eii": "EII",
     "esi": "ESI",
 }
 """The paper's name for each acquisition family, keyed by the token an arm's name carries"""
@@ -47,6 +48,7 @@ CURVES = {
     "arrived": ("arrived", "linear"),
     "rmse": ("RMSE", "linear"),
     "posterior_variance": ("posterior variance", "linear"),
+    "information": ("information (nats)", "linear"),
 }
 """What an arm achieved, a value per time_step (distance in km, RMSE in m/s, the variance in m^2/s^2), as the words naming it and the scale it is drawn on"""
 
@@ -55,6 +57,7 @@ TABLE_COLUMNS = (
     ("arrived", r"arrived \%", 0, "max"),
     ("rmse", "RMSE", 2, "min"),
     ("posterior_variance", "posterior variance", 2, "min"),
+    ("information", "information (nats)", 0, "max"),
     ("arrival_share", r"waypoint arrival \%", 0, "max"),
     ("seconds", "time (s)", 0, "none"),
 )
@@ -120,11 +123,11 @@ def episode_curves(held: dict[str, Any], claim_every: int, prior_log_variance: f
     posterior_variance  mean over candidates of exp(v_t,u) + exp(v_t,v)
     information         (1/2) sum over candidates and components of (prior_log_variance - v_t), nats the claim's marginals have shed since the prior
     """
-    arrived = held["objective_state/arrived"][1:]  # (time_steps,)
+    truth = held["objective_state/truth"][1:]  # (time_steps, candidates, 2)
+    arrived = held.get("objective_state/arrived", np.zeros(truth.shape[0] + 1))[1:]  # (time_steps,): never, when learning the region
     position, target = held["state/position"][1:], held["state/target"][1:]  # (time_steps, 2) as (lat, lon) degrees
     km_per_degree = KM_PER_DEGREE * np.array([1.0, np.cos(np.radians(np.mean(target[:, 0])))])
     distance = np.linalg.norm((position - target) * km_per_degree, axis=-1)
-    truth = held["objective_state/truth"][1:]  # (time_steps, candidates, 2)
     claim = at_each_snapshot(held["objective_state/claim"], arrived.size + 1, claim_every)[1:]
     mean, spread = claimed(claim)  # (time_steps, candidates, 2) and (time_steps, candidates)
     log_variance = np.maximum(held["objective_state/claim"][..., 2:4], LOG_VARIANCE_FLOOR)  # (snapshots, candidates, 2)
@@ -187,14 +190,14 @@ def tables(runs: list[tuple[str, int, Path, dict[str, Any]]]) -> tuple[pd.DataFr
         held = channels(run, TABLE_CHANNELS)
         achieved = episode_curves(held, int(config["claim_every"]), 2.0 * float(np.log(config["belief"]["amplitude"])))
         legs = episode_legs(held, config)
-        hours = float(config["problem"]["step_hours"]) * np.arange(1, held["objective_state/arrived"].size)
+        hours = float(config["problem"]["step_hours"]) * np.arange(1, held["objective_state/truth"].shape[0])
         curves.append(pd.DataFrame({"acquisition": arm, "seed": seed, "x": hours, **achieved}))
         scalars.append(
             {
                 "acquisition": arm,
                 "seed": seed,
                 **{name: float(values[-1]) for name, values in achieved.items()},
-                "steps_to_arrival": float(held["objective_state/steps_to_arrival"][-1]),
+                "steps_to_arrival": float(held.get("objective_state/steps_to_arrival", [float("nan")])[-1]),
                 **{
                     name: float("nan") if config.get("method") is None else float(achieved[name][-1])
                     for name in ("rmse", "posterior_variance", "information")
