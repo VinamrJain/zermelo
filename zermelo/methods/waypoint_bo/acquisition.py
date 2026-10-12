@@ -74,10 +74,10 @@ class Acquisition:
         target: Int[Array, ""] | None,
         budget_left: Float[Array, ""] | None,
     ) -> Scores:
-        """Every candidate scored under every field and walk, and the argmax over the reachable ones; `target` is the one candidate at `n_candidates = 0`"""
+        """Every candidate scored under every field and walk, and the argmax over the reachable ones, a tie broken at random; `target` is the one candidate at `n_candidates = 0`"""
         if self.n_candidates == 0 and target is None:
             raise ValueError("the target alone is scored, and this decision names none")
-        k_indices, k_field, k_walk, k_utility = jax.random.split(key, 4)
+        k_indices, k_field, k_walk, k_utility, k_tie = jax.random.split(key, 5)
         candidate_indices = jnp.flatnonzero(candidates.live)
         if self.n_candidates == 0:
             candidate_indices = jnp.asarray(target)[None]
@@ -129,9 +129,11 @@ class Acquisition:
         reachable = (steps > 0.0) & (steps < self.planner.replan_every)
         if budget_left is not None:
             reachable &= spent <= budget_left
+        masked = jnp.where(reachable, value, -jnp.inf)
+        tied = masked == jnp.max(masked)  # the maxima among the reachable candidates
         best = jnp.where(
             jnp.any(reachable),
-            jnp.argmax(jnp.where(reachable, value, -jnp.inf)),
+            jax.random.choice(k_tie, tied.shape[0], p=tied / jnp.maximum(jnp.sum(tied), 1)),  # one of the tied maxima, uniformly
             jnp.argmin(jnp.where(steps > 0.0, steps, jnp.inf)),  # nothing reachable: the nearest candidate
         )
         return Scores(
