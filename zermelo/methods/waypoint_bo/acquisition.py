@@ -1,8 +1,10 @@
-"""x* = argmax over the reachable candidates of alpha(x), where
+"""x* ~ Uniform( argmax over reachable x of alpha(x) ), the nearest x by S when none is reachable
 
-w(x)     = E over fields and walks of [ U(D + obs(tau)) - U(D) ]
-alpha(x) = w(x) - lambda * (max w - min w) * (S(z, x) + mu C(z, x)) / B        lambda = 0 scores w alone
-reachable: 0 < S(z, x) < L, and C(z, x) <= the budget left where the problem keeps one
+z the state scored from, D the readings so far, f-hat = E[f | D], pi = pi[f-hat] with its S(z, x) and C(z, x):
+
+    w(x)      = (1 / S M) sum over s, m of [ U(D + obs(tau^(s,m)(x))) - U(D) ],   tau^(s,m)(x) a walk under pi(., x) and f^(s) ~ p(f | D)
+    alpha(x)  = w(x) - lambda (max w - min w) (S(z, x) + mu C(z, x)) / B,         B = L (1 + mu), lambda = 0 scores w alone
+    reachable = 0 < S(z, x) < L, and C(z, x) <= the budget left where the problem keeps one
 """
 
 from dataclasses import dataclass
@@ -22,45 +24,48 @@ from zermelo.methods.waypoint_bo.utility import Utility
 @register_dataclass
 @dataclass(frozen=True)
 class Scores:
-    """One acquisition pass: what each candidate was worth, which won, and the route to it"""
+    """One `choose`: the candidates `x`, `alpha(x)`, `x*`, `tau^(1,1)(x*)` and `pi(., x*)`"""
 
     candidate_indices: Int[Array, " n_candidates"]
-    """The states scored, as position domain indices"""
+    """The `x` scored, as position domain indices"""
 
     acquisition_value: Float[Array, " n_candidates"]
-    """`alpha` at each of them"""
+    """`alpha(x)`"""
 
     waypoint: Int[Array, ""]
-    """`x_{n+1}`: the candidate that won"""
+    """`x*`"""
 
     imagined_walk_to_waypoint: Int[Array, " time_steps"]
-    """The winner's walk under the first field and walk"""
+    """`tau^(1,1)(x*)`"""
 
     route: Policy
-    """`pi[mu_n](., x_{n+1})`: the winner's column of the plan under the posterior mean, one column wide"""
+    """`pi(., x*)`, one column wide"""
 
 
 @dataclass(frozen=True)
 class Acquisition:
-    """Scores the reachable candidate waypoints and takes the best"""
+    """`choose`: the module's rule, `(belief, z) -> Scores`"""
 
     utility: Utility
+    """`U`"""
+
     planner: Planner
+    """`pi[f]`"""
 
     n_fields: int
-    """`S`: posterior fields drawn per decision, or the posterior mean at zero"""
+    """`S`, 0 for f-hat alone"""
 
     n_walks: int
-    """`M`: walks imagined per field, or the destination alone at zero"""
+    """`M`, 0 for tau = (x) and no walk"""
 
     n_candidates: int | None
-    """How many candidates to score: `None` every live one, an integer that many drawn uniformly each decision, 0 the target alone"""
+    """`x` scored: `None` every live candidate, an integer that many drawn uniformly, 0 the target alone"""
 
     improvement: bool
-    """Whether to score the collected readings and the imagined ones together, less the collected ones alone"""
+    """`U(D + obs(tau)) - U(D)` when True, `U(obs(tau))` when False"""
 
     penalty_rate: float
-    """`lambda`: a full-budget trip is charged this share of the spread of the candidate values. Zero charges nothing"""
+    """`lambda`"""
 
     def choose(
         self,
@@ -74,7 +79,7 @@ class Acquisition:
         target: Int[Array, ""] | None,
         budget_left: Float[Array, ""] | None,
     ) -> Scores:
-        """Every candidate scored under every field and walk, and the argmax over the reachable ones, a tie broken at random; `target` is the one candidate at `n_candidates = 0`"""
+        """`(belief, z = position, ...) -> Scores` by the module's rule; `target` is the one `x` at `n_candidates = 0`"""
         if self.n_candidates == 0 and target is None:
             raise ValueError("the target alone is scored, and this decision names none")
         k_indices, k_field, k_walk, k_utility, k_tie = jax.random.split(key, 5)

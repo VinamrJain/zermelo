@@ -1,4 +1,7 @@
-"""The method itself: pick a waypoint, commit a route to it, walk that route, pick again"""
+"""Path-EUI: every L moves, or on arrival within rho of x*, x* <- choose(belief, z_h), and the move is pi[f-hat](z_h, x*)
+
+z_h the state read at move h, D_h = D_{h-1} + (z_h, reading_h, context_h), f-hat = E[f | D_h]; a uniform legal act for h < opening_steps
+"""
 
 import dataclasses
 from dataclasses import dataclass
@@ -16,7 +19,7 @@ from zermelo.methods.waypoint_bo.planner import Policy
 
 
 def posterior_moments(belief: Belief, context: Float[Array, " n_context"]) -> Function:
-    """The belief's mean and log-variance per component at one context, readable at any state"""
+    """`(E[f | D], log Var[f | D])` at `context`, as a function over every state"""
     mean, var = belief.predict(jnp.arange(coordinates(belief.positions).shape[0]), context)
     return lookup(belief.positions, jnp.concatenate([mean, jnp.log(var)], axis=-1))
 
@@ -24,27 +27,27 @@ def posterior_moments(belief: Belief, context: Float[Array, " n_context"]) -> Fu
 @register_dataclass
 @dataclass(frozen=True)
 class WaypointAgentState:
-    """What the method carries between steps, and what a consumer plots it by"""
+    """What one move hands the next"""
 
     belief: Belief
-    """Holds the readings folded in so far, and the model's parameters as they stand"""
+    """`p(f | D_h)`"""
 
     scores: Scores
-    """The acquisition pass that chose the standing waypoint and the route to it, carried until the next one"""
+    """The `choose` that set the standing `x*`"""
 
     time_steps_since_waypoint: Int[Array, ""]
-    """time_steps taken since that waypoint was chosen"""
+    """Moves since that `choose`"""
 
     time_steps_taken: Int[Array, ""]
-    """time_steps taken this episode"""
+    """`h`"""
 
     claim: Function = dataclasses.field(metadata=dict(static=True))
-    """What the method asserts about the field, re-read off the belief every `claim_every` time_steps and unchanged in between"""
+    """`posterior_moments`, re-read every `claim_every` moves"""
 
 
 @dataclass(frozen=True, kw_only=True)
 class WaypointAgent(Agent[WaypointAgentState]):
-    """Bayesian optimization over waypoints, with the walk to each waypoint scored and charged"""
+    """The module's rule: `reset` gives `D_0` empty, `decide` gives the move"""
 
     candidates: Subset[Any]
     """Which states are worth aiming at, published by the problem over the set the field lives on"""
@@ -86,33 +89,33 @@ class WaypointAgent(Agent[WaypointAgentState]):
 
     @property
     def positions(self) -> Domain:
-        """The states the field is defined on"""
+        """The states `f` is defined on"""
         return self.candidates.base
 
     def _live_candidates(self) -> Int[Array, " n_live"]:
-        """Every candidate state, as position domain indices"""
+        """Every candidate `x`, as position domain indices"""
         return jnp.flatnonzero(self.candidates.live)
 
     def _legal_actions(self, obs: Observation) -> Int[Array, " n_actions"]:
-        """The values of the acts legal at the state being acted from"""
+        """The acts legal at the state acted from, as values"""
         if not isinstance(obs.legal_actions, Enumerable):
             raise TypeError(f"a planner enumerates acts, and a {type(obs.legal_actions).__name__} has no index")
         acts = jnp.asarray(obs.legal_actions.elements())
         return acts[obs.legal_actions.live] if isinstance(obs.legal_actions, Subset) else acts
 
     def _context(self, obs: Observation) -> Float[Array, " n_context"]:
-        """The coordinates this reading carries beyond its state, empty where the readout publishes none"""
+        """`context_h`, empty where the readout publishes none"""
         return obs.reading[self.context_key] if self.context_key in obs.reading else jnp.zeros(0)
 
     def _fold_reading(self, state: WaypointAgentState, obs: Observation) -> tuple[Int[Array, ""], Belief]:
-        """Where the actor stands, and the belief with this step's reading folded in"""
+        """`z_h`, and `p(f | D_{h-1} + (z_h, reading_h, context_h))`"""
         z = self.candidates.index_of(obs.reading[self.position_key])
         row = int(jnp.sum(state.belief.data.row_is_written))  # rows written so far; concrete, an episode being a Python loop
         written = state.belief.data.write(row, z, obs.reading[self.reading_key], self._context(obs))
         return z, state.belief.fit(written)
 
     def reset(self, key: PRNGKeyArray, obs: Observation) -> WaypointAgentState:
-        """Nothing read yet: an empty buffer, blank scores at the shape they keep, and the step budget already spent"""
+        """`D_0` empty, blank `Scores` at their shape, moves since waypoint = `L` so the first move plans"""
         if self.belief.positions != self.positions:
             raise ValueError("the belief and the candidate set were built over different position domains")
         if self.opening_steps >= self.horizon:
@@ -140,7 +143,7 @@ class WaypointAgent(Agent[WaypointAgentState]):
         )
 
     def decide(self, key: PRNGKeyArray, agent_state: WaypointAgentState, obs: Observation) -> tuple[WaypointAgentState, Decision]:
-        """The reading folded in, and either a random opening act, a fresh waypoint, or the next act of the standing route"""
+        """`(state, obs) -> (state', a)` by the module's rule"""
         k_draw, k_score = jax.random.split(key)
         planner = self.acquisition.planner
         z, belief = self._fold_reading(agent_state, obs)
