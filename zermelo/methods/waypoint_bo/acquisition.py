@@ -88,7 +88,7 @@ class Acquisition:
         walk_keys = jax.vmap(jax.random.fold_in, in_axes=(None, 0))(k_walk, jnp.arange(max(self.n_walks, 1)))
         collected_readings, n_scored = belief.data, candidate_indices.shape[0]
         # pi[mu_n], solved once and reused
-        mean_policy = self.planner.plan(transition.kernel(belief.mean(context)), candidate_indices, actions)
+        mean_policy = self.planner.plan(transition.kernel(belief.mean(context)), candidate_indices, actions, position)
         utility_samples, first_draw_walks = [], None
 
         # f-hat^(1..S)
@@ -109,7 +109,7 @@ class Acquisition:
             if self.n_walks == 0:  # (1, n_candidates, 1): tau = (x), the destination and no route
                 walk, moved = candidate_indices[None, :, None], jnp.ones((1, n_scored, 1), bool)
             else:  # both (n_walks, n_candidates, time_steps): tau ~ p(. | z, x, f-hat, pi)
-                walk, moved = self.planner.roll(walk_keys, kernel, mean_policy, position)
+                walk, moved = self.planner.roll(walk_keys, kernel, mean_policy, candidate_indices, position)
             first_draw_walks = (
                 walk[0] if first_draw_walks is None else first_draw_walks
             )  # (n_candidates, time_steps) under f-hat^(1), tau^(1)
@@ -121,7 +121,7 @@ class Acquisition:
 
         # (n_fields, n_walks, n_candidates), averaged over both sample axes
         worth = jnp.mean(jnp.stack(utility_samples), axis=(0, 1))  # w(x)
-        steps, spent = mean_policy.steps_to_target[position], mean_policy.budget_spent_to_target[position]  # S(z, x), C(z, x)
+        steps, spent = mean_policy.steps_to_target, mean_policy.budget_spent_to_target  # S(z, x), C(z, x)
         # lambda * (max w - min w) / B charges each unit of the plan's own cost-to-go S + mu C. A flat w charges nothing
         charge = self.penalty_rate * (jnp.max(worth) - jnp.min(worth)) / self.planner.cost_budget
         value = worth - charge * (steps + self.planner.cost_weight * spent)  # alpha(x)
@@ -139,5 +139,5 @@ class Acquisition:
             acquisition_value=value,
             waypoint=candidate_indices[best],
             imagined_walk_to_waypoint=jnp.asarray(first_draw_walks)[best],
-            route=jax.tree.map(lambda table: table[:, best, None], mean_policy),
+            route=Policy(mean_policy.act[:, best, None], steps[best, None], spent[best, None]),
         )

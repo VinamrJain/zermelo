@@ -126,7 +126,7 @@ class WaypointAgent(Agent[WaypointAgentState]):
             acquisition_value=jnp.zeros(n_scored),
             waypoint=jnp.zeros((), jnp.int32),
             imagined_walk_to_waypoint=jnp.zeros(time_steps, jnp.int32),
-            route=Policy(jnp.zeros((n_states, 1), jnp.int8), jnp.zeros((n_states, 1)), jnp.zeros((n_states, 1))),
+            route=Policy(jnp.zeros((n_states, 1), jnp.int8), jnp.zeros((1,)), jnp.zeros((1,))),
         )
         context = self._context(obs)
         prior_mean = obs.reading[self.prior_mean_key] if self.prior_mean_key is not None and self.prior_mean_key in obs.reading else None
