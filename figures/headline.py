@@ -17,6 +17,7 @@ from matplotlib.cm import ScalarMappable  # noqa: E402
 from matplotlib.colors import PowerNorm  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 
+from figures.common import BUILD  # noqa: E402
 from zermelo.experiments.ambient_waypoint.render import panels as grid_panels  # noqa: E402
 from zermelo.experiments.ambient_waypoint.render import read as read_grid  # noqa: E402
 from zermelo.experiments.ambient_waypoint.render.style import Style as GridStyle  # noqa: E402
@@ -181,7 +182,7 @@ def main() -> None:
         ],
         loc="lower center", ncol=5, frameon=False, fontsize=SIZE, handletextpad=0.4, columnspacing=1.2, borderaxespad=0.1,
     )  # fmt: skip
-    out = Path(__file__).parent.parent / "build" / "main"
+    out = BUILD / "main"
     out.mkdir(parents=True, exist_ok=True)
     fig.savefig(out / "headline.pdf", dpi=600)
     fig.savefig(out / "headline.png")

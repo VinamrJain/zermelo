@@ -227,7 +227,8 @@ def read(path: Path) -> Replay:
         made = np.arange(index.size) >= replans[0]  # (snapshots,) a plan is in force from the first one onward
         made_at = replans[np.clip(np.searchsorted(replans, np.arange(index.size), "right") - 1, 0, None)]  # (snapshots,)
         walk = grid[np.asarray(record.agent_state["scores.imagined_walk_to_waypoint"])]  # (snapshots, steps, 2)
-        act = np.asarray(record.agent_state["scores.route.act"])[:, :, 0]  # (snapshots, n_states) the plan's choice at every cell
+        route = "scores.route.act" if "scores.route.act" in record.agent_state else "policy.act"  # records before 2026-10 hold the latter
+        act = np.asarray(record.agent_state[route])[:, :, 0]  # (snapshots, n_states) the plan's choice at every cell
         plan = Plan(
             opening_moves=opening_moves(record.config, int(record.reward.shape[0])),
             waypoint=np.where(made[:, None], grid[index], np.nan),
