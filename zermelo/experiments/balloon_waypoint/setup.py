@@ -149,9 +149,10 @@ def column_peak_speed(n_alt: int) -> Implementation:
 
 
 def value_iteration(replan_every: int, radius: float, target_chunk: int | None, cost_weight: float) -> Implementation:
-    """`v_0 = 0`, `v_{k+1}(s) = 0 on arrival, else min over a of c(s, a) + sum over s' of P(s' | s, a) v_k(s')`, `replan_every` rounds"""
+    """`v_0 = 0`, `v_{k+1}(s) = 0 on arrival, else min over a of c(s, a) + sum over s' of P(s' | s, a) v_k(s')`, `replan_every` rounds, the budget"""
     return _built(
         "zermelo.methods.waypoint_bo.planner.ValueIteration",
+        backup_iterations=replan_every,
         replan_every=replan_every,
         radius=radius,
         target_chunk=target_chunk,
@@ -163,6 +164,7 @@ def greedy(replan_every: int, radius: float, target_chunk: int | None, cost_weig
     """One backup on the distance to the target: the act whose next cell is nearest it in expectation"""
     return _built(
         "zermelo.methods.waypoint_bo.planner.Greedy",
+        backup_iterations=replan_every,
         replan_every=replan_every,
         radius=radius,
         target_chunk=target_chunk,

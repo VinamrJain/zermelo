@@ -73,10 +73,6 @@ class ProblemConfig:
     arrival_km: float = MISSING
     """How near the target counts as arrived"""
 
-    start_lat: float = MISSING
-    start_lon: float = MISSING
-    """Where the boat starts, snapped to the grid"""
-
     objective: Literal["reach", "learn", "search"] = MISSING
     """What the episode is scored on: reaching a target drawn from the target box, learning the ocean current over that box, or finding where it runs fastest in it"""
 

@@ -1,10 +1,10 @@
 """pi[f](z, x): the act at state z steering to target x under a field f, and what following it takes from z
 
-P(z' | z, a) the transition under f, c(z, a) >= 0 a step's own cost, mu its weight, rho the arrival radius, L the budget:
+P(z' | z, a) the transition under f, c(z, a) >= 0 a step's own cost, mu its weight, rho the arrival radius, K the rounds, L the budget:
 
     v_0 = 0,   v_{k+1}(z, x) = 0 if |z - x| <= rho else min over a of [ 1 + mu c(z, a) + sum over z' of P(z' | z, a) v_k(z', x) ]
-    pi(z, x)  = argmin over a of [ 1 + mu c(z, a) + sum over z' of P(z' | z, a) v_L(z', x) ]
-    S(z, x)   = expected steps from z to x, C(z, x) = expected cost spent, both under pi and truncated at L, so v_L = S + mu C
+    pi(z, x)  = argmin over a of [ 1 + mu c(z, a) + sum over z' of P(z' | z, a) v_K(z', x) ]
+    S(z, x)   = expected steps from z to x, C(z, x) = expected cost spent, both under pi and truncated at K, so v_K = S + mu C
 """
 
 from abc import ABC, abstractmethod
@@ -36,7 +36,7 @@ class Policy:
     """`pi(z, x)`, the act's value"""
 
     steps_to_target: Float[Array, " n_targets"]
-    """`S(z, x)`: 0 within `rho` of `x`, `L` where `pi` never arrives"""
+    """`S(z, x)`: 0 within `rho` of `x`, `K` where `pi` never arrives"""
 
     budget_spent_to_target: Float[Array, " n_targets"]
     """`C(z, x)`: 0 where the transition charges none"""
@@ -50,8 +50,11 @@ type PolicyTables = tuple[Int[Array, "n_states n_targets"], Float[Array, "n_stat
 class Planner(ABC):
     """`solve` gives `(pi, S, C)`, `plan` gives it `target_chunk` targets at a time, `roll` samples walks under `pi`"""
 
+    backup_iterations: int
+    """`K`: rounds of the recursion per solve"""
+
     replan_every: int
-    """`L`: backups per solve, steps per walk, moves per waypoint"""
+    """`L`: steps per walk, moves per waypoint"""
 
     radius: float
     """`rho`: `|z - x| <= rho` is arrival, on embedded coordinates"""
@@ -137,13 +140,13 @@ class Planner(ABC):
         actions: Int[Array, " n_actions"],
         per_step: Callable[[Int[Array, ""]], Float[Array, " n_states"] | float],
     ) -> Float[Array, "n_states n_targets"]:
-        """h_L for h_0 = 0, h_{k+1}(z, x) = 0 if |z - x| <= rho else per_step(pi(z, x))[z] + sum over z' of P(z' | z, pi(z, x)) h_k(z', x)"""
+        """h_K for h_0 = 0, h_{k+1}(z, x) = 0 if |z - x| <= rho else per_step(pi(z, x))[z] + sum over z' of P(z' | z, pi(z, x)) h_k(z', x)"""
         arrived = self.arrived(kernel.domain, targets)
         state_rows, target_columns = jnp.arange(arrived.shape[0])[:, None], jnp.arange(arrived.shape[1])[None, :]
         act_rows = position_of(actions, act_table)  # (n_states, n_targets): the act's position on the backup's action axis
         return lax.fori_loop(
             0,
-            self.replan_every,
+            self.backup_iterations,
             lambda _, accumulated: jnp.where(
                 arrived, 0.0, self._backup(kernel, accumulated, actions, per_step)[act_rows, state_rows, target_columns]
             ),
@@ -191,7 +194,7 @@ class Planner(ABC):
 
 @dataclass(frozen=True)
 class ValueIteration(Planner):
-    """The module's recursion, L rounds, with a_k(z, x) the round's minimiser:
+    """The module's recursion, K rounds, with a_k(z, x) the round's minimiser:
 
     S_{k+1}(z, x) = 1 + sum over z' of P(z' | z, a_k) S_k(z', x),   C_{k+1}(z, x) = c(z, a_k) + sum over z' of P(z' | z, a_k) C_k(z', x)
     """
@@ -221,7 +224,7 @@ class ValueIteration(Planner):
             )
 
         zeros = jnp.zeros(arrived.shape)
-        value, steps_to_target, budget_spent_to_target = lax.fori_loop(0, self.replan_every, backup, (zeros, zeros, zeros))
+        value, steps_to_target, budget_spent_to_target = lax.fori_loop(0, self.backup_iterations, backup, (zeros, zeros, zeros))
         act_table = actions[jnp.argmin(self._backup(kernel, value, actions, planned_cost), axis=0)]
         return act_table, steps_to_target, budget_spent_to_target
 
