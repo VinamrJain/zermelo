@@ -197,12 +197,22 @@ class BeliefField:
 
 
 class Belief(ABC):
-    """A model of the field over `positions`, conditioned on `data`"""
+    """A model of the field over `positions`, conditioned on `data`, as independent blocks of its channels"""
 
     positions: Domain
     """The states the field is defined on: finite, and handing out coordinates"""
 
     data: Dataset
+
+    @property
+    @abstractmethod
+    def widths(self) -> tuple[int, ...]:
+        """Channels in each block, summing to the field's `m`"""
+
+    @property
+    @abstractmethod
+    def reading_noise(self) -> Float[Array, " blocks"]:
+        """Standard deviation of a reading's error per channel, one per block"""
 
     @abstractmethod
     def with_prior_mean(self, prior_mean: Function | None) -> Self:
@@ -225,8 +235,8 @@ class Belief(ABC):
     @abstractmethod
     def posterior_covariance(
         self, a: Int[Array, "*batch_a n_a"], b: Int[Array, "*batch_b n_b"], context: Float[Array, " n_context"]
-    ) -> Float[Array, "*batch n_a n_b"]:
-        """`k_n(a, b)` for every state `a` of the first set and `b` of the second, at one context; the batch axes broadcast"""
+    ) -> Float[Array, "*batch blocks n_a n_b"]:
+        """`k_n(a, b)` of each block for every state `a` of the first set and `b` of the second, at one context; the batch axes broadcast"""
 
     @abstractmethod
     def mean(self, context: Float[Array, " n_context"]) -> BeliefField:
@@ -261,6 +271,16 @@ class OracleBelief(Belief):
         """Seen nothing, over a buffer of `rows` rows, holding the field the world drew"""
         return cls(positions, Dataset.empty(rows, m, sum(context.values())), field, context)
 
+    @property
+    def widths(self) -> tuple[int, ...]:
+        """One block of every channel"""
+        return (self.data.state_value.shape[-1],)
+
+    @property
+    def reading_noise(self) -> Float[Array, " blocks"]:
+        """1, unread: the truth has no spread to weigh it against"""
+        return jnp.ones(1)
+
     def with_prior_mean(self, prior_mean: Function | None) -> "OracleBelief":
         """Unchanged: the truth needs no prior"""
         return self
@@ -290,9 +310,9 @@ class OracleBelief(Belief):
 
     def posterior_covariance(
         self, a: Int[Array, "*batch_a n_a"], b: Int[Array, "*batch_b n_b"], context: Float[Array, " n_context"]
-    ) -> Float[Array, "*batch n_a n_b"]:
+    ) -> Float[Array, "*batch blocks n_a n_b"]:
         """Zero everywhere: the truth has no spread"""
-        return jnp.zeros((*jnp.broadcast_shapes(a.shape[:-1], b.shape[:-1]), a.shape[-1], b.shape[-1]))
+        return jnp.zeros((*jnp.broadcast_shapes(a.shape[:-1], b.shape[:-1]), 1, a.shape[-1], b.shape[-1]))
 
     def mean(self, context: Float[Array, " n_context"]) -> BeliefField:
         return self._field(context)
@@ -372,6 +392,15 @@ class GPBelief(Belief):
     def empty(cls, positions: Domain, rows: int, m: int, n_context: int, **config: Any) -> "GPBelief":
         """Seen nothing, over a buffer of `rows` rows"""
         return cls(positions, Dataset.empty(rows, m, n_context), **config)
+
+    @property
+    def widths(self) -> tuple[int, ...]:
+        """One block of every channel"""
+        return (self.data.state_value.shape[-1],)
+
+    @property
+    def reading_noise(self) -> Float[Array, " blocks"]:
+        return self.noise[None]
 
     def with_prior_mean(self, prior_mean: Function | None) -> "GPBelief":
         return dataclasses.replace(self, prior_mean=prior_mean)
@@ -496,8 +525,8 @@ class GPBelief(Belief):
 
     def posterior_covariance(
         self, first_states: Int[Array, "*batch_a n_a"], second_states: Int[Array, "*batch_b n_b"], context: Float[Array, " n_context"]
-    ) -> Float[Array, "*batch n_a n_b"]:
-        """k_n(a, b) = k(a, b) - V_a^T V_b,   V = L^-1 k(X_n, .),   each side whitened once over its own batch
+    ) -> Float[Array, "*batch blocks n_a n_b"]:
+        """k_n(a, b) = k(a, b) - V_a^T V_b,   V = L^-1 k(X_n, .),   each side whitened once over its own batch, as the one block
 
         Memory O(rows (n_a + n_b) + n_a n_b) per batch element.
         """
@@ -507,7 +536,7 @@ class GPBelief(Belief):
         first, second = self._coordinate_rows(first_states, context), self._coordinate_rows(second_states, context)
         prior = jnp.vectorize(kernel.cross_covariance, signature="(a,d),(b,d)->(a,b)")(first, second)  # (*batch, n_a, n_b): k(a, b)
         whiten = jnp.vectorize(lambda rows: _whiten(chol, keep, kernel.cross_covariance(x, rows)), signature="(n,d)->(r,n)")
-        return prior - jnp.einsum("...ra,...rb->...ab", whiten(first), whiten(second))
+        return (prior - jnp.einsum("...ra,...rb->...ab", whiten(first), whiten(second)))[..., None, :, :]
 
     def mean(self, context: Float[Array, " n_context"]) -> BeliefField:
         return self._field(context, self._moments(self._query_and_rows(context))[0])
@@ -560,3 +589,86 @@ class GPBelief(Belief):
         )  # (n_read, n_fields): the same key, so the same Omega
         canonical = jnp.linalg.solve(gram, residual)  # (n_read, n_fields): one factorization, a column per field
         return prior_part + (kernel.cross_covariance(query, x) @ canonical).T
+
+
+@register_dataclass
+@dataclass(frozen=True)
+class BlockBelief(Belief):
+    """Independent beliefs over consecutive blocks of the field's channels:
+
+    f = (f_1, ..., f_B),   block b the next widths[b] channels, modelled by blocks[b] alone
+    """
+
+    positions: Domain = dataclasses.field(metadata=dict(static=True))
+    data: Dataset
+
+    blocks: tuple[Belief, ...]
+    """One belief per block, each over its own channels of `data`"""
+
+    @property
+    def widths(self) -> tuple[int, ...]:
+        return tuple(block.data.state_value.shape[-1] for block in self.blocks)
+
+    @property
+    def reading_noise(self) -> Float[Array, " blocks"]:
+        return jnp.concatenate([block.reading_noise for block in self.blocks])
+
+    def _edges(self) -> list[tuple[int, int]]:
+        """(first channel, one past the last) of each block"""
+        ends = [sum(self.widths[: b + 1]) for b in range(len(self.widths))]
+        return list(zip([0, *ends[:-1]], ends, strict=True))
+
+    def _split(self, data: Dataset) -> list[Dataset]:
+        """`data` with its channels cut into the blocks"""
+        return [dataclasses.replace(data, state_value=data.state_value[..., low:high]) for low, high in self._edges()]
+
+    def _each(self, data: Dataset, blocks: tuple[Belief, ...]) -> "BlockBelief":
+        """This belief over `data`, with `blocks` in place of its own"""
+        return BlockBelief(self.positions, data, blocks)
+
+    def with_prior_mean(self, prior_mean: Function | None) -> "BlockBelief":
+        """Each block about its own channels of `prior_mean`"""
+        if prior_mean is None:
+            return self
+        return dataclasses.replace(
+            self,
+            blocks=tuple(
+                block.with_prior_mean(lambda x, low=low, high=high: prior_mean(x)[..., low:high])
+                for block, (low, high) in zip(self.blocks, self._edges(), strict=True)
+            ),
+        )
+
+    def fit(self, data: Dataset) -> "BlockBelief":
+        return self._each(data, tuple(block.fit(part) for block, part in zip(self.blocks, self._split(data), strict=True)))
+
+    def condition(self, data: Dataset) -> "BlockBelief":
+        return self._each(data, tuple(block.condition(part) for block, part in zip(self.blocks, self._split(data), strict=True)))
+
+    def predict(
+        self, state_index: Int[Array, "*batch n"], context: Float[Array, " n_context"]
+    ) -> tuple[Float[Array, "*batch n m"], Float[Array, "*batch n m"]]:
+        """The blocks' means and variances laid side by side"""
+        moments = [block.predict(state_index, context) for block in self.blocks]
+        return jnp.concatenate([mean for mean, _ in moments], axis=-1), jnp.concatenate([var for _, var in moments], axis=-1)
+
+    def posterior_covariance(
+        self, first_states: Int[Array, "*batch_a n_a"], second_states: Int[Array, "*batch_b n_b"], context: Float[Array, " n_context"]
+    ) -> Float[Array, "*batch blocks n_a n_b"]:
+        """Each block's `k_n(a, b)`, stacked"""
+        return jnp.concatenate([block.posterior_covariance(first_states, second_states, context) for block in self.blocks], axis=-3)
+
+    def _joined(self, fields: list[BeliefField]) -> BeliefField:
+        """One field per block laid side by side into one field"""
+        return BeliefField(
+            self.positions,
+            jnp.concatenate([f.table for f in fields], axis=-1),
+            jnp.concatenate([f.at_collected_readings for f in fields], axis=-1),
+        )
+
+    def mean(self, context: Float[Array, " n_context"]) -> BeliefField:
+        return self._joined([block.mean(context) for block in self.blocks])
+
+    def draw(self, key: PRNGKeyArray, n_fields: int, context: Float[Array, " n_context"]) -> list[BeliefField]:
+        """Draw `s` is each block's draw `s` laid side by side"""
+        drawn = [block.draw(k, n_fields, context) for block, k in zip(self.blocks, jax.random.split(key, len(self.blocks)), strict=True)]
+        return [self._joined(list(per_block)) for per_block in zip(*drawn, strict=True)]
