@@ -4,7 +4,7 @@ Two panels against hours elapsed: simple regret g - b_t and cumulative regret, g
 stood on by then, in m/s; each the median over episodes with the quartile band.
 Below, a table: mean +- standard error of both at the horizon; the best mean bold.
 
-Run from code/:  pixi run fig fig_ocean_search [sweep]
+Run from code/:  pixi run fig ocean.fig_search [sweep]
 """
 
 import sys

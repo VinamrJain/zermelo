@@ -3,7 +3,7 @@
 Left, targets visited against hours elapsed, the median over episodes with the quartile band. Right, steps to completion per arm,
 mean +- standard error, the oracle as a dashed line. Below, a table of both at the horizon; the best mean of a competed column bold.
 
-Run from code/:  pixi run fig fig_ocean_visit [sweep]
+Run from code/:  pixi run fig ocean.fig_visit [sweep]
 """
 
 import sys

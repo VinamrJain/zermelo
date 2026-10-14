@@ -1,6 +1,6 @@
 """Headline figure draft, 1x2: (a) one grid episode, (b) one static balloon episode on the globe
 
-Run from code/:  pixi run fig headline <grid run dir> <balloon run dir> [grid move] [balloon move]
+Run from code/:  pixi run fig comparison.headline <grid run dir> <balloon run dir> [grid move] [balloon move]
 Writes results/figures/main/headline.{pdf,png}. The paper's copy: ambient_waypoint `planning_budget_steps50,seed=7` at move 1590, balloon_waypoint `static_esi_L50,seed=7` at move 160
 """
 

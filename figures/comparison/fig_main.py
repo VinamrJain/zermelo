@@ -4,8 +4,8 @@ Rows: 2D grid then balloon (pooled over frames), two each: simple regret, averag
 Median over episodes with the quartile band (in the last three columns for our rules only).
 """
 
-from figures import fig_comparison, fig_travel
 from figures.common import LEGEND_HEIGHT, WIDTH, plt, save
+from figures.comparison import fig_comparison, fig_travel
 
 fig, axes = plt.subplots(4, 3, figsize=(WIDTH, 4 * 1.28 + LEGEND_HEIGHT), constrained_layout=True)
 fig_comparison.draw(axes[[0, 2]])

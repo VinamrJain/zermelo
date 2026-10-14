@@ -30,7 +30,7 @@ Python 3.14 or newer (uses PEP 695 generics)
     pixi run film   <experiment> <target>     # the same sheets as video, submitted rather than drawn here
 
 
-    pixi run fig    fig_comparison
+    pixi run fig    comparison.fig_comparison
     pixi run render balloon_waypoint acquisitions_oracle -- --arm all
 
 `pixi task list` names every task. Put `--` before any override or flag:

@@ -4,7 +4,7 @@ Two rows of three panels against hours elapsed, the ocean current above and the 
 claimed mean over the box, information gained by the belief over the box in nats; each the median over episodes with the quartile band.
 Below, a table: mean +- standard error of the three at the horizon; the best mean of a competed column bold.
 
-Run from code/:  pixi run fig fig_ocean_learn [sweep]
+Run from code/:  pixi run fig ocean.fig_learn [sweep]
 """
 
 import sys

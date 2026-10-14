@@ -30,7 +30,7 @@ args = ["experiment", "name"]
 cmd = "python -m zermelo.experiments.{{ experiment }} +sweep={{ name }} hydra/launcher=slurm"
 description = "Submit one sweep as a Slurm array, on the partition its own resources block names"
 
-# Put `--` before any argument: `pixi run fig fig_ocean_search -- search`
+# Put `--` before any argument: `pixi run fig ocean.fig_search -- search`
 [tasks.fig]
 args = ["script"]
 cmd = "python -m figures.{{ script }}"

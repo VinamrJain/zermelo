@@ -1,6 +1,6 @@
 """The settings a tuning launch picks: per rule, the arm of lowest median metric over the held-out seeds
 
-Run from code/:  pixi run fig pick_tuned <ambient_waypoint|balloon_waypoint> <launch dir>
+Run from code/:  pixi run fig comparison.pick_tuned <ambient_waypoint|balloon_waypoint> <launch dir>
 EMI is picked on cumulative regret and EVI on RMSE. Prints every arm's median and the pick; a tie keeps the first arm listed.
 """
 
