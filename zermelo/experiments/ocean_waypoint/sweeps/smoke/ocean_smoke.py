@@ -9,6 +9,7 @@ from zermelo.experiments.ocean_waypoint.setup import (
     posterior_spread,
     region_information,
     sweep,
+    targets_reached,
     total_variance,
     uniform,
     value_iteration,
@@ -41,7 +42,7 @@ def _method(utility: Implementation, *, n_fields: int, n_walks: int, n_candidate
     """One rule on a value-iteration planner, only the candidates within reach scored, at the settings the arms differ in"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(replan_every=3, radius=60.0, target_chunk=None, cost_weight=0.0),
+        planner=value_iteration(backup_iterations=10, replan_every=3, radius=60.0, target_chunk=None, cost_weight=0.0),
         improvement=True,
         n_fields=n_fields,
         n_walks=n_walks,
@@ -109,6 +110,28 @@ sweep(
     arms=[
         arm("emi", _method(max_magnitude(), n_fields=2, n_walks=2, n_candidates=8), _belief(oracle=False)),
         arm("mc_ei", _method(max_magnitude(), n_fields=2, n_walks=0, n_candidates=8), _belief(oracle=False)),
+        arm("rand_act", None, _belief(oracle=False)),
+    ],
+)
+
+# The visiting objective on the same coarse grid, two targets, the fields drawn and the walks kept few
+sweep(
+    "smoke_visit",
+    problem=dataclasses.replace(WORLD, objective="visit", n_targets=2),
+    horizon=10,
+    claim_every=1,
+    recorded={
+        **RECORDED,
+        "objective_state/claim": 1,
+        "objective_state/targets": 1,
+        "objective_state/visited": 1,
+        "objective_state/steps_to_completion": 1,
+    },
+    seeds=[0],
+    resources=Resources(cpus=1, mem_gb=8, timeout_min=20, gres=None, partition="dean", constraint="avx2", array_parallelism=10),
+    arms=[
+        arm("etr", _method(targets_reached(60.0), n_fields=2, n_walks=2, n_candidates=None), _belief(oracle=False)),
+        arm("nearest", _method(targets_reached(60.0), n_fields=0, n_walks=0, n_candidates=None), _belief(oracle=False)),
         arm("rand_act", None, _belief(oracle=False)),
     ],
 )

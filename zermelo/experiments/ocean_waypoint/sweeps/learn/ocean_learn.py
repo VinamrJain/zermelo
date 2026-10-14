@@ -34,7 +34,9 @@ def _method(utility: Implementation, *, n_walks: int) -> MethodConfig:
     """One rule on a value-iteration planner, travel not priced"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(replan_every=PLANNING_BUDGET, radius=ARRIVAL_RADIUS_KM, target_chunk=None, cost_weight=0.0),
+        planner=value_iteration(
+            backup_iterations=HORIZON_LENGTH, replan_every=PLANNING_BUDGET, radius=ARRIVAL_RADIUS_KM, target_chunk=None, cost_weight=0.0
+        ),
         improvement=True,
         n_fields=0,
         n_walks=n_walks,
