@@ -35,21 +35,9 @@ def query_context(data: Dataset) -> Float[Array, " n_context"]:
     return data.context_value[(-1,) * (data.context_value.ndim - 1)]
 
 
-def block_channels(widths: tuple[int, ...], blocks: tuple[int, ...]) -> Int[Array, " channels"]:
-    """The field's channel indices the `blocks` cover, in order"""
-    edges = [sum(widths[:b]) for b in range(len(widths) + 1)]
-    return jnp.concatenate([jnp.arange(edges[b], edges[b + 1]) for b in blocks])
-
-
-def over_blocks(belief: Belief, per_block: Float[Array, "*batch blocks"], blocks: tuple[int, ...]) -> Float[Array, " *batch"]:
-    """sum over b in `blocks` of widths[b] * per_block[b]"""
-    chosen = jnp.asarray(blocks)
-    return jnp.sum(jnp.asarray(belief.widths)[chosen] * jnp.take(per_block, chosen, axis=-1), axis=-1)
-
-
 def magnitude(values: Float[Array, "*batch n m"], belief: Belief, block: int) -> Float[Array, "*batch n"]:
     """||values[block's channels]||"""
-    return jnp.linalg.norm(values[..., block_channels(belief.widths, (block,))], axis=-1)
+    return jnp.linalg.norm(values[..., belief.channels((block,))], axis=-1)
 
 
 @dataclass(frozen=True)
@@ -93,15 +81,15 @@ class TotalVariance(Utility):
     def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
         context = query_context(data)
         candidate_states = jnp.flatnonzero(candidates.live)  # (n_candidates,)
-        channels = block_channels(belief.widths, tuple(self.blocks))
+        channels = belief.channels(tuple(self.blocks))
         variance_now = jnp.sum(belief.predict(candidate_states, context)[1][:, channels])  # sum over c and channels of k_n(c, c)
         imagined_states, imagined_is_live = imagined_rows(belief, data)
         if imagined_states.shape[-1] == 0:
             return jnp.broadcast_to(-variance_now, imagined_states.shape[:-1])
         if imagined_states.ndim == 1:
             return (
-                over_blocks(
-                    belief, variance_removed(belief, candidate_states, imagined_states, imagined_is_live, context), tuple(self.blocks)
+                belief.over_blocks(
+                    variance_removed(belief, candidate_states, imagined_states, imagined_is_live, context), tuple(self.blocks)
                 )
                 - variance_now
             )
@@ -109,7 +97,7 @@ class TotalVariance(Utility):
         return (
             jnp.stack(
                 [
-                    over_blocks(belief, variance_removed(belief, candidate_states, states, is_live, context), tuple(self.blocks))
+                    belief.over_blocks(variance_removed(belief, candidate_states, states, is_live, context), tuple(self.blocks))
                     for states, is_live in zip(imagined_states, imagined_is_live, strict=True)
                 ]
             )
@@ -144,7 +132,7 @@ class PosteriorSpread(Utility):
     """Which blocks of the field count"""
 
     def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
-        var = belief.predict(data.state_index, query_context(data))[1][..., block_channels(belief.widths, tuple(self.blocks))]
+        var = belief.predict(data.state_index, query_context(data))[1][..., belief.channels(tuple(self.blocks))]
         spread = jnp.sqrt(jnp.sum(var, axis=-1))  # channels independent
         return jnp.sum(jnp.where(row_counts_toward_utility(data, candidates), spread, 0.0), axis=-1)
 
@@ -157,7 +145,7 @@ class ExpectedImprovement(Utility):
     """Which block of the field is measured, one channel wide"""
 
     def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
-        channel = block_channels(belief.widths, (self.block,))
+        channel = belief.channels((self.block,))
         if channel.shape[0] != 1:
             raise ValueError(
                 f"a closed-form improvement of a magnitude needs a one-channel block, and block {self.block} has {channel.shape[0]}"
@@ -188,7 +176,7 @@ class UpperConfidence(Utility):
 
     def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
         mean, var = belief.predict(data.state_index, query_context(data))
-        channels = block_channels(belief.widths, (self.block,))
+        channels = belief.channels((self.block,))
         bound = jnp.linalg.norm(mean[..., channels], axis=-1) + self.c * jnp.sqrt(jnp.sum(var[..., channels], axis=-1))
         return jnp.max(jnp.where(row_counts_toward_utility(data, candidates), bound, 0.0), axis=-1)  # 0.0 floors a magnitude
 
@@ -247,7 +235,7 @@ class InformationGain(Utility):
             return jnp.zeros(imagined_states.shape[:-1])
         both_live = (imagined_is_live[..., :, None] & imagined_is_live[..., None, :])[..., None, :, :]
         among_imagined = jnp.where(both_live, belief.posterior_covariance(imagined_states, imagined_states, context), 0.0)
-        return over_blocks(belief, half_log_det(among_imagined, belief.reading_noise), tuple(self.blocks))
+        return belief.over_blocks(half_log_det(among_imagined, belief.reading_noise), tuple(self.blocks))
 
 
 @dataclass(frozen=True)
@@ -283,8 +271,8 @@ class RegionInformation(Utility):
             )  # (*batch, blocks, n_imagined, n_candidates)
             explained = jnp.einsum("...bic,bcd,...bjd->...bij", to_candidates, inverse_candidates, to_candidates)
             noise = belief.reading_noise
-            return over_blocks(
-                belief, half_log_det(among_imagined, noise) - half_log_det(among_imagined - explained, noise), tuple(self.blocks)
+            return belief.over_blocks(
+                half_log_det(among_imagined, noise) - half_log_det(among_imagined - explained, noise), tuple(self.blocks)
             )
 
         if imagined_states.ndim <= 2:

@@ -133,7 +133,7 @@ class WaypointAgent(Agent[WaypointAgentState]):
         )
         context = self._context(obs)
         prior_mean = obs.reading[self.prior_mean_key] if self.prior_mean_key is not None and self.prior_mean_key in obs.reading else None
-        empty = self.belief.with_prior_mean(prior_mean).condition(Dataset.empty(self.horizon, width, context.shape[-1]))
+        empty = self.belief.with_prior_mean(prior_mean).fit(Dataset.empty(self.horizon, width, context.shape[-1]))
         return WaypointAgentState(
             empty,
             blank,
