@@ -41,7 +41,7 @@ def _method(utility: Implementation, *, n_fields: int, n_walks: int, n_candidate
     """One rule on a value-iteration planner, only the candidates within reach scored, at the settings the arms differ in"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(replan_every=3, radius=60.0, target_chunk=None, cost_weight=0.0),
+        planner=value_iteration(backup_iterations=10, replan_every=3, radius=60.0, target_chunk=None, cost_weight=0.0),
         improvement=True,
         n_fields=n_fields,
         n_walks=n_walks,

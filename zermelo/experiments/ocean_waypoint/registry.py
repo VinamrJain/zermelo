@@ -25,12 +25,10 @@ GULF_STREAM_2019JUN = ProblemConfig(
     lat_max=42.0,
     lon_min=-75.0,
     lon_max=-55.0,
-    target_lat_min=36.4,  # the middle three fifths of the box, so no target sits on its rim
+    target_lat_min=36.4,  # the middle three fifths of the box, where the boat starts and every target is drawn
     target_lat_max=40.6,
     target_lon_min=-71.0,
     target_lon_max=-59.0,
-    start_lat=37.0,
-    start_lon=-65.0,
     arrival_km=20.0,
     objective="reach",
 )
@@ -73,8 +71,8 @@ PLANNING_BUDGET = 25
 ARRIVAL_RADIUS_KM = 20.0
 """`rho`: how near a waypoint counts as arrived, inside positions about 18 km apart"""
 
-HORIZON_LENGTH = 160
-"""time_steps in an episode: 20 days at 3 hours each"""
+HORIZON_LENGTH = 480
+"""time_steps in an episode: 60 days at 3 hours each"""
 
 CLAIM_EVERY_STEPS = 1
 """Moves between re-readings of the claim off a belief"""
@@ -94,13 +92,16 @@ RECORDED = {
 }
 """What a record stores, and the moves between the snapshots it keeps of each. The forecast is read from `data_path` instead"""
 
-N_SEEDS = 10
-"""Instances every arm is run on, seeded `0` to `N_SEEDS - 1`"""
+STILL_FRAMES = {"jun04": 72.0, "jun16": 360.0, "jun22": 504.0, "jun28": 648.0}
+"""`frame_hour` of the 00Z frames of June 2019 every study runs on, keyed by date"""
+
+N_SEEDS = 2
+"""Instances every arm is run on at each frame, seeded `0` to `N_SEEDS - 1`"""
 
 RESOURCES = Resources(
     cpus=2,
     mem_gb=16,
-    timeout_min=120,
+    timeout_min=240,
     gres="gpu:1",
     partition="default_partition",
     constraint="avx2&(gpu-high|gpu-mid)",
