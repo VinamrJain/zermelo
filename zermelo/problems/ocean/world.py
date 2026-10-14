@@ -1,4 +1,4 @@
-"""A boat problem, assembled from one frame of a ocean current and the wind over it"""
+"""A boat problem, assembled from one frame of an ocean current and the wind over it"""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,10 +8,10 @@ import numpy as np
 from jaxtyping import Array, Bool, Float
 
 from zermelo.interface import BoxDomain, FunctionDomain, ProductDomain, ProductPrior, Uniform, World
-from zermelo.problems.ocean.field import ForecastPrior, OceanCurrent, OceanCurrentError
+from zermelo.problems.ocean.field import CHANNELS, ForecastError, ForecastPrior, GridField
 from zermelo.problems.ocean.grid import PlaneGrid
-from zermelo.problems.ocean.objective import LearnRegion, ReachTarget, SearchMagnitude
-from zermelo.problems.ocean.readout import PointOceanCurrent
+from zermelo.problems.ocean.objective import LearnRegion, ReachTarget, SearchMagnitude, VisitTargets
+from zermelo.problems.ocean.readout import PointField
 from zermelo.problems.ocean.transition import OceanTransition, Polar
 
 
@@ -34,6 +34,10 @@ class OceanData:
         if at.size != 1:
             raise ValueError(f"the data holds no frame at hour {hour}; it runs from hour {float(self.hour[0])} to {float(self.hour[-1])}")
         return int(at[0])
+
+    def field(self, frame: int) -> Float[Array, "pos channels"]:
+        """(W, U) at every grid point of one frame"""
+        return jnp.concatenate([self.ocean_current[frame], self.wind[frame]], axis=-1)
 
 
 def load_ocean(path: Path, grid_stride: int) -> OceanData:
@@ -68,31 +72,29 @@ def ocean_states(grid: PlaneGrid) -> ProductDomain:
     return ProductDomain({"position": grid})
 
 
-def ocean_transition(
-    grid: PlaneGrid, wind: Float[Array, "pos uv"], polar: Polar, n_headings: int, step_hours: float, states: ProductDomain
-) -> OceanTransition:
-    """One time_step of the boat over `states` under the wind `wind`"""
-    return OceanTransition(grid, polar, wind, n_headings, step_hours, states)
+def ocean_transition(grid: PlaneGrid, polar: Polar, n_headings: int, step_hours: float, states: ProductDomain) -> OceanTransition:
+    """One time_step of the boat over `states`"""
+    return OceanTransition(grid, polar, n_headings, step_hours, states)
 
 
 def ocean_world(
     grid: PlaneGrid,
     states: ProductDomain,
-    forecast: Float[Array, "pos uv"],
-    error: OceanCurrentError,
+    forecast: Float[Array, "pos channels"],
+    error: ForecastError,
     transition: OceanTransition,
-    noise_ms: float,
+    noise_ms: Float[Array, " channels"],
     start_box: Bool[Array, " pos"],
     target_box: Bool[Array, " pos"],
 ) -> World:
-    """The problem a forecast poses: the boat starts at a grid point `start_box` marks, its target is drawn uniformly from `target_box`, and the ocean current is that forecast plus an error"""
+    """The problem a forecast poses: the boat starts at a grid point drawn uniformly from `start_box`, its target is drawn uniformly from `target_box`, and the field is that forecast plus an error"""
     return World(
         state_domain=ProductDomain(
-            {"position": grid.narrow(start_box), "target": grid.narrow(target_box), "field": FunctionDomain(states, BoxDomain((2,)))}
+            {"position": grid.narrow(start_box), "target": grid.narrow(target_box), "field": FunctionDomain(states, BoxDomain((CHANNELS,)))}
         ),
         prior=ProductPrior({"position": Uniform(), "target": Uniform(), "field": ForecastPrior(forecast, error, grid)}),
         transition=transition,
-        readout=PointOceanCurrent(OceanCurrent(forecast, grid), states, noise_ms),
+        readout=PointField(GridField(forecast, grid), states, noise_ms),
     )
 
 
@@ -101,11 +103,18 @@ def ocean_objective(states: ProductDomain, grid: PlaneGrid, box: Bool[Array, " p
     return ReachTarget(states.narrow(box), grid, arrival_km)
 
 
-def learn_objective(states: ProductDomain, box: Bool[Array, " pos"], prior_log_variance: float) -> LearnRegion:
-    """What the episode is scored on: information about the ocean current over the grid points `box` marks, waypoints aimed inside it"""
-    return LearnRegion(states.narrow(box), prior_log_variance)
+def learn_objective(
+    states: ProductDomain, box: Bool[Array, " pos"], prior_log_variance: Float[Array, " channels"], scored: slice
+) -> LearnRegion:
+    """What the episode is scored on: information about the field's `scored` channels over the grid points `box` marks, waypoints aimed inside it"""
+    return LearnRegion(states.narrow(box), prior_log_variance, scored)
 
 
 def search_objective(states: ProductDomain, box: Bool[Array, " pos"]) -> SearchMagnitude:
     """What the episode is scored on: the fastest ocean current stood on over the grid points `box` marks, waypoints aimed inside it"""
     return SearchMagnitude(states.narrow(box))
+
+
+def visit_objective(states: ProductDomain, grid: PlaneGrid, targets: Bool[Array, " pos"], arrival_km: float) -> VisitTargets:
+    """What the episode is scored on: visiting every grid point `targets` marks, waypoints aimed at those alone"""
+    return VisitTargets(states.narrow(targets), grid, arrival_km)

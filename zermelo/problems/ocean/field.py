@@ -1,7 +1,7 @@
-"""The ocean current a boat is carried by: how it is read, and the law an episode's own is drawn by
+"""The field a boat sails in, the ocean current carrying it and the wind driving it: how it is read, and the law an episode's own is drawn by
 
-W(position) = (u, v)      u eastward, v northward, both m/s, at the grid point `position` names
-W = F + forecast_error     F the forecast the boat is given
+field(position) = (W_u, W_v, U_u, U_v)    W the ocean current and U the wind, u eastward, v northward, m/s, at the grid point `position` names
+field = forecast + forecast_error         forecast the frame the boat is given
 """
 
 import dataclasses
@@ -17,34 +17,43 @@ from jaxtyping import Array, Float, PRNGKeyArray
 from zermelo.interface import Domain, FunctionDomain, Prior
 from zermelo.problems.ocean.grid import PlaneGrid
 
+OCEAN_CURRENT = slice(0, 2)
+"""The channels of the field holding W"""
+
+WIND = slice(2, 4)
+"""The channels of the field holding U"""
+
+CHANNELS = 4
+"""How wide the field is: W then U"""
+
 
 @register_dataclass
 @dataclass(frozen=True)
-class OceanCurrent:
-    """W over the whole grid, read at the grid point nearest a state's position"""
+class GridField:
+    """The field over the whole grid, read at the grid point nearest a state's position"""
 
-    ocean_current_on_grid: Float[Array, "pos uv"]
-    """(u, v) at every grid point"""
+    field_on_grid: Float[Array, "pos channels"]
+    """(W_u, W_v, U_u, U_v) at every grid point"""
 
     grid: PlaneGrid = dataclasses.field(metadata=dict(static=True))
     """What `pos` is indexed by"""
 
-    def __call__(self, state: dict[str, Any]) -> Float[Array, "*batch uv"]:
-        """ocean_current_on_grid[flat index of position]"""
-        return self.ocean_current_on_grid[self.grid.flat_index(state["position"])]
+    def __call__(self, state: dict[str, Any]) -> Float[Array, "*batch channels"]:
+        """field_on_grid[flat index of position]"""
+        return self.field_on_grid[self.grid.flat_index(state["position"])]
 
 
-class OceanCurrentError(ABC):
-    """Where forecast_error comes from, for a truth W = F + forecast_error"""
+class ForecastError(ABC):
+    """Where forecast_error comes from, for a truth field = forecast + forecast_error"""
 
     @abstractmethod
-    def sample(self, key: PRNGKeyArray, grid: PlaneGrid) -> Float[Array, "pos uv"]:
+    def sample(self, key: PRNGKeyArray, grid: PlaneGrid) -> Float[Array, "pos channels"]:
         """One draw of forecast_error at every grid point"""
 
 
 @dataclass(frozen=True)
-class GaussianError(OceanCurrentError):
-    """forecast_error ~ N(0, K) over grid points, independently per component of (u, v), with
+class GaussianError(ForecastError):
+    """forecast_error ~ N(0, K) over grid points, independently per channel, with
 
     K(a, b) = amplitude_ms^2 * exp(-||embed(a) - embed(b)||^2 / (2 * length_scale_km^2))
     """
@@ -55,7 +64,7 @@ class GaussianError(OceanCurrentError):
     jitter: float
     """Added to K's diagonal relative to amplitude_ms^2, so the factorisation succeeds"""
 
-    def sample(self, key: PRNGKeyArray, grid: PlaneGrid) -> Float[Array, "pos uv"]:
+    def sample(self, key: PRNGKeyArray, grid: PlaneGrid) -> Float[Array, "pos channels"]:
         """L @ white, for L the Cholesky factor of K. Time O(pos^3), memory O(pos^2)"""
         points = grid.embed(grid.elements())  # (pos, 2)
         gap = jnp.sum((points[:, None, :] - points[None, :, :]) ** 2, axis=-1)  # (pos, pos)
@@ -63,37 +72,37 @@ class GaussianError(OceanCurrentError):
         factor = self.amplitude_ms * jnp.linalg.cholesky(correlation)
         if jnp.isnan(factor).any():  # a singular K returns NaN rather than raising
             raise ValueError(f"K over {grid.size()} positions at {self.length_scale_km} km does not factorise at jitter {self.jitter}")
-        return factor @ jax.random.normal(key, (grid.size(), 2))
+        return factor @ jax.random.normal(key, (grid.size(), CHANNELS))
 
 
 @register_dataclass
 @dataclass(frozen=True)
-class FixedError(OceanCurrentError):
-    """forecast_error = W - F as the data holds it, the same at every draw"""
+class FixedError(ForecastError):
+    """forecast_error = field - forecast as the data holds it, the same at every draw"""
 
-    error: Float[Array, "pos uv"]
-    """W - F at every grid point"""
+    error: Float[Array, "pos channels"]
+    """field - forecast at every grid point"""
 
-    def sample(self, key: PRNGKeyArray, grid: PlaneGrid) -> Float[Array, "pos uv"]:
+    def sample(self, key: PRNGKeyArray, grid: PlaneGrid) -> Float[Array, "pos channels"]:
         """`error`, whatever the key"""
         return self.error
 
 
 @dataclass(frozen=True)
-class ForecastPrior(Prior[OceanCurrent]):
-    """W = F + forecast_error, F fixed and forecast_error taken once per episode"""
+class ForecastPrior(Prior[GridField]):
+    """field = forecast + forecast_error, forecast fixed and forecast_error taken once per episode"""
 
-    forecast: Float[Array, "pos uv"]
-    """F at every grid point"""
+    forecast: Float[Array, "pos channels"]
+    """The forecast at every grid point"""
 
-    error: OceanCurrentError
+    error: ForecastError
     """Where forecast_error comes from"""
 
     grid: PlaneGrid
     """What `pos` is indexed by"""
 
-    def sample(self, domain: Domain[OceanCurrent], key: PRNGKeyArray) -> OceanCurrent:
-        """One episode's W"""
+    def sample(self, domain: Domain[GridField], key: PRNGKeyArray) -> GridField:
+        """One episode's field"""
         if not isinstance(domain, FunctionDomain):
             raise TypeError(f"a {type(domain).__name__} holds no fields, so none can be drawn from it")
-        return OceanCurrent(self.forecast + self.error.sample(key, self.grid), self.grid)
+        return GridField(self.forecast + self.error.sample(key, self.grid), self.grid)
