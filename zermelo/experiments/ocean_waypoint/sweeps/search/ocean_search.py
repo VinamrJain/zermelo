@@ -6,10 +6,12 @@ from zermelo.experiments.ocean_waypoint.registry import (
     GULF_STREAM_2019JUN,
     HORIZON_LENGTH,
     N_SEEDS,
+    OCEAN_CURRENT_BLOCK,
     PLANNING_BUDGET,
     RECORDED,
     RESOURCES,
-    ocean_current_belief,
+    STILL_FRAMES,
+    field_belief,
 )
 from zermelo.experiments.ocean_waypoint.schema import MethodConfig
 from zermelo.experiments.ocean_waypoint.setup import Implementation, arm, max_magnitude, sweep, uniform, upper_confidence, value_iteration
@@ -28,7 +30,9 @@ def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walk
     """One rule on a value-iteration planner, travel not priced"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(replan_every=PLANNING_BUDGET, radius=ARRIVAL_RADIUS_KM, target_chunk=None, cost_weight=0.0),
+        planner=value_iteration(
+            backup_iterations=HORIZON_LENGTH, replan_every=PLANNING_BUDGET, radius=ARRIVAL_RADIUS_KM, target_chunk=None, cost_weight=0.0
+        ),
         improvement=improvement,
         n_fields=n_fields,
         n_walks=n_walks,
@@ -38,22 +42,23 @@ def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walk
     )
 
 
-sweep(
-    "search",
-    problem=WORLD,
-    horizon=HORIZON_LENGTH,
-    claim_every=CLAIM_EVERY_STEPS,
-    recorded={**RECORDED, "objective_state/best_observed_magnitude": 1, "objective_state/best_possible_magnitude": 1},
-    seeds=list(range(N_SEEDS)),
-    resources=dataclasses.replace(RESOURCES, constraint="avx2&gpu-high"),  # 48 GB cards and up
-    arms=[
-        # E over fields f and walks tau of max(0, max over z in tau of ||f(z)|| - beta_n)
-        arm("emi", _method(max_magnitude(), improvement=True, n_fields=N_FIELDS, n_walks=N_WALKS), ocean_current_belief()),
-        # E over fields f of max(0, ||f(x)|| - beta_n) at the destination alone
-        arm("mc_ei", _method(max_magnitude(), improvement=True, n_fields=N_FIELDS, n_walks=0), ocean_current_belief()),
-        arm("ucb", _method(upper_confidence(2.0), improvement=False, n_fields=0, n_walks=0), ocean_current_belief()),
-        arm("ts", _method(max_magnitude(), improvement=False, n_fields=1, n_walks=0), ocean_current_belief()),
-        arm("rand_wp", _method(uniform(), improvement=False, n_fields=0, n_walks=0), ocean_current_belief()),
-        arm("rand_act", None, ocean_current_belief()),  # no rule at all
-    ],
-)
+for date, frame_hour in STILL_FRAMES.items():
+    sweep(
+        f"search_{date}",
+        problem=dataclasses.replace(WORLD, frame_hour=frame_hour),
+        horizon=HORIZON_LENGTH,
+        claim_every=CLAIM_EVERY_STEPS,
+        recorded={**RECORDED, "objective_state/best_observed_magnitude": 1, "objective_state/best_possible_magnitude": 1},
+        seeds=list(range(N_SEEDS)),
+        resources=dataclasses.replace(RESOURCES, constraint="avx2&gpu-high"),  # 48 GB cards and up
+        arms=[
+            # E over fields f and walks tau of max(0, max over z in tau of ||f(z)|| - beta_n)
+            arm("emi", _method(max_magnitude(OCEAN_CURRENT_BLOCK), improvement=True, n_fields=N_FIELDS, n_walks=N_WALKS), field_belief()),
+            # E over fields f of max(0, ||f(x)|| - beta_n) at the destination alone
+            arm("mc_ei", _method(max_magnitude(OCEAN_CURRENT_BLOCK), improvement=True, n_fields=N_FIELDS, n_walks=0), field_belief()),
+            arm("ucb", _method(upper_confidence(2.0, OCEAN_CURRENT_BLOCK), improvement=False, n_fields=0, n_walks=0), field_belief()),
+            arm("ts", _method(max_magnitude(OCEAN_CURRENT_BLOCK), improvement=False, n_fields=1, n_walks=0), field_belief()),
+            arm("rand_wp", _method(uniform(), improvement=False, n_fields=0, n_walks=0), field_belief()),
+            arm("rand_act", None, field_belief()),  # no rule at all
+        ],
+    )

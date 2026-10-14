@@ -9,7 +9,7 @@ from zermelo.experiments.ocean_waypoint.registry import (
     PLANNING_BUDGET,
     RECORDED,
     RESOURCES,
-    ocean_current_belief,
+    field_belief,
     oracle_belief,
 )
 from zermelo.experiments.ocean_waypoint.schema import MethodConfig
@@ -20,7 +20,9 @@ def _method(utility: Implementation, *, n_candidates: int | None) -> MethodConfi
     """One rule on a value-iteration planner, only the candidates within reach scored"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(replan_every=PLANNING_BUDGET, radius=ARRIVAL_RADIUS_KM, target_chunk=None, cost_weight=0.0),
+        planner=value_iteration(
+            backup_iterations=HORIZON_LENGTH, replan_every=PLANNING_BUDGET, radius=ARRIVAL_RADIUS_KM, target_chunk=None, cost_weight=0.0
+        ),
         improvement=True,
         n_fields=0,
         n_walks=0,
@@ -44,9 +46,9 @@ sweep(
     seeds=list(range(N_SEEDS)),
     resources=dataclasses.replace(RESOURCES, constraint="avx2&gpu-high"),  # 48 GB cards and up
     arms=[
-        arm("direct", _direct(), ocean_current_belief()),
-        arm("rand_wp", _method(uniform(), n_candidates=None), ocean_current_belief()),
-        arm("rand_act", None, ocean_current_belief()),  # no rule at all
+        arm("direct", _direct(), field_belief()),
+        arm("rand_wp", _method(uniform(), n_candidates=None), field_belief()),
+        arm("rand_act", None, field_belief()),  # no rule at all
         arm("oracle", _direct(), oracle_belief()),
     ],
 )
