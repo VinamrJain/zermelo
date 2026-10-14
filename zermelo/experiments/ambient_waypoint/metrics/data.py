@@ -33,8 +33,6 @@ ACQUISITION_FAMILIES = {
 }
 """The paper's name for each acquisition family, keyed by the token an arm's name carries"""
 
-DRAWN_ARMS: tuple[str, ...] | None = None
-"""The arms the figure draws, in legend order; None draws every arm of the launch. Every arm appears in the table"""
 
 CURVES = {
     "simple_regret": ("simple regret", "linear"),
@@ -44,15 +42,6 @@ CURVES = {
 }
 """What an arm achieved, a value per time_step, as the words naming it and the scale it is drawn on"""
 
-TABLE_COLUMNS = (
-    ("simple_regret", "simple regret", 2, "min"),
-    ("cumulative_regret", "cumulative regret", 0, "min"),
-    ("rmse", "RMSE", 3, "min"),
-    ("posterior_spread", "posterior spread", 3, "min"),
-    ("arrival_share", r"arrival \%", 1, "max"),
-    ("seconds", "seconds per episode", 0, "min"),
-)
-"""The table's columns: the scalar, its heading, its digits, and which end is better"""
 
 CURVE_CHANNELS = (
     "objective_state/best_possible_magnitude",

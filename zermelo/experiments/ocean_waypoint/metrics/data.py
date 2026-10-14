@@ -44,8 +44,6 @@ ACQUISITION_FAMILIES = {
 }
 """The paper's name for each acquisition family, keyed by the token an arm's name carries"""
 
-DRAWN_ARMS: tuple[str, ...] | None = None
-"""The arms the figure draws, in legend order; None draws every arm of the launch. Every arm appears in the table"""
 
 CURVES = {
     "distance_to_target": ("distance to target (km)", "linear"),
@@ -62,23 +60,6 @@ CURVES = {
 }
 """What an arm achieved, a value per time_step (distance in km, RMSE in m/s, the variance in m^2/s^2), as the words naming it and the scale it is drawn on"""
 
-TABLE_COLUMNS = (
-    ("steps_to_arrival", "steps to arrival", 0, "min"),
-    ("arrived", r"arrived \%", 0, "max"),
-    ("rmse", "RMSE", 2, "min"),
-    ("posterior_variance", "posterior variance", 2, "min"),
-    ("wind_rmse", "wind RMSE", 2, "min"),
-    ("wind_posterior_variance", "wind posterior variance", 2, "min"),
-    ("information", "information (nats)", 0, "max"),
-    ("wind_information", "wind information (nats)", 0, "max"),
-    ("simple_regret", "simple regret", 2, "min"),
-    ("cumulative_regret", "cumulative regret", 0, "min"),
-    ("steps_to_completion", "steps to completion", 0, "min"),
-    ("targets_visited", "targets visited", 1, "max"),
-    ("arrival_share", r"waypoint arrival \%", 0, "max"),
-    ("seconds", "time (s)", 0, "none"),
-)
-"""The table's columns: the scalar, its heading, its digits, and which end is better"""
 
 CURVE_CHANNELS = (
     "objective_state/arrived",
