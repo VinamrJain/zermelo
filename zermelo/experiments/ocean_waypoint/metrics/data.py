@@ -2,8 +2,8 @@
 
 arrived_t    1 once the boat is within arrival_km of the target, 0 before
 g, b_t       max over candidates of ||W||, and the largest ||W|| stood on at a candidate by time_step t
-W(c)         (u, v) at every candidate c, the truth
-mu_t, v_t    (mu_u, mu_v) and (log var_u, log var_v) claimed at every candidate after time_step t
+field(c)     (W_u, W_v, U_u, U_v) at every candidate c, the truth: the ocean current W and the wind U
+mu_t, v_t    the means and the log-variances claimed per channel at every candidate after time_step t
 """
 
 import json
@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from zermelo.problems.ocean import KM_PER_DEGREE
+from zermelo.problems.ocean import KM_PER_DEGREE, OCEAN_CURRENT, WIND
 
 LOG_VARIANCE_FLOOR = -12.0
 """Smallest log variance a claim is read at"""
@@ -38,6 +38,9 @@ ACQUISITION_FAMILIES = {
     "evi": "EVI",
     "eii": "EII",
     "esi": "ESI",
+    "etr": "ETR",
+    "nearest": "Nearest",
+    "oracle_etr": "Oracle-ETR",
 }
 """The paper's name for each acquisition family, keyed by the token an arm's name carries"""
 
@@ -49,9 +52,13 @@ CURVES = {
     "arrived": ("arrived", "linear"),
     "rmse": ("RMSE", "linear"),
     "posterior_variance": ("posterior variance", "linear"),
+    "wind_rmse": ("wind RMSE", "linear"),
+    "wind_posterior_variance": ("wind posterior variance", "linear"),
     "information": ("information (nats)", "linear"),
+    "wind_information": ("wind information (nats)", "linear"),
     "simple_regret": ("simple regret (m/s)", "linear"),
     "cumulative_regret": ("cumulative regret (m/s)", "linear"),
+    "targets_visited": ("targets visited", "linear"),
 }
 """What an arm achieved, a value per time_step (distance in km, RMSE in m/s, the variance in m^2/s^2), as the words naming it and the scale it is drawn on"""
 
@@ -60,9 +67,14 @@ TABLE_COLUMNS = (
     ("arrived", r"arrived \%", 0, "max"),
     ("rmse", "RMSE", 2, "min"),
     ("posterior_variance", "posterior variance", 2, "min"),
+    ("wind_rmse", "wind RMSE", 2, "min"),
+    ("wind_posterior_variance", "wind posterior variance", 2, "min"),
     ("information", "information (nats)", 0, "max"),
+    ("wind_information", "wind information (nats)", 0, "max"),
     ("simple_regret", "simple regret", 2, "min"),
     ("cumulative_regret", "cumulative regret", 0, "min"),
+    ("steps_to_completion", "steps to completion", 0, "min"),
+    ("targets_visited", "targets visited", 1, "max"),
     ("arrival_share", r"waypoint arrival \%", 0, "max"),
     ("seconds", "time (s)", 0, "none"),
 )
@@ -75,6 +87,8 @@ CURVE_CHANNELS = (
     "objective_state/claim",
     "objective_state/best_observed_magnitude",
     "objective_state/best_possible_magnitude",
+    "objective_state/visited",
+    "objective_state/steps_to_completion",
 )
 """What the curves are computed from, as the names a record holds them under"""
 
@@ -115,9 +129,10 @@ def acquisition_label(arm: str) -> str:
     return arm.replace("_", " ")
 
 
-def claimed(claim: Any) -> tuple[Any, Any]:
-    """The (u, v) a claim predicts and the spread it holds: `mu` and `(sum_i exp(v_i))^(1/2)`"""
-    mean, log_variance = claim[..., 0:2], np.maximum(claim[..., 2:4], LOG_VARIANCE_FLOOR)
+def claimed(claim: Any, channels: slice) -> tuple[Any, Any]:
+    """What a claim predicts over `channels` and the spread it holds there: `mu` and `(sum over the channels of exp(v))^(1/2)`"""
+    m = claim.shape[-1] // 2
+    mean, log_variance = claim[..., :m][..., channels], np.maximum(claim[..., m:][..., channels], LOG_VARIANCE_FLOOR)
     return mean, np.sqrt(np.sum(np.exp(log_variance), axis=-1))
 
 
@@ -126,26 +141,31 @@ def at_each_snapshot(claim: Any, snapshots: int, claim_every: int) -> Any:
     return claim[np.minimum(np.arange(snapshots) // claim_every, claim.shape[0] - 1)]
 
 
-def episode_curves(held: dict[str, Any], claim_every: int, prior_log_variance: float) -> dict[str, Any]:
+def episode_curves(held: dict[str, Any], claim_every: int, prior_log_variance: np.ndarray) -> dict[str, Any]:
     """What one episode achieved, a value per time_step
 
-    distance_to_target  ||position - target|| on the plane tangent at the box's middle latitude, km
-    arrived             1 once within arrival_km of the target
-    rmse                sqrt(mean over candidates and components of (W - mu_t)^2)
-    posterior_variance  mean over candidates of exp(v_t,u) + exp(v_t,v)
-    information         (1/2) sum over candidates and components of (prior_log_variance - v_t), nats the claim's marginals have shed since the prior
+    distance_to_target       ||position - target|| on the plane tangent at the box's middle latitude, km
+    arrived                  1 once within arrival_km of the target
+    rmse                     sqrt(mean over candidates and components of (W - mu_t)^2)
+    posterior_variance       mean over candidates of exp(v_t,u) + exp(v_t,v) over W's channels
+    wind_rmse, wind_posterior_variance    the same over U
+    information              (1/2) sum over candidates and W's channels of (prior_log_variance - v_t), nats the claim's marginals have shed since the prior
+    wind_information         the same over U's channels
     simple_regret       g - b_t, nan unless the episode searches for the fastest current
     cumulative_regret   sum over u <= t of (g - b_u)
+    targets_visited     how many targets the boat has been within arrival_km of, nan unless the episode visits targets
     """
-    truth = held["objective_state/truth"][1:]  # (time_steps, candidates, 2)
+    truth = held["objective_state/truth"][1:]  # (time_steps, candidates, channels)
     arrived = held.get("objective_state/arrived", np.zeros(truth.shape[0] + 1))[1:]  # (time_steps,): never, when learning the region
     position, target = held["state/position"][1:], held["state/target"][1:]  # (time_steps, 2) as (lat, lon) degrees
     km_per_degree = KM_PER_DEGREE * np.array([1.0, np.cos(np.radians(np.mean(target[:, 0])))])
     distance = np.linalg.norm((position - target) * km_per_degree, axis=-1)
     claim = at_each_snapshot(held["objective_state/claim"], arrived.size + 1, claim_every)[1:]
-    mean, spread = claimed(claim)  # (time_steps, candidates, 2) and (time_steps, candidates)
-    log_variance = np.maximum(held["objective_state/claim"][..., 2:4], LOG_VARIANCE_FLOOR)  # (snapshots, candidates, 2)
-    shed = 0.5 * np.sum(prior_log_variance - log_variance, axis=(-2, -1))  # (snapshots,)
+    mean, spread = claimed(claim, OCEAN_CURRENT)  # (time_steps, candidates, 2) and (time_steps, candidates)
+    wind_mean, wind_spread = claimed(claim, WIND)
+    stored = held["objective_state/claim"]
+    log_variance = np.maximum(stored[..., stored.shape[-1] // 2 :], LOG_VARIANCE_FLOOR)  # (snapshots, candidates, channels)
+    shed = 0.5 * (prior_log_variance - log_variance)  # (snapshots, candidates, channels)
     regret = (
         (held["objective_state/best_possible_magnitude"] - held["objective_state/best_observed_magnitude"])[1:]
         if "objective_state/best_possible_magnitude" in held
@@ -154,12 +174,23 @@ def episode_curves(held: dict[str, Any], claim_every: int, prior_log_variance: f
     return {
         "distance_to_target": distance,
         "arrived": arrived,
-        "rmse": np.sqrt(np.mean((mean - truth) ** 2, axis=(-2, -1))),
+        "rmse": np.sqrt(np.mean((mean - truth[..., OCEAN_CURRENT]) ** 2, axis=(-2, -1))),
         "posterior_variance": np.mean(spread**2, axis=-1),
-        "information": at_each_snapshot(shed, arrived.size + 1, claim_every)[1:],
+        "wind_rmse": np.sqrt(np.mean((wind_mean - truth[..., WIND]) ** 2, axis=(-2, -1))),
+        "wind_posterior_variance": np.mean(wind_spread**2, axis=-1),
+        "information": at_each_snapshot(np.sum(shed[..., OCEAN_CURRENT], axis=(-2, -1)), arrived.size + 1, claim_every)[1:],
+        "wind_information": at_each_snapshot(np.sum(shed[..., WIND], axis=(-2, -1)), arrived.size + 1, claim_every)[1:],
         "simple_regret": regret,
         "cumulative_regret": np.cumsum(regret),
+        "targets_visited": np.sum(held["objective_state/visited"][1:], axis=-1)
+        if "objective_state/visited" in held
+        else np.full(arrived.size, np.nan),
     }
+
+
+def prior_log_variance(config: dict[str, Any]) -> np.ndarray:
+    """(channels,): 2 log amplitude of the block each channel sits in, the level a claim's log-variance is counted from"""
+    return np.concatenate([np.full(block["width"], 2.0 * np.log(block["amplitude"])) for block in config["belief"]["blocks"]])
 
 
 def opening_moves(config: dict[str, Any], moves: int) -> int:
@@ -209,7 +240,7 @@ def tables(runs: list[tuple[str, int, Path, dict[str, Any]]]) -> tuple[pd.DataFr
     scalars: list[dict[str, Any]] = []
     for arm, seed, run, config in runs:
         held = channels(run, TABLE_CHANNELS)
-        achieved = episode_curves(held, int(config["claim_every"]), 2.0 * float(np.log(config["belief"]["amplitude"])))
+        achieved = episode_curves(held, int(config["claim_every"]), prior_log_variance(config))
         legs = episode_legs(held, config)
         hours = float(config["problem"]["step_hours"]) * np.arange(1, held["objective_state/truth"].shape[0])
         curves.append(pd.DataFrame({"acquisition": arm, "seed": seed, "x": hours, **achieved}))
@@ -219,9 +250,10 @@ def tables(runs: list[tuple[str, int, Path, dict[str, Any]]]) -> tuple[pd.DataFr
                 "seed": seed,
                 **{name: float(values[-1]) for name, values in achieved.items()},
                 "steps_to_arrival": float(held.get("objective_state/steps_to_arrival", [float("nan")])[-1]),
+                "steps_to_completion": float(held.get("objective_state/steps_to_completion", [float("nan")])[-1]),
                 **{
                     name: float("nan") if config.get("method") is None else float(achieved[name][-1])
-                    for name in ("rmse", "posterior_variance", "information")
+                    for name in ("rmse", "posterior_variance", "wind_rmse", "wind_posterior_variance", "information", "wind_information")
                 },
                 "arrival_share": 100.0 * float(np.mean(legs["arrived"])) if legs["arrived"].size else float("nan"),
                 "seconds": float(held["time_per_episode"]),
