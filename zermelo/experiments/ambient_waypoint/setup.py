@@ -91,7 +91,7 @@ Implementation = dict[str, Any]
 
 def _built(path: str, **arguments: Any) -> Implementation:
     """One dotted path and its arguments, as the mapping hydra builds from"""
-    return {"_target_": path, **arguments}
+    return {"_target_": path, "_convert_": "all", **arguments}
 
 
 # --- utilities: which quantity of a belief a rule maximizes --------------------------------------------------------
@@ -99,32 +99,32 @@ def _built(path: str, **arguments: Any) -> Implementation:
 
 def max_magnitude() -> Implementation:
     """The largest reading magnitude among the cells scored"""
-    return _built("zermelo.methods.waypoint_bo.utility.MaxMagnitude")
+    return _built("zermelo.methods.waypoint_bo.utility.MaxMagnitude", block=0)
 
 
 def sum_magnitude() -> Implementation:
     """The reading magnitudes among the cells scored, summed"""
-    return _built("zermelo.methods.waypoint_bo.utility.SumMagnitude")
+    return _built("zermelo.methods.waypoint_bo.utility.SumMagnitude", block=0)
 
 
 def total_variance() -> Implementation:
     """Minus the posterior variance summed over every candidate state, given where the dataset was read"""
-    return _built("zermelo.methods.waypoint_bo.utility.TotalVariance")
+    return _built("zermelo.methods.waypoint_bo.utility.TotalVariance", blocks=(0,))
 
 
 def posterior_spread() -> Implementation:
     """The posterior standard deviations at the scored cells, summed"""
-    return _built("zermelo.methods.waypoint_bo.utility.PosteriorSpread")
+    return _built("zermelo.methods.waypoint_bo.utility.PosteriorSpread", blocks=(0,))
 
 
 def upper_confidence(c: float) -> Implementation:
     """The largest optimistic magnitude `||mean|| + c * spread` at the scored cells"""
-    return _built("zermelo.methods.waypoint_bo.utility.UpperConfidence", c=c)
+    return _built("zermelo.methods.waypoint_bo.utility.UpperConfidence", c=c, block=0)
 
 
 def expected_improvement() -> Implementation:
     """`E[(|f| - beta)^+]` at each scored cell in closed form, `beta` the largest magnitude read so far"""
-    return _built("zermelo.methods.waypoint_bo.utility.ExpectedImprovement")
+    return _built("zermelo.methods.waypoint_bo.utility.ExpectedImprovement", block=0)
 
 
 def uniform() -> Implementation:
@@ -136,9 +136,10 @@ def uniform() -> Implementation:
 
 
 def value_iteration(replan_every: int, radius: float, target_chunk: int | None) -> Implementation:
-    """`v_0 = 0`, `v_{k+1}(s) = 0 on arrival, else min over a of c(s, a) + sum over s' of P(s' | s, a) v_k(s')`, `replan_every` rounds"""
+    """`v_0 = 0`, `v_{k+1}(s) = 0 on arrival, else min over a of c(s, a) + sum over s' of P(s' | s, a) v_k(s')`, `replan_every` rounds, the budget"""
     return _built(
         "zermelo.methods.waypoint_bo.planner.ValueIteration",
+        backup_iterations=replan_every,
         replan_every=replan_every,
         radius=radius,
         target_chunk=target_chunk,
@@ -149,5 +150,10 @@ def value_iteration(replan_every: int, radius: float, target_chunk: int | None) 
 def greedy(replan_every: int, radius: float, target_chunk: int | None) -> Implementation:
     """One backup on the distance to the target: the act whose next cell is nearest it in expectation"""
     return _built(
-        "zermelo.methods.waypoint_bo.planner.Greedy", replan_every=replan_every, radius=radius, target_chunk=target_chunk, cost_weight=0.0
+        "zermelo.methods.waypoint_bo.planner.Greedy",
+        backup_iterations=replan_every,
+        replan_every=replan_every,
+        radius=radius,
+        target_chunk=target_chunk,
+        cost_weight=0.0,
     )
