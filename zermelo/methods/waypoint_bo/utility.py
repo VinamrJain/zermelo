@@ -11,7 +11,7 @@ from jax.scipy.stats import norm
 from jaxtyping import Array, Bool, Float, Int, PRNGKeyArray
 
 from zermelo.interface import Subset
-from zermelo.methods.waypoint_bo.belief import Belief, Dataset
+from zermelo.methods.waypoint_bo.belief import Belief, Dataset, coordinates
 
 
 class Utility(ABC):
@@ -144,6 +144,22 @@ class UpperConfidence(Utility):
         mean, var = belief.predict(data.state_index, query_context(data))
         bound = jnp.linalg.norm(mean, axis=-1) + self.c * jnp.sqrt(jnp.sum(var, axis=-1))
         return jnp.max(jnp.where(row_counts_toward_utility(data, candidates), bound, 0.0), axis=-1)  # 0.0 floors a magnitude
+
+
+@dataclass(frozen=True)
+class TargetsReached(Utility):
+    """U(D) = number of candidates within `radius` of some counted row's state, on embedded coordinates"""
+
+    radius: float
+    """How near a candidate a row must sit to reach it"""
+
+    def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
+        with jax.ensure_compile_time_eval():
+            coords = coordinates(candidates.base)  # (n_states, k)
+            targets = coords[jnp.flatnonzero(candidates.live)]  # (n_candidates, k)
+        gap = coords[data.state_index][..., None, :] - targets  # (*batch, n, n_candidates, k)
+        near = jnp.sum(gap**2, axis=-1) <= self.radius**2  # (*batch, n, n_candidates)
+        return jnp.sum(jnp.any(near & data.row_is_written[..., None], axis=-2), axis=-1).astype(float)
 
 
 @dataclass(frozen=True)

@@ -15,7 +15,7 @@ A plan and a belief are written over position alone
 
 from zermelo.problems.ocean.field import FixedError, ForecastPrior, GaussianError, OceanCurrent, OceanCurrentError
 from zermelo.problems.ocean.grid import KM_PER_DEGREE, PlaneGrid
-from zermelo.problems.ocean.objective import LearnRegion, ReachTarget, SearchMagnitude
+from zermelo.problems.ocean.objective import LearnRegion, ReachTarget, SearchMagnitude, VisitTargets
 from zermelo.problems.ocean.readout import PointOceanCurrent
 from zermelo.problems.ocean.transition import Act, OceanKernel, OceanTransition, Polar
 from zermelo.problems.ocean.world import (
@@ -27,6 +27,7 @@ from zermelo.problems.ocean.world import (
     ocean_transition,
     ocean_world,
     search_objective,
+    visit_objective,
 )
 
 __all__ = [
@@ -37,6 +38,7 @@ __all__ = [
     "ReachTarget",
     "LearnRegion",
     "SearchMagnitude",
+    "VisitTargets",
     "FixedError",
     "ForecastPrior",
     "GaussianError",
@@ -48,6 +50,7 @@ __all__ = [
     "Polar",
     "learn_objective",
     "search_objective",
+    "visit_objective",
     "load_ocean",
     "ocean_objective",
     "ocean_states",

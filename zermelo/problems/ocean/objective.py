@@ -1,4 +1,4 @@
-"""What a boat is scored on: reaching a target, learning the ocean current over a region, or finding where it runs fastest
+"""What a boat is scored on: reaching a target, learning the ocean current over a region, finding where it runs fastest, or visiting every target
 
 W(position) = (u, v)      the ocean current, m/s
 target                    the grid point to reach, drawn once per episode
@@ -16,6 +16,10 @@ or, searching the region for the fastest current:
     best_observed         = max over positions z_u stood on so far, z_u a candidate, of ||W(z_u)||
     best_possible         = max over candidates of ||W(c)||
     reward                = max(0, ||W(position)|| - best_observed before) where position is a candidate, else 0
+or, visiting every target, the candidates being the targets:
+    visited[i]            = visited[i] before, or ||position - candidate i|| <= arrival_km on the tangent plane
+    reward                = 0 where every target is visited, else -1
+    steps_to_completion   = time_steps rewarded -1 so far
 """
 
 import dataclasses
@@ -177,3 +181,60 @@ class SearchMagnitude(Objective[dict[str, Float[Array, "..."]]]):
             "claim": decision.claim(self.candidate_states),
         }
         return carried, jnp.where(on_candidate, jnp.maximum(speed - best, 0.0), 0.0)
+
+
+@dataclass(frozen=True)
+class VisitTargets(Objective[dict[str, Float[Array, "..."]]]):
+    """Reward is -1 every time_step until the boat has been within arrival_km of every candidate and 0 from then on, with the truth and the claim recorded beside it"""
+
+    candidates: Subset[dict[str, Any]]
+    """The targets, as the states a waypoint may be aimed at and a claim is scored on, over the state domain a belief is maintained on"""
+
+    grid: PlaneGrid
+    """What positions are measured on"""
+
+    arrival_km: float
+    """How near a target counts as visited"""
+
+    candidate_states: dict[str, Any] = dataclasses.field(init=False, repr=False)
+    """The targets, gathered once"""
+
+    def __post_init__(self) -> None:
+        """Gather the targets as concrete arrays"""
+        live = jnp.flatnonzero(self.candidates.live)  # (n_targets,) indices into the state domain
+        object.__setattr__(self, "candidate_states", jax.tree.map(lambda a: a[live], self.candidates.elements()))
+
+    @property
+    def claim_domain(self) -> Domain:
+        """A claim is a function: the mean of (u, v) at any target, then their log-variances"""
+        return FunctionDomain(self.candidates, BoxDomain((4,)))
+
+    def near(self, state: dict[str, Any]) -> Float[Array, " n_targets"]:
+        """1 at each target within arrival_km of `state`"""
+        gap = self.grid.embed(state["position"]) - self.grid.embed(self.candidate_states["position"])  # (n_targets, 2) km
+        return (jnp.linalg.norm(gap, axis=-1) <= self.arrival_km).astype(jnp.float32)
+
+    def reset(self, state: dict[str, Any]) -> dict[str, Float[Array, "..."]]:
+        """The objective's memory before any time_step, nothing claimed yet"""
+        truth = state["field"](self.candidate_states)  # (n_targets, 2)
+        return {
+            "targets": self.candidate_states["position"],  # (n_targets, 2) as (lat, lon)
+            "truth": truth,
+            "visited": self.near(state),
+            "steps_to_completion": jnp.zeros(()),
+            "claim": jnp.zeros((truth.shape[0], 4)),  # (n_targets, 4)
+        }
+
+    def score(
+        self, objective_state: dict[str, Float[Array, "..."]], state: dict[str, Any], decision: Decision, next_state: dict[str, Any]
+    ) -> tuple[dict[str, Float[Array, "..."]], Float[Array, ""]]:
+        """-1 unless every target is visited by the state arrived in, and the claim as it stood"""
+        visited = jnp.maximum(objective_state["visited"], self.near(next_state))
+        reward = jnp.min(visited) - 1.0
+        return {
+            "targets": objective_state["targets"],
+            "truth": objective_state["truth"],
+            "visited": visited,
+            "steps_to_completion": objective_state["steps_to_completion"] - reward,
+            "claim": decision.claim(self.candidate_states),
+        }, reward
