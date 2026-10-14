@@ -26,6 +26,7 @@ from zermelo.problems.ocean import (
     ocean_transition,
     ocean_world,
     search_objective,
+    visit_objective,
 )
 from zermelo.run.episode import Episode
 
@@ -63,17 +64,26 @@ def assemble(cfg: RunConfig) -> Episode:
     )
     transition = ocean_transition(grid, wind, polar, cfg.problem.n_headings, cfg.problem.step_hours, states)
     box = grid.inside(cfg.problem.lat_min, cfg.problem.lat_max, cfg.problem.lon_min, cfg.problem.lon_max) & ~data.land
-    start_box = jnp.arange(grid.size()) == grid.flat_index(jnp.array([cfg.problem.start_lat, cfg.problem.start_lon]))
     target_box = box & grid.inside(
         cfg.problem.target_lat_min, cfg.problem.target_lat_max, cfg.problem.target_lon_min, cfg.problem.target_lon_max
     )
-    world = ocean_world(grid, states, predicted, error, transition, cfg.problem.noise_ms, start_box, target_box)
+    world = ocean_world(
+        grid, states, predicted, error, transition, cfg.problem.noise_ms, target_box, target_box
+    )  # the boat starts in the target box too
+    # the targets of a visiting episode, drawn uniformly from the target box on a key folded off the world's
+    targets = (
+        jnp.zeros(grid.size(), bool)
+        .at[jax.random.choice(jax.random.fold_in(k_world, 1), jnp.flatnonzero(target_box), (cfg.problem.n_targets,), replace=False)]
+        .set(True)
+    )
     objective = (  # under learn and search the region of interest is the target box
         ocean_objective(states, grid, box, cfg.problem.arrival_km)
         if cfg.problem.objective == "reach"
         else learn_objective(states, target_box, 2.0 * float(jnp.log(cfg.belief.amplitude)))
         if cfg.problem.objective == "learn"
         else search_objective(states, target_box)
+        if cfg.problem.objective == "search"
+        else visit_objective(states, grid, targets, cfg.problem.arrival_km)
     )
     candidates = objective.candidates
     context = world.readout.context

@@ -137,6 +137,11 @@ def expected_improvement() -> Implementation:
     return _built("zermelo.methods.waypoint_bo.utility.ExpectedImprovement")
 
 
+def targets_reached(radius: float) -> Implementation:
+    """How many candidates lie within `radius` of some reading's state"""
+    return _built("zermelo.methods.waypoint_bo.utility.TargetsReached", radius=radius)
+
+
 def uniform() -> Implementation:
     """A draw ignoring the data"""
     return _built("zermelo.methods.waypoint_bo.utility.Uniform")
@@ -145,10 +150,13 @@ def uniform() -> Implementation:
 # --- planners: how the actor is carried to a waypoint, and how that walk is priced ----------------------------------
 
 
-def value_iteration(replan_every: int, radius: float, target_chunk: int | None, cost_weight: float) -> Implementation:
-    """`v_0 = 0`, `v_{k+1}(s) = 0 on arrival, else min over a of c(s, a) + sum over s' of P(s' | s, a) v_k(s')`, `replan_every` rounds"""
+def value_iteration(
+    backup_iterations: int, replan_every: int, radius: float, target_chunk: int | None, cost_weight: float
+) -> Implementation:
+    """`v_0 = 0`, `v_{k+1}(s) = 0 on arrival, else min over a of c(s, a) + sum over s' of P(s' | s, a) v_k(s')`, `backup_iterations` rounds"""
     return _built(
         "zermelo.methods.waypoint_bo.planner.ValueIteration",
+        backup_iterations=backup_iterations,
         replan_every=replan_every,
         radius=radius,
         target_chunk=target_chunk,
@@ -156,10 +164,11 @@ def value_iteration(replan_every: int, radius: float, target_chunk: int | None, 
     )
 
 
-def greedy(replan_every: int, radius: float, target_chunk: int | None, cost_weight: float) -> Implementation:
+def greedy(backup_iterations: int, replan_every: int, radius: float, target_chunk: int | None, cost_weight: float) -> Implementation:
     """One backup on the distance to the target: the act whose next cell is nearest it in expectation"""
     return _built(
         "zermelo.methods.waypoint_bo.planner.Greedy",
+        backup_iterations=backup_iterations,
         replan_every=replan_every,
         radius=radius,
         target_chunk=target_chunk,
