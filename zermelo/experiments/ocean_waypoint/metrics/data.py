@@ -38,6 +38,9 @@ ACQUISITION_FAMILIES = {
     "evi": "EVI",
     "eii": "EII",
     "esi": "ESI",
+    "etr": "ETR",
+    "nearest": "Nearest",
+    "oracle_etr": "Oracle-ETR",
 }
 """The paper's name for each acquisition family, keyed by the token an arm's name carries"""
 
@@ -52,6 +55,7 @@ CURVES = {
     "information": ("information (nats)", "linear"),
     "simple_regret": ("simple regret (m/s)", "linear"),
     "cumulative_regret": ("cumulative regret (m/s)", "linear"),
+    "targets_visited": ("targets visited", "linear"),
 }
 """What an arm achieved, a value per time_step (distance in km, RMSE in m/s, the variance in m^2/s^2), as the words naming it and the scale it is drawn on"""
 
@@ -63,6 +67,8 @@ TABLE_COLUMNS = (
     ("information", "information (nats)", 0, "max"),
     ("simple_regret", "simple regret", 2, "min"),
     ("cumulative_regret", "cumulative regret", 0, "min"),
+    ("steps_to_completion", "steps to completion", 0, "min"),
+    ("targets_visited", "targets visited", 1, "max"),
     ("arrival_share", r"waypoint arrival \%", 0, "max"),
     ("seconds", "time (s)", 0, "none"),
 )
@@ -75,6 +81,8 @@ CURVE_CHANNELS = (
     "objective_state/claim",
     "objective_state/best_observed_magnitude",
     "objective_state/best_possible_magnitude",
+    "objective_state/visited",
+    "objective_state/steps_to_completion",
 )
 """What the curves are computed from, as the names a record holds them under"""
 
@@ -136,6 +144,7 @@ def episode_curves(held: dict[str, Any], claim_every: int, prior_log_variance: f
     information         (1/2) sum over candidates and components of (prior_log_variance - v_t), nats the claim's marginals have shed since the prior
     simple_regret       g - b_t, nan unless the episode searches for the fastest current
     cumulative_regret   sum over u <= t of (g - b_u)
+    targets_visited     how many targets the boat has been within arrival_km of, nan unless the episode visits targets
     """
     truth = held["objective_state/truth"][1:]  # (time_steps, candidates, 2)
     arrived = held.get("objective_state/arrived", np.zeros(truth.shape[0] + 1))[1:]  # (time_steps,): never, when learning the region
@@ -159,6 +168,9 @@ def episode_curves(held: dict[str, Any], claim_every: int, prior_log_variance: f
         "information": at_each_snapshot(shed, arrived.size + 1, claim_every)[1:],
         "simple_regret": regret,
         "cumulative_regret": np.cumsum(regret),
+        "targets_visited": np.sum(held["objective_state/visited"][1:], axis=-1)
+        if "objective_state/visited" in held
+        else np.full(arrived.size, np.nan),
     }
 
 
@@ -219,6 +231,7 @@ def tables(runs: list[tuple[str, int, Path, dict[str, Any]]]) -> tuple[pd.DataFr
                 "seed": seed,
                 **{name: float(values[-1]) for name, values in achieved.items()},
                 "steps_to_arrival": float(held.get("objective_state/steps_to_arrival", [float("nan")])[-1]),
+                "steps_to_completion": float(held.get("objective_state/steps_to_completion", [float("nan")])[-1]),
                 **{
                     name: float("nan") if config.get("method") is None else float(achieved[name][-1])
                     for name in ("rmse", "posterior_variance", "information")

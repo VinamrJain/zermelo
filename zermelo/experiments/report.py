@@ -33,6 +33,9 @@ FAMILY_COLOURS = {
     "IG": "D55E00",
     "Direct": "7F3C8D",
     "Oracle": "000000",
+    "ETR": "0173B2",
+    "Nearest": "7F3C8D",
+    "Oracle-ETR": "000000",
 }
 """A hex colour per acquisition family, defined in every figure under the family's own name; a table lists the families in this order"""
 
