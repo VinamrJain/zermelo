@@ -10,7 +10,7 @@ from jaxtyping import Array, Bool, Float
 from zermelo.interface import BoxDomain, FunctionDomain, ProductDomain, ProductPrior, Uniform, World
 from zermelo.problems.ocean.field import ForecastPrior, OceanCurrent, OceanCurrentError
 from zermelo.problems.ocean.grid import PlaneGrid
-from zermelo.problems.ocean.objective import LearnRegion, ReachTarget, SearchMagnitude
+from zermelo.problems.ocean.objective import LearnRegion, ReachTarget, SearchMagnitude, VisitTargets
 from zermelo.problems.ocean.readout import PointOceanCurrent
 from zermelo.problems.ocean.transition import OceanTransition, Polar
 
@@ -109,3 +109,8 @@ def learn_objective(states: ProductDomain, box: Bool[Array, " pos"], prior_log_v
 def search_objective(states: ProductDomain, box: Bool[Array, " pos"]) -> SearchMagnitude:
     """What the episode is scored on: the fastest ocean current stood on over the grid points `box` marks, waypoints aimed inside it"""
     return SearchMagnitude(states.narrow(box))
+
+
+def visit_objective(states: ProductDomain, grid: PlaneGrid, targets: Bool[Array, " pos"], arrival_km: float) -> VisitTargets:
+    """What the episode is scored on: visiting every grid point `targets` marks, waypoints aimed at those alone"""
+    return VisitTargets(states.narrow(targets), grid, arrival_km)

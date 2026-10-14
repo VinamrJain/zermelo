@@ -34,8 +34,12 @@ CHANNELS = (
     "objective_state/steps_to_arrival",
     "objective_state/best_observed_magnitude",
     "objective_state/best_possible_magnitude",
+    "objective_state/targets",
+    "objective_state/visited",
+    "objective_state/steps_to_completion",
     "agent_state/scores.waypoint",
     "agent_state/scores.candidate_indices",
+    "agent_state/time_steps_since_waypoint",
 )
 """What a still is drawn from, as the names a record holds them under"""
 
@@ -54,8 +58,10 @@ def still(run: Path, out: Path) -> None:
     lat, lon, land = grid_of(config)
     n_lat, n_lon = len(lat), len(lon)
     problem = config["problem"]
-    candidates = np.flatnonzero(candidate_box(problem, lat, lon, land))
-    reaching = "objective_state/arrived" in held  # else the episode is scored on what it learned, and the target is unread
+    targets_drawn = held["objective_state/targets"][0] if "objective_state/targets" in held else None
+    candidates = np.flatnonzero(candidate_box(problem, lat, lon, land, targets_drawn))
+    reaching = "objective_state/arrived" in held  # else the target the world drew is unread
+    searching, visiting = "objective_state/best_observed_magnitude" in held, "objective_state/targets" in held
     where = "" if reaching else "target_"  # the candidate box the waypoints are aimed in
     box_lat, box_lon = (problem[f"{where}lat_min"], problem[f"{where}lat_max"]), (problem[f"{where}lon_min"], problem[f"{where}lon_max"])
 
@@ -85,16 +91,26 @@ def still(run: Path, out: Path) -> None:
                 (box_lon[0], box_lat[0]), box_lon[1] - box_lon[0], box_lat[1] - box_lat[0], fill=False, ec="orange", lw=0.8, ls="--"
             )
         )
-        ax.plot(track[0, 1], track[0, 0], "wo", ms=6, mfc="none")
+        ax.plot(track[0, 1], track[0, 0], "o", ms=7, mfc="none", mec="k", mew=1.5, label="start")
         ax.plot(track[-1, 1], track[-1, 0], "r*", ms=9)
         if reaching:
             ax.plot(held["state/target"][0, 1], held["state/target"][0, 0], "m*", ms=12, mec="w", label="target")
+        if searching:  # the fastest current in the box, the point the search is scored against
+            fastest = candidates[np.argmax(np.linalg.norm(held["objective_state/truth"][-1], axis=-1))]
+            ax.plot(lon[fastest % n_lon], lat[fastest // n_lon], "*", ms=14, color="gold", mec="k", label="fastest current")
+        if visiting:  # every target, filled once visited
+            for (t_lat, t_lon), seen in zip(held["objective_state/targets"][0], held["objective_state/visited"][-1], strict=True):
+                ax.plot(t_lon, t_lat, "*", ms=14, color="m" if seen else "none", mec="m", mew=1.5)
         ax.set_aspect(1 / np.cos(np.radians(np.mean(lat))))
         ax.set_xlabel("lon")
     if "agent_state/scores.waypoint" in held:  # an arm with a rule: every waypoint it aimed at
-        aimed = np.unique(held["agent_state/scores.waypoint"][1:])  # move 0 holds no decision yet
+        decided = np.flatnonzero(held["agent_state/time_steps_since_waypoint"][1:] == 0) + 1  # the moves a waypoint was chosen at
+        aimed = np.unique(held["agent_state/scores.waypoint"][decided])
         axes[0].plot(lon[aimed % n_lon], lat[aimed // n_lon], "x", color="orange", ms=6, label="waypoints")
-        axes[0].legend(loc="lower right", fontsize=8)
+    if visiting:
+        axes[0].plot([], [], "*", ms=10, color="m", mec="m", label="target, visited")
+        axes[0].plot([], [], "*", ms=10, color="none", mec="m", mew=1.5, label="target, not yet")
+    axes[0].legend(loc="lower right", fontsize=7)
     axes[0].set_ylabel("lat")
     fig.suptitle(
         f"{run.parent.parent.name} / {run.name}: {track.shape[0] - 1} moves of {problem['step_hours']} h, arrived at step {int(held['objective_state/steps_to_arrival'][-1])}"
@@ -106,6 +122,9 @@ def still(run: Path, out: Path) -> None:
             else f"{held['objective_state/information'][-1]:.0f} nats learned"
             if "objective_state/information" in held
             else f"best {held['objective_state/best_observed_magnitude'][-1]:.2f} of {held['objective_state/best_possible_magnitude'][-1]:.2f} m/s"
+            if searching
+            else f"{int(held['objective_state/visited'][-1].sum())} of {held['objective_state/visited'].shape[1]} targets visited"
+            + (f", all by step {int(held['objective_state/steps_to_completion'][-1])}" if held["objective_state/visited"][-1].all() else "")
         ),
         fontsize=10,
     )

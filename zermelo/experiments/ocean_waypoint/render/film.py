@@ -45,7 +45,7 @@ TRAIL = 30
 ARROW_KM_PER_MS = 70.0
 """km of arrow per m/s of velocity, all four arrows at the boat"""
 
-WIND, CURRENT, HEADING, NET, TRACK, TARGET = "#ffd54f", "#4fc3f7", "#ffffff", "#ff7043", "#4fc3f7", "#ff5fa2"
+WIND, CURRENT, HEADING, NET, TRACK, TARGET, FASTEST = "#ffd54f", "#4fc3f7", "#ffffff", "#ff7043", "#4fc3f7", "#ff5fa2", "#ffd700"
 
 RESOURCES_PER_FILM = Resources(
     cpus=2, mem_gb=8, timeout_min=90, gres=None, partition="default_partition", constraint="avx2", array_parallelism=8
@@ -97,9 +97,13 @@ def send(runs: Sequence[Path], into: Path, flags: str) -> str:
     return f"{said.stdout.strip()}, {len(runs)} film{'s' if len(runs) != 1 else ''} from {script}"
 
 
-def candidate_box(problem: dict, lat: np.ndarray, lon: np.ndarray, land: np.ndarray) -> np.ndarray:
-    """(n_lat * n_lon,): the grid points a claim is scored on, the target box when the episode learns or searches the region and the whole box otherwise"""
+def candidate_box(problem: dict, lat: np.ndarray, lon: np.ndarray, land: np.ndarray, targets: np.ndarray | None) -> np.ndarray:
+    """(n_lat * n_lon,): the grid points a claim is scored on: the `targets` (n_targets, 2) of a visiting episode as (lat, lon), else the
+    target box when the episode learns or searches the region and the whole box otherwise"""
     grid = PlaneGrid(len(lat), len(lon), float(lat[0]), float(lon[0]), float(lat[1] - lat[0]), float(lon[1] - lon[0]))
+    if targets is not None:
+        rows, cols = np.abs(lat[:, None] - targets[:, 0]).argmin(axis=0), np.abs(lon[:, None] - targets[:, 1]).argmin(axis=0)
+        return np.isin(np.arange(len(lat) * len(lon)), rows * len(lon) + cols)
     where = "target_" if problem.get("objective") in ("learn", "search") else ""  # a record from before the field is a reaching one
     inside = grid.inside(problem[f"{where}lat_min"], problem[f"{where}lat_max"], problem[f"{where}lon_min"], problem[f"{where}lon_max"])
     return np.asarray(inside) & ~land.reshape(-1)
@@ -121,6 +125,8 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
             "objective_state/information",
             "objective_state/best_observed_magnitude",
             "objective_state/best_possible_magnitude",
+            "objective_state/targets",
+            "objective_state/visited",
             "agent_state/scores.waypoint",
             "agent_state/scores.imagined_walk_to_waypoint",
         ),
@@ -131,7 +137,8 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     frame = int(np.argmin(np.abs(raw["hours"] - problem["frame_hour"])))
     wind_u, wind_v = raw["wind_u"][frame][::stride, ::stride].astype(float), raw["wind_v"][frame][::stride, ::stride].astype(float)
     n_lat, n_lon = len(lat), len(lon)
-    candidates = np.flatnonzero(candidate_box(problem, lat, lon, land))
+    targets_drawn = held["objective_state/targets"][0] if "objective_state/targets" in held else None
+    candidates = np.flatnonzero(candidate_box(problem, lat, lon, land, targets_drawn))
     polar = Polar(
         problem["top_speed_ms"],
         problem["no_go_degrees"],
@@ -156,8 +163,10 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     true_u, true_v = on_grid(truth[:, 0]), on_grid(truth[:, 1])
     true_speed = np.hypot(true_u, true_v)
     track, target = held["state/position"].astype(float), held["state/target"][0].astype(float)  # (T + 1, 2) and (2,) as (lat, lon)
-    reaching = "objective_state/arrived" in held  # else the episode is scored on what it learned, and the target is unread
-    arrived = held["objective_state/arrived"] if reaching else np.zeros(track.shape[0], bool)
+    reaching = "objective_state/arrived" in held  # else the target the world drew is unread
+    searching, visiting = "objective_state/best_observed_magnitude" in held, "objective_state/targets" in held
+    visited = held["objective_state/visited"] if visiting else np.zeros((track.shape[0], 0))  # (T + 1, n_targets)
+    arrived = held["objective_state/arrived"] if reaching else visited.all(axis=-1) if visiting else np.zeros(track.shape[0], bool)
     step_hours = float(problem["step_hours"])
     cos_mid = np.cos(np.radians(np.mean(lat)))
     km_per_degree = np.array([KM_PER_DEGREE, KM_PER_DEGREE * cos_mid])  # per degree of (lat, lon)
@@ -247,6 +256,25 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
             )
         )
         main.plot(target[1], target[0], marker="*", ms=20, color=TARGET, mec="white", mew=0.8, zorder=6, ls="none")
+    if searching:  # the fastest current in the box, the point the search is scored against
+        fastest = candidates[np.argmax(np.linalg.norm(truth, axis=-1))]
+        main.plot(lon[fastest % n_lon], lat[fastest // n_lon], marker="*", ms=22, color=FASTEST, mec="white", mew=0.8, zorder=6, ls="none")
+    target_stars = []
+    if visiting:
+        for t_lat, t_lon in held["objective_state/targets"][0]:
+            main.add_patch(
+                Ellipse(
+                    (t_lon, t_lat),
+                    2 * ring_km / km_per_degree[1],
+                    2 * ring_km / km_per_degree[0],
+                    fill=False,
+                    ec=TARGET,
+                    lw=1.4,
+                    ls="--",
+                    zorder=5,
+                )
+            )
+            target_stars.append(main.plot(t_lon, t_lat, marker="*", ms=20, color="none", mec=TARGET, mew=1.6, zorder=6, ls="none")[0])
     main.plot(track[0, 1], track[0, 0], marker="o", ms=9, mfc="none", mec="white", mew=1.5, zorder=6, ls="none")
     (aim,) = main.plot([], [], marker="x", ms=11, color="#ffa726", mew=2.2, zorder=6, ls="none")
     (route,) = main.plot([], [], color="#ffa726", lw=1.8, ls="--", alpha=0.9, zorder=5.5)  # the walk imagined to the waypoint
@@ -263,6 +291,8 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
             Line2D([], [], color=HEADING, lw=2.5, label="heading (through water)"),
             Line2D([], [], color=NET, lw=2.5, label="net motion"),
             *([Line2D([], [], marker="*", ms=14, color=TARGET, mec="white", ls="none", label="target, 20 km ring")] if reaching else []),
+            *([Line2D([], [], marker="*", ms=14, color=FASTEST, mec="white", ls="none", label="fastest current in the box")] if searching else []),
+            *([Line2D([], [], marker="*", ms=14, color="none", mec=TARGET, mew=1.6, ls="none", label="target, filled once visited")] if visiting else []),
             Line2D([], [], marker="x", ms=10, color="#ffa726", mew=2, ls="none", label="waypoint aimed at"),
             Line2D([], [], color="#ffa726", lw=1.8, ls="--", label="walk imagined to it"),
         ],
@@ -393,14 +423,18 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
                 else f"{held['objective_state/information'][t]:6.0f} nats learned\n"
                 if "objective_state/information" in held
                 else f"best {held['objective_state/best_observed_magnitude'][t]:4.2f} of {held['objective_state/best_possible_magnitude'][t]:4.2f} m/s\n"
+                if searching
+                else f"{int(visited[t].sum())} of {visited.shape[1]} targets visited\n"
             )
             + f"wind     {np.linalg.norm(wind[m]):4.1f} m/s\n"
             f"current  {np.linalg.norm(current[m]):4.1f} m/s\n"
             f"boat     {np.linalg.norm(through[m]):4.1f} m/s\n"
             f"net      {np.linalg.norm(net[m]):4.1f} m/s"
         )
+        for star, seen in zip(target_stars, visited[t], strict=True):
+            star.set_color(TARGET if seen else "none")
         if arrived[t]:
-            badge.set_text("arrived")
+            badge.set_text("all visited" if visiting else "arrived")
             badge.set_alpha(min(1.0, 0.3 * (t - int(np.argmax(arrived)) + 1)))
 
     if still is not None:

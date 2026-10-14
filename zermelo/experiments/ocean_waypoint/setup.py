@@ -137,6 +137,11 @@ def expected_improvement() -> Implementation:
     return _built("zermelo.methods.waypoint_bo.utility.ExpectedImprovement")
 
 
+def targets_reached(radius: float) -> Implementation:
+    """How many candidates lie within `radius` of some reading's state"""
+    return _built("zermelo.methods.waypoint_bo.utility.TargetsReached", radius=radius)
+
+
 def uniform() -> Implementation:
     """A draw ignoring the data"""
     return _built("zermelo.methods.waypoint_bo.utility.Uniform")
