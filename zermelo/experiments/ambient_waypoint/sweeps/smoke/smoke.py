@@ -47,17 +47,19 @@ def _belief(oracle: bool) -> BeliefConfig:
     )
 
 
-def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, penalty_rate: float) -> MethodConfig:
+def _method(
+    utility: Implementation, *, subtract_dataset_utility: bool, n_field_samples: int, n_paths_per_field: int, penalty_rate: float
+) -> MethodConfig:
     """One rule on a value-iteration planner, at the settings the arms differ in"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(replan_every=4, radius=0.05, target_chunk=None),
-        improvement=improvement,
-        n_fields=n_fields,
-        n_walks=n_walks,
+        planner=value_iteration(replan_length=4, radius=0.05, targets_per_solve=None),
+        subtract_dataset_utility=subtract_dataset_utility,
+        n_field_samples=n_field_samples,
+        n_paths_per_field=n_paths_per_field,
         penalty_rate=penalty_rate,
-        n_candidates=None,
-        opening_steps=4,  # four uniform moves, leaving two the rule decides
+        n_candidates_scored=None,
+        random_opening_steps=4,  # four uniform moves, leaving two the rule decides
     )
 
 
@@ -78,14 +80,26 @@ for name, resources in (
         seeds=[0],
         resources=resources,
         arms=[
-            arm("mean", _method(max_magnitude(), improvement=True, n_fields=0, n_walks=0, penalty_rate=0.0), _belief(oracle=False)),
-            arm("oracle", _method(max_magnitude(), improvement=True, n_fields=0, n_walks=0, penalty_rate=0.0), _belief(oracle=True)),
             arm(
-                "ei",  # a closed form: its own increment, no draws, no walks
-                _method(expected_improvement(), improvement=False, n_fields=0, n_walks=0, penalty_rate=0.0),
+                "mean",
+                _method(max_magnitude(), subtract_dataset_utility=True, n_field_samples=0, n_paths_per_field=0, penalty_rate=0.0),
                 _belief(oracle=False),
             ),
-            arm("evi", _method(total_variance(), improvement=True, n_fields=2, n_walks=2, penalty_rate=0.5), _belief(oracle=False)),
+            arm(
+                "oracle",
+                _method(max_magnitude(), subtract_dataset_utility=True, n_field_samples=0, n_paths_per_field=0, penalty_rate=0.0),
+                _belief(oracle=True),
+            ),
+            arm(
+                "ei",  # a closed form: its own increment, no draws, no walks
+                _method(expected_improvement(), subtract_dataset_utility=False, n_field_samples=0, n_paths_per_field=0, penalty_rate=0.0),
+                _belief(oracle=False),
+            ),
+            arm(
+                "evi",
+                _method(total_variance(), subtract_dataset_utility=True, n_field_samples=2, n_paths_per_field=2, penalty_rate=0.5),
+                _belief(oracle=False),
+            ),
             arm("random", None, _belief(oracle=False)),  # no rule at all
         ],
     )

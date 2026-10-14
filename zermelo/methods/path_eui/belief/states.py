@@ -1,4 +1,4 @@
-"""The finite position domain as a table: its elements, their coordinates, an index into it, and a reading's context cut into parts"""
+"""The finite position domain as a table: its elements, their coordinates, an index into it, and an observation's context cut into parts"""
 
 import functools
 from typing import Any
@@ -35,7 +35,7 @@ def indexer(positions: Domain) -> Any:
     return jax.jit(jax.vmap(positions.index_of))
 
 
-def lookup(positions: Domain, table: Float[Array, "n_states m"]) -> Function:
+def table_as_field(positions: Domain, table: Float[Array, "n_states m"]) -> Function:
     """A field that reads `table` at whatever element it is called on"""
     index = indexer(positions)
     return lambda x: table[index(x)]

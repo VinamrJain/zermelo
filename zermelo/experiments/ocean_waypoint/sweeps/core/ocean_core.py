@@ -16,25 +16,29 @@ from zermelo.experiments.ocean_waypoint.schema import MethodConfig
 from zermelo.experiments.ocean_waypoint.setup import Implementation, arm, sweep, uniform, value_iteration
 
 
-def _method(utility: Implementation, *, n_candidates: int | None) -> MethodConfig:
+def _method(utility: Implementation, *, n_candidates_scored: int | None) -> MethodConfig:
     """One rule on a value-iteration planner, only the candidates within reach scored"""
     return MethodConfig(
         utility=utility,
         planner=value_iteration(
-            backup_iterations=HORIZON_LENGTH, replan_every=PLANNING_BUDGET, radius=ARRIVAL_RADIUS_KM, target_chunk=None, cost_weight=0.0
+            value_iterations=HORIZON_LENGTH,
+            replan_length=PLANNING_BUDGET,
+            radius=ARRIVAL_RADIUS_KM,
+            targets_per_solve=None,
+            cost_weight=0.0,
         ),
-        improvement=True,
-        n_fields=0,
-        n_walks=0,
+        subtract_dataset_utility=True,
+        n_field_samples=0,
+        n_paths_per_field=0,
         penalty_rate=0.0,
-        n_candidates=n_candidates,
-        opening_steps=0,
+        n_candidates_scored=n_candidates_scored,
+        random_opening_steps=0,
     )
 
 
 def _direct() -> MethodConfig:
     """Waypoint = the target, re-solved under the belief's mean every `L` moves"""
-    return _method(uniform(), n_candidates=0)
+    return _method(uniform(), n_candidates_scored=0)
 
 
 sweep(
@@ -47,7 +51,7 @@ sweep(
     resources=dataclasses.replace(RESOURCES, constraint="avx2&gpu-high"),  # 48 GB cards and up
     arms=[
         arm("direct", _direct(), field_belief()),
-        arm("rand_wp", _method(uniform(), n_candidates=None), field_belief()),
+        arm("rand_wp", _method(uniform(), n_candidates_scored=None), field_belief()),
         arm("rand_act", None, field_belief()),  # no rule at all
         arm("oracle", _direct(), oracle_belief()),
     ],

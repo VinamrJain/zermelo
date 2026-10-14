@@ -24,42 +24,65 @@ N_SEEDS = 5
 
 
 def method(
-    utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, penalty_rate: float, replan_every: int, cost_weight: float
+    utility: Implementation,
+    *,
+    subtract_dataset_utility: bool,
+    n_field_samples: int,
+    n_paths_per_field: int,
+    penalty_rate: float,
+    replan_length: int,
+    cost_weight: float,
 ) -> MethodConfig:
     """One acquisition on a value-iteration planner, at the settings the acquisitions differ in"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(replan_every=replan_every, radius=ARRIVAL_RADIUS_KM, target_chunk=TARGET_CHUNK, cost_weight=cost_weight),
-        improvement=improvement,
-        n_fields=n_fields,
-        n_walks=n_walks,
+        planner=value_iteration(
+            replan_length=replan_length, radius=ARRIVAL_RADIUS_KM, targets_per_solve=TARGET_CHUNK, cost_weight=cost_weight
+        ),
+        subtract_dataset_utility=subtract_dataset_utility,
+        n_field_samples=n_field_samples,
+        n_paths_per_field=n_paths_per_field,
         penalty_rate=penalty_rate,
-        n_candidates=N_CANDIDATES,
-        opening_steps=OPENING_STEPS,
+        n_candidates_scored=N_CANDIDATES,
+        random_opening_steps=OPENING_STEPS,
     )
 
 
-def baseline(utility: Implementation, n_fields: int) -> MethodConfig:
-    """A rule reading the posterior (or `n_fields` draws of it) at the candidates, charging no travel and no altitude change"""
-    return method(utility, improvement=False, n_fields=n_fields, n_walks=0, penalty_rate=0.0, replan_every=PLANNING_BUDGET, cost_weight=0.0)
+def baseline(utility: Implementation, n_field_samples: int) -> MethodConfig:
+    """A rule reading the posterior (or `n_field_samples` draws of it) at the candidates, charging no travel and no altitude change"""
+    return method(
+        utility,
+        subtract_dataset_utility=False,
+        n_field_samples=n_field_samples,
+        n_paths_per_field=0,
+        penalty_rate=0.0,
+        replan_length=PLANNING_BUDGET,
+        cost_weight=0.0,
+    )
 
 
 def mc_ei() -> MethodConfig:
     """Expected improvement of the largest speed at the target alone, over 16 drawn winds and no walk"""
     return method(
-        max_magnitude(), improvement=True, n_fields=16, n_walks=0, penalty_rate=0.0, replan_every=PLANNING_BUDGET, cost_weight=0.0
+        max_magnitude(),
+        subtract_dataset_utility=True,
+        n_field_samples=16,
+        n_paths_per_field=0,
+        penalty_rate=0.0,
+        replan_length=PLANNING_BUDGET,
+        cost_weight=0.0,
     )
 
 
-def ours(name: str, *, penalty_rate: float | None = None, replan_every: int | None = None, cost_weight: float = 0.0) -> MethodConfig:
+def ours(name: str, *, penalty_rate: float | None = None, replan_length: int | None = None, cost_weight: float = 0.0) -> MethodConfig:
     """Expected improvement of `name`'s utility over 16 imagined walks under 16 drawn winds, at `PLANNING_BUDGET` and `PENALTY_RATE` unless given"""
     return method(
         UTILITIES[name](),
-        improvement=True,
-        n_fields=16,
-        n_walks=16,
+        subtract_dataset_utility=True,
+        n_field_samples=16,
+        n_paths_per_field=16,
         penalty_rate=PENALTY_RATE if penalty_rate is None else penalty_rate,
-        replan_every=PLANNING_BUDGET if replan_every is None else replan_every,
+        replan_length=PLANNING_BUDGET if replan_length is None else replan_length,
         cost_weight=cost_weight,
     )
 

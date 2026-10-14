@@ -99,37 +99,37 @@ def _built(path: str, **arguments: Any) -> Implementation:
 
 def max_magnitude() -> Implementation:
     """The largest reading magnitude among the cells scored"""
-    return _built("zermelo.methods.waypoint_bo.utility.MaxMagnitude", components=(0, 1))
+    return _built("zermelo.methods.path_eui.utility.MaxMagnitude", components=(0, 1))
 
 
 def sum_magnitude() -> Implementation:
     """The reading magnitudes among the cells scored, summed"""
-    return _built("zermelo.methods.waypoint_bo.utility.SumMagnitude", components=(0, 1))
+    return _built("zermelo.methods.path_eui.utility.SumMagnitude", components=(0, 1))
 
 
 def total_variance() -> Implementation:
     """Minus the posterior variance summed over every candidate state, given where the dataset was read"""
-    return _built("zermelo.methods.waypoint_bo.utility.TotalVariance", components=(0, 1))
+    return _built("zermelo.methods.path_eui.utility.TotalVariance", components=(0, 1))
 
 
 def posterior_spread() -> Implementation:
     """The posterior standard deviations at the scored cells, summed"""
-    return _built("zermelo.methods.waypoint_bo.utility.PosteriorSpread", components=(0, 1))
+    return _built("zermelo.methods.path_eui.utility.PosteriorSpread", components=(0, 1))
 
 
 def upper_confidence(c: float) -> Implementation:
     """The largest optimistic magnitude `||mean|| + c * spread` at the scored cells"""
-    return _built("zermelo.methods.waypoint_bo.utility.UpperConfidence", c=c, components=(0, 1))
+    return _built("zermelo.methods.path_eui.utility.UpperConfidence", c=c, components=(0, 1))
 
 
 def expected_improvement() -> Implementation:
     """`E[(|f| - beta)^+]` at each scored cell in closed form, `beta` the largest magnitude read so far"""
-    return _built("zermelo.methods.waypoint_bo.utility.ExpectedImprovement", components=(0, 1))
+    return _built("zermelo.methods.path_eui.utility.ExpectedImprovement", components=(0, 1))
 
 
 def uniform() -> Implementation:
     """A draw ignoring the data"""
-    return _built("zermelo.methods.waypoint_bo.utility.Uniform")
+    return _built("zermelo.methods.path_eui.utility.Uniform")
 
 
 # --- targets: which scalar of the wind an episode is scored on predicting -------------------------------------------
@@ -145,28 +145,28 @@ def column_peak_speed(n_alt: int) -> Implementation:
     return _built("zermelo.problems.balloon.objective.ColumnPeakSpeed", n_alt=n_alt)
 
 
-# --- planners: how the actor is carried to a waypoint, and how that walk is priced ----------------------------------
+# --- planners: how the actor is carried to a target, and how that walk is priced ----------------------------------
 
 
-def value_iteration(replan_every: int, radius: float, target_chunk: int | None, cost_weight: float) -> Implementation:
-    """`v_0 = 0`, `v_{k+1}(s) = 0 on arrival, else min over a of c(s, a) + sum over s' of P(s' | s, a) v_k(s')`, `replan_every` rounds, the budget"""
+def value_iteration(replan_length: int, radius: float, targets_per_solve: int | None, cost_weight: float) -> Implementation:
+    """`v_0 = 0`, `v_{k+1}(s) = 0 on arrival, else min over a of c(s, a) + sum over s' of P(s' | s, a) v_k(s')`, `replan_length` rounds, the budget"""
     return _built(
-        "zermelo.methods.waypoint_bo.planner.ValueIteration",
-        backup_iterations=replan_every,
-        replan_every=replan_every,
-        radius=radius,
-        target_chunk=target_chunk,
+        "zermelo.methods.path_eui.planner.ValueIteration",
+        value_iterations=replan_length,
+        replan_length=replan_length,
+        goal_radius=radius,
+        targets_per_solve=targets_per_solve,
         cost_weight=cost_weight,
     )
 
 
-def greedy(replan_every: int, radius: float, target_chunk: int | None, cost_weight: float) -> Implementation:
+def greedy(replan_length: int, radius: float, targets_per_solve: int | None, cost_weight: float) -> Implementation:
     """One backup on the distance to the target: the act whose next cell is nearest it in expectation"""
     return _built(
-        "zermelo.methods.waypoint_bo.planner.Greedy",
-        backup_iterations=replan_every,
-        replan_every=replan_every,
-        radius=radius,
-        target_chunk=target_chunk,
+        "zermelo.methods.path_eui.planner.Greedy",
+        value_iterations=replan_length,
+        replan_length=replan_length,
+        goal_radius=radius,
+        targets_per_solve=targets_per_solve,
         cost_weight=cost_weight,
     )

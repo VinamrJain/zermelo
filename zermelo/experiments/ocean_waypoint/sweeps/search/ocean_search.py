@@ -17,7 +17,7 @@ from zermelo.experiments.ocean_waypoint.setup import Implementation, arm, max_ma
 from zermelo.problems.ocean import OCEAN_CURRENT
 
 WORLD = dataclasses.replace(GULF_STREAM_2019JUN, objective="search")
-"""The same frame, scored on the fastest ocean current stood on inside the target box, which is also where a waypoint may be aimed"""
+"""The same frame, scored on the fastest ocean current stood on inside the target box, which is also where a target may be aimed"""
 
 N_FIELDS = 16
 """`N` fields drawn from the posterior per decision"""
@@ -26,19 +26,23 @@ N_WALKS = 16
 """`M` walks the path-aware rule imagines per candidate under each drawn field"""
 
 
-def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int) -> MethodConfig:
+def _method(utility: Implementation, *, subtract_dataset_utility: bool, n_field_samples: int, n_paths_per_field: int) -> MethodConfig:
     """One rule on a value-iteration planner, travel not priced"""
     return MethodConfig(
         utility=utility,
         planner=value_iteration(
-            backup_iterations=HORIZON_LENGTH, replan_every=PLANNING_BUDGET, radius=ARRIVAL_RADIUS_KM, target_chunk=None, cost_weight=0.0
+            value_iterations=HORIZON_LENGTH,
+            replan_length=PLANNING_BUDGET,
+            radius=ARRIVAL_RADIUS_KM,
+            targets_per_solve=None,
+            cost_weight=0.0,
         ),
-        improvement=improvement,
-        n_fields=n_fields,
-        n_walks=n_walks,
+        subtract_dataset_utility=subtract_dataset_utility,
+        n_field_samples=n_field_samples,
+        n_paths_per_field=n_paths_per_field,
         penalty_rate=0.0,
-        n_candidates=None,
-        opening_steps=0,
+        n_candidates_scored=None,
+        random_opening_steps=0,
     )
 
 
@@ -53,12 +57,28 @@ for date, frame_hour in STILL_FRAMES.items():
         resources=dataclasses.replace(RESOURCES, constraint="avx2&gpu-high"),  # 48 GB cards and up
         arms=[
             # E over fields f and walks tau of max(0, max over z in tau of ||f(z)|| - beta_n)
-            arm("emi", _method(max_magnitude(OCEAN_CURRENT), improvement=True, n_fields=N_FIELDS, n_walks=N_WALKS), field_belief()),
+            arm(
+                "emi",
+                _method(max_magnitude(OCEAN_CURRENT), subtract_dataset_utility=True, n_field_samples=N_FIELDS, n_paths_per_field=N_WALKS),
+                field_belief(),
+            ),
             # E over fields f of max(0, ||f(x)|| - beta_n) at the destination alone
-            arm("mc_ei", _method(max_magnitude(OCEAN_CURRENT), improvement=True, n_fields=N_FIELDS, n_walks=0), field_belief()),
-            arm("ucb", _method(upper_confidence(2.0, OCEAN_CURRENT), improvement=False, n_fields=0, n_walks=0), field_belief()),
-            arm("ts", _method(max_magnitude(OCEAN_CURRENT), improvement=False, n_fields=1, n_walks=0), field_belief()),
-            arm("rand_wp", _method(uniform(), improvement=False, n_fields=0, n_walks=0), field_belief()),
+            arm(
+                "mc_ei",
+                _method(max_magnitude(OCEAN_CURRENT), subtract_dataset_utility=True, n_field_samples=N_FIELDS, n_paths_per_field=0),
+                field_belief(),
+            ),
+            arm(
+                "ucb",
+                _method(upper_confidence(2.0, OCEAN_CURRENT), subtract_dataset_utility=False, n_field_samples=0, n_paths_per_field=0),
+                field_belief(),
+            ),
+            arm(
+                "ts",
+                _method(max_magnitude(OCEAN_CURRENT), subtract_dataset_utility=False, n_field_samples=1, n_paths_per_field=0),
+                field_belief(),
+            ),
+            arm("rand_wp", _method(uniform(), subtract_dataset_utility=False, n_field_samples=0, n_paths_per_field=0), field_belief()),
             arm("rand_act", None, field_belief()),  # no rule at all
         ],
     )

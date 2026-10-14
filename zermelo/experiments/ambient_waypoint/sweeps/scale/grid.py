@@ -22,18 +22,24 @@ TARGET_CHUNK = 2500
 
 
 def _method(
-    utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, penalty_rate: float, target_chunk: int | None
+    utility: Implementation,
+    *,
+    subtract_dataset_utility: bool,
+    n_field_samples: int,
+    n_paths_per_field: int,
+    penalty_rate: float,
+    targets_per_solve: int | None,
 ) -> MethodConfig:
     """This sweep's held values"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(replan_every=PLANNING_BUDGET, radius=0.5, target_chunk=target_chunk),
-        improvement=improvement,
-        n_fields=n_fields,
-        n_walks=n_walks,
+        planner=value_iteration(replan_length=PLANNING_BUDGET, radius=0.5, targets_per_solve=targets_per_solve),
+        subtract_dataset_utility=subtract_dataset_utility,
+        n_field_samples=n_field_samples,
+        n_paths_per_field=n_paths_per_field,
         penalty_rate=penalty_rate,
-        n_candidates=None,
-        opening_steps=OPENING_STEPS,
+        n_candidates_scored=None,
+        random_opening_steps=OPENING_STEPS,
     )
 
 
@@ -57,13 +63,27 @@ for name, problem, chunk, resources in (
         arms=[
             arm(
                 "eui_fields16_walks16_rate0p5",  # the pathwise sampler runs on this arm
-                _method(max_magnitude(), improvement=True, n_fields=16, n_walks=16, penalty_rate=0.5, target_chunk=chunk),
+                _method(
+                    max_magnitude(),
+                    subtract_dataset_utility=True,
+                    n_field_samples=16,
+                    n_paths_per_field=16,
+                    penalty_rate=0.5,
+                    targets_per_solve=chunk,
+                ),
                 matched_belief(problem),
             ),
             # a charge would bias a uniform draw, which spans [0, 1] whatever the field
             arm(
                 "random_search",
-                _method(uniform(), improvement=False, n_fields=0, n_walks=0, penalty_rate=0.0, target_chunk=chunk),
+                _method(
+                    uniform(),
+                    subtract_dataset_utility=False,
+                    n_field_samples=0,
+                    n_paths_per_field=0,
+                    penalty_rate=0.0,
+                    targets_per_solve=chunk,
+                ),
                 matched_belief(problem),
             ),
         ],

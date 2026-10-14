@@ -5,11 +5,11 @@ from zermelo.experiments.ocean_waypoint.schema import BeliefConfig, MethodConfig
 from zermelo.experiments.ocean_waypoint.setup import (
     Implementation,
     arm,
+    goals_reached,
     max_magnitude,
     posterior_spread,
     region_information,
     sweep,
-    targets_reached,
     total_variance,
     uniform,
     value_iteration,
@@ -45,17 +45,17 @@ def _belief(oracle: bool) -> BeliefConfig:
     )
 
 
-def _method(utility: Implementation, *, n_fields: int, n_walks: int, n_candidates: int | None) -> MethodConfig:
+def _method(utility: Implementation, *, n_field_samples: int, n_paths_per_field: int, n_candidates_scored: int | None) -> MethodConfig:
     """One rule on a value-iteration planner, only the candidates within reach scored, at the settings the arms differ in"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(backup_iterations=10, replan_every=3, radius=60.0, target_chunk=None, cost_weight=0.0),
-        improvement=True,
-        n_fields=n_fields,
-        n_walks=n_walks,
+        planner=value_iteration(value_iterations=10, replan_length=3, radius=60.0, targets_per_solve=None, cost_weight=0.0),
+        subtract_dataset_utility=True,
+        n_field_samples=n_field_samples,
+        n_paths_per_field=n_paths_per_field,
         penalty_rate=0.0,
-        n_candidates=n_candidates,
-        opening_steps=2,  # two uniform moves, leaving eight the rule decides
+        n_candidates_scored=n_candidates_scored,
+        random_opening_steps=2,  # two uniform moves, leaving eight the rule decides
     )
 
 
@@ -76,10 +76,10 @@ for name, resources in (
         seeds=[0],
         resources=resources,
         arms=[
-            arm("direct", _method(uniform(), n_fields=0, n_walks=0, n_candidates=0), _belief(oracle=False)),
-            arm("rand_wp", _method(uniform(), n_fields=0, n_walks=0, n_candidates=8), _belief(oracle=False)),
+            arm("direct", _method(uniform(), n_field_samples=0, n_paths_per_field=0, n_candidates_scored=0), _belief(oracle=False)),
+            arm("rand_wp", _method(uniform(), n_field_samples=0, n_paths_per_field=0, n_candidates_scored=8), _belief(oracle=False)),
             arm("rand_act", None, _belief(oracle=False)),  # no rule at all
-            arm("oracle", _method(uniform(), n_fields=0, n_walks=0, n_candidates=0), _belief(oracle=True)),
+            arm("oracle", _method(uniform(), n_field_samples=0, n_paths_per_field=0, n_candidates_scored=0), _belief(oracle=True)),
         ],
     )
 
@@ -93,15 +93,19 @@ sweep(
     seeds=[0],
     resources=Resources(cpus=1, mem_gb=8, timeout_min=20, gres=None, partition="dean", constraint="avx2", array_parallelism=10),
     arms=[
-        arm("evi", _method(total_variance(SCORED_COMPONENTS[WORLD.learned]), n_fields=0, n_walks=2, n_candidates=8), _belief(oracle=False)),
+        arm(
+            "evi",
+            _method(total_variance(SCORED_COMPONENTS[WORLD.learned]), n_field_samples=0, n_paths_per_field=2, n_candidates_scored=8),
+            _belief(oracle=False),
+        ),
         arm(
             "eii",
-            _method(region_information(SCORED_COMPONENTS[WORLD.learned]), n_fields=0, n_walks=2, n_candidates=8),
+            _method(region_information(SCORED_COMPONENTS[WORLD.learned]), n_field_samples=0, n_paths_per_field=2, n_candidates_scored=8),
             _belief(oracle=False),
         ),
         arm(
             "max_var",
-            _method(posterior_spread(SCORED_COMPONENTS[WORLD.learned]), n_fields=0, n_walks=0, n_candidates=8),
+            _method(posterior_spread(SCORED_COMPONENTS[WORLD.learned]), n_field_samples=0, n_paths_per_field=0, n_candidates_scored=8),
             _belief(oracle=False),
         ),
         arm("rand_act", None, _belief(oracle=False)),
@@ -123,8 +127,16 @@ sweep(
     seeds=[0],
     resources=Resources(cpus=1, mem_gb=8, timeout_min=20, gres=None, partition="dean", constraint="avx2", array_parallelism=10),
     arms=[
-        arm("emi", _method(max_magnitude(OCEAN_CURRENT), n_fields=2, n_walks=2, n_candidates=8), _belief(oracle=False)),
-        arm("mc_ei", _method(max_magnitude(OCEAN_CURRENT), n_fields=2, n_walks=0, n_candidates=8), _belief(oracle=False)),
+        arm(
+            "emi",
+            _method(max_magnitude(OCEAN_CURRENT), n_field_samples=2, n_paths_per_field=2, n_candidates_scored=8),
+            _belief(oracle=False),
+        ),
+        arm(
+            "mc_ei",
+            _method(max_magnitude(OCEAN_CURRENT), n_field_samples=2, n_paths_per_field=0, n_candidates_scored=8),
+            _belief(oracle=False),
+        ),
         arm("rand_act", None, _belief(oracle=False)),
     ],
 )
@@ -145,8 +157,10 @@ sweep(
     seeds=[0],
     resources=Resources(cpus=1, mem_gb=8, timeout_min=20, gres=None, partition="dean", constraint="avx2", array_parallelism=10),
     arms=[
-        arm("etr", _method(targets_reached(60.0), n_fields=2, n_walks=2, n_candidates=None), _belief(oracle=False)),
-        arm("nearest", _method(targets_reached(60.0), n_fields=0, n_walks=0, n_candidates=None), _belief(oracle=False)),
+        arm("etr", _method(goals_reached(60.0), n_field_samples=2, n_paths_per_field=2, n_candidates_scored=None), _belief(oracle=False)),
+        arm(
+            "nearest", _method(goals_reached(60.0), n_field_samples=0, n_paths_per_field=0, n_candidates_scored=None), _belief(oracle=False)
+        ),
         arm("rand_act", None, _belief(oracle=False)),
     ],
 )

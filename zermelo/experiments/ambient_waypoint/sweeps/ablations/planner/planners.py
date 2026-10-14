@@ -22,12 +22,12 @@ def _method(planner: Implementation) -> MethodConfig:
     return MethodConfig(
         utility=max_magnitude(),
         planner=planner,
-        improvement=True,
-        n_fields=16,
-        n_walks=16,
+        subtract_dataset_utility=True,
+        n_field_samples=16,
+        n_paths_per_field=16,
         penalty_rate=0.5,
-        n_candidates=None,
-        opening_steps=OPENING_STEPS,
+        n_candidates_scored=None,
+        random_opening_steps=OPENING_STEPS,
     )
 
 
@@ -42,6 +42,7 @@ sweep(
     seeds=range(N_SEEDS),
     resources=RESOURCES,
     arms=[
-        arm(name, _method(build(replan_every=PLANNING_BUDGET, radius=0.5, target_chunk=None)), BELIEF) for name, build in PLANNERS.items()
+        arm(name, _method(build(replan_length=PLANNING_BUDGET, radius=0.5, targets_per_solve=None)), BELIEF)
+        for name, build in PLANNERS.items()
     ],
 )

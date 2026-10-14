@@ -13,6 +13,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from zermelo.run.record import RENAMED_CHANNELS
+
 LOG_VARIANCE_FLOOR = -12.0
 """Smallest log variance a claim is read at"""
 
@@ -58,19 +60,14 @@ TABLE_COLUMNS = (
 CURVE_CHANNELS = ("objective_state/best_possible_speed", "objective_state/speed", "objective_state/truth", "objective_state/claim")
 """What the curves are computed from, as the names a record holds them under"""
 
-TABLE_CHANNELS = CURVE_CHANNELS + (
-    "state/altitude",
-    "state/hours_elapsed",
-    "agent_state/time_steps_since_waypoint",
-    "reward",
-    "time_per_episode",
-)
+TABLE_CHANNELS = CURVE_CHANNELS + ("state/altitude", "state/hours_elapsed", "agent_state/steps_since_target", "reward", "time_per_episode")
 
 
 def channels(run: Path, wanted: Sequence[str]) -> dict[str, Any]:
     """The arrays `wanted` names from one run's record (a name the record does not hold is absent)"""
+    old_name = {new: old for old, new in RENAMED_CHANNELS.items()}
     with np.load(run / "record.npz") as npz:
-        return {name: npz[name] for name in wanted if name in npz}
+        return {name: npz[name] if name in npz else npz[old_name[name]] for name in wanted if name in npz or old_name.get(name) in npz}
 
 
 def settings(name: str) -> dict[str, str]:
@@ -141,7 +138,7 @@ def opening_moves(config: dict[str, Any], moves: int) -> int:
     method = config.get("method")
     if method is None:
         return moves
-    return int(method["opening_steps"])
+    return int(method.get("random_opening_steps", method.get("opening_steps")))
 
 
 def episode_legs(held: dict[str, Any], config: dict[str, Any]) -> dict[str, np.ndarray]:
@@ -149,8 +146,8 @@ def episode_legs(held: dict[str, Any], config: dict[str, Any]) -> dict[str, np.n
     method = config.get("method")
     if method is None:
         return {name: np.zeros(0) for name in ("ended", "walked", "arrived")}
-    budget = int(method["planner"]["replan_every"])
-    since = held["agent_state/time_steps_since_waypoint"]  # (time_steps + 1,) zero on a replan and up one a time_step
+    budget = int(method["planner"].get("replan_length", method["planner"].get("replan_every")))
+    since = held["agent_state/steps_since_target"]  # (time_steps + 1,) zero on a replan and up one a time_step
     ends = np.flatnonzero(np.diff(since) < 0)  # the last snapshot of each waypoint leg, where the sawtooth drops
     ends = ends[ends > opening_moves(config, since.size - 1)]  # the drop closing the opening ends no waypoint leg
     walked = since[ends].astype(float)

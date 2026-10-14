@@ -56,7 +56,7 @@ class Agreement:
 
 
 def dummy_problem() -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-    """The problem both sides solve: the grid, the cells read, and what was read there."""
+    """The problem both sides solve_shortest_paths: the grid, the cells read, and what was read there."""
     coords = (SPACING * jnp.arange(N_CELLS, dtype=jnp.float32))[:, None]  # (n_cells, 1)
     rng = np.random.default_rng(SEED)
     read = np.sort(rng.choice(N_CELLS, N_READ, replace=False))
@@ -74,24 +74,24 @@ def exact_moments(x: jnp.ndarray, y: jnp.ndarray, coords: jnp.ndarray) -> tuple[
         return np.zeros(coords.shape[0]), prior
     gram = np.asarray(kernel.gram(x).to_dense(), np.float64) + NOISE**2 * np.eye(x.shape[0])
     cross = np.asarray(kernel.cross_covariance(coords, x), np.float64)  # (n_cells, n_read)
-    solved = np.linalg.solve(gram, cross.T)  # (n_read, n_cells)
-    return cross @ np.linalg.solve(gram, np.asarray(y, np.float64)), prior - cross @ solved
+    solved = np.linalg.solve_shortest_paths(gram, cross.T)  # (n_read, n_cells)
+    return cross @ np.linalg.solve_shortest_paths(gram, np.asarray(y, np.float64)), prior - cross @ solved
 
 
-def their_paths(x: jnp.ndarray, y: jnp.ndarray, coords: jnp.ndarray, key: jax.Array, n_fields: int) -> np.ndarray:
-    """gpjax's own pathwise draw at every cell, as (n_fields, n_cells)."""
+def their_paths(x: jnp.ndarray, y: jnp.ndarray, coords: jnp.ndarray, key: jax.Array, n_field_samples: int) -> np.ndarray:
+    """gpjax's own pathwise draw at every cell, as (n_field_samples, n_cells)."""
     prior = gpx.gps.Prior(
         kernel=gpx.kernels.RBF(lengthscale=LENGTHSCALE, variance=AMPLITUDE**2, n_dims=1), mean_function=gpx.mean_functions.Zero()
     )
     posterior = prior * gpx.likelihoods.Gaussian(num_datapoints=max(x.shape[0], 1), obs_stddev=NOISE)
     if x.shape[0] == 0:
-        return np.asarray(posterior.prior.sample_approx(n_fields, key, N_FEATURES)(coords)).T
-    return np.asarray(posterior.sample_approx(n_fields, gpx.Dataset(x, y[:, None]), key, N_FEATURES)(coords)).T
+        return np.asarray(posterior.prior.sample_approx(n_field_samples, key, N_FEATURES)(coords)).T
+    return np.asarray(posterior.sample_approx(n_field_samples, gpx.Dataset(x, y[:, None]), key, N_FEATURES)(coords)).T
 
 
-def our_paths(x: jnp.ndarray, y: jnp.ndarray, coords: jnp.ndarray, key: jax.Array, n_fields: int) -> np.ndarray:
-    """Our pathwise draw at the same cells, as (n_fields, n_cells)."""
-    from zermelo.methods.waypoint_bo.belief import GPBelief
+def our_paths(x: jnp.ndarray, y: jnp.ndarray, coords: jnp.ndarray, key: jax.Array, n_field_samples: int) -> np.ndarray:
+    """Our pathwise draw at the same cells, as (n_field_samples, n_cells)."""
+    from zermelo.methods.path_eui.belief import GPBelief
     from zermelo.problems.ambient_dynamics.ambient_grid import PaddedGridDomain
 
     positions = PaddedGridDomain(n_axes=1, n_cells=N_CELLS, cell_spacing=SPACING, pad=0)
@@ -107,7 +107,7 @@ def our_paths(x: jnp.ndarray, y: jnp.ndarray, coords: jnp.ndarray, key: jax.Arra
         refit=False,
         refit_steps=0,
     )
-    return np.asarray(belief._paths(key, x, y, n_fields))
+    return np.asarray(belief._sample_component(key, x, y, n_field_samples))
 
 
 def compare() -> int:

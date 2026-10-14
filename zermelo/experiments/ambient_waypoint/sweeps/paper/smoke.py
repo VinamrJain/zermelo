@@ -13,10 +13,10 @@ def _small(method: MethodConfig) -> MethodConfig:
     """`method` with two draws, a four-step planner and four opening moves"""
     return dataclasses.replace(
         method,
-        planner=value_iteration(replan_every=4, radius=0.05, target_chunk=None),
-        n_fields=2,
-        n_walks=min(method.n_walks, 2),
-        opening_steps=4,
+        planner=value_iteration(replan_length=4, radius=0.05, targets_per_solve=None),
+        n_field_samples=2,
+        n_paths_per_field=min(method.n_paths_per_field, 2),
+        random_opening_steps=4,
     )
 
 

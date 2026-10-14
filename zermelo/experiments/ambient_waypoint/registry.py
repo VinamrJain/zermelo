@@ -65,12 +65,12 @@ RECORDED = {
     "objective_state/best_observed_magnitude": 1,
     "objective_state/truth": 1,
     "objective_state/claim": CLAIM_EVERY_STEPS,
-    "agent_state/time_steps_since_waypoint": 1,
-    "agent_state/scores.waypoint": 1,
-    "agent_state/scores.imagined_walk_to_waypoint": 1,
-    "agent_state/scores.candidate_indices": 1,
-    "agent_state/scores.acquisition_value": 1,
-    "agent_state/scores.route.act": 1,
+    "agent_state/steps_since_target": 1,
+    "agent_state/choice.target": 1,
+    "agent_state/choice.imagined_path_to_target": 1,
+    "agent_state/choice.candidate_indices": 1,
+    "agent_state/choice.acquisition_value": 1,
+    "agent_state/choice.policy_to_target.action": 1,
 }
 """What a record stores, and the moves between the snapshots it keeps of each"""
 

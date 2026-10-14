@@ -129,8 +129,8 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
             "objective_state/best_possible_magnitude",
             "objective_state/targets",
             "objective_state/visited",
-            "agent_state/scores.waypoint",
-            "agent_state/scores.imagined_walk_to_waypoint",
+            "agent_state/choice.target",
+            "agent_state/choice.imagined_path_to_target",
         ),
     )
     raw = np.load(Path(problem["data_path"]))
@@ -175,8 +175,8 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     distance = np.linalg.norm((track - target) * km_per_degree, axis=-1)  # (T + 1,) km
     last = min(track.shape[0] - 1, int(np.argmax(arrived)) + AFTER_ARRIVAL) if arrived.any() else track.shape[0] - 1
     claims = held["objective_state/claim"]  # (T + 1, n_candidates, 8)
-    waypoints = held.get("agent_state/scores.waypoint")
-    walks = held.get("agent_state/scores.imagined_walk_to_waypoint")  # (T + 1, L) flat indices, the last repeated past the end
+    waypoints = held.get("agent_state/choice.target")
+    walks = held.get("agent_state/choice.imagined_path_to_target")  # (T + 1, L) flat indices, the last repeated past the end
 
     # per move: the velocities at the point it left, (east, north) m/s
     net = np.diff(track, axis=0)[:, ::-1] * km_per_degree[::-1] / (3.6 * step_hours)  # (T, 2): the move as a velocity

@@ -234,22 +234,22 @@ def read(path: Path) -> Replay:
     claim[0] = np.nan  # the objective opens with zeros in the shape of a claim, which is not one
     flown = np.asarray(record.state["altitude"]).astype(int)
 
-    index = np.asarray(record.agent_state["scores.waypoint"]) if method is not None else np.zeros(0, int)
+    index = np.asarray(record.agent_state["choice.target"]) if method is not None else np.zeros(0, int)
     replans = 1 + np.flatnonzero(np.diff(index))  # snapshots at which a new waypoint took force
     plan = None
     if replans.size:
         whole = np.concatenate([np.asarray(element["position"]), np.asarray(element["altitude"])[:, None]], -1)  # (n_states, 3)
         made = np.arange(index.size) >= replans[0]  # (snapshots,) a plan is in force from the first one onward
         made_at = replans[np.clip(np.searchsorted(replans, np.arange(index.size), "right") - 1, 0, None)]  # (snapshots,)
-        walk = whole[np.asarray(record.agent_state["scores.imagined_walk_to_waypoint"])]  # (snapshots, steps, 3)
+        walk = whole[np.asarray(record.agent_state["choice.imagined_path_to_target"])]  # (snapshots, steps, 3)
         from_here = np.concatenate([np.asarray(record.state["position"]), flown[:, None]], -1)[made_at]  # (snapshots, 3)
         plan = Plan(
             opening_moves=opening_moves(record.config, int(record.reward.shape[0])),
             waypoint=np.where(made[:, None], whole[index], np.nan),
             walk=np.where(made[:, None, None], np.concatenate([from_here[:, None, :], walk], 1), np.nan),
             replans=replans,
-            scored=np.asarray(record.agent_state["scores.candidate_indices"]),
-            acquisition=np.asarray(record.agent_state["scores.acquisition_value"]),
+            scored=np.asarray(record.agent_state["choice.candidate_indices"]),
+            acquisition=np.asarray(record.agent_state["choice.acquisition_value"]),
         )
 
     lat_edges = (float(np.min(position[:, 0])), float(np.max(position[:, 0])))
@@ -278,7 +278,9 @@ def read(path: Path) -> Replay:
         level=level,
         index=live,
         outside=outside,
-        leg=int(method["planner"]["replan_every"]) if method is not None else int(record.reward.shape[0]),
+        leg=int(method["planner"].get("replan_length", method["planner"].get("replan_every")))
+        if method is not None
+        else int(record.reward.shape[0]),
         path=np.asarray(record.state["position"]),
         flown=flown,
         balloon_resource=np.asarray(record.state["balloon_resource"]).astype(int),

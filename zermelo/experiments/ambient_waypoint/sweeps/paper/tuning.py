@@ -25,7 +25,7 @@ for swept, names in (("paper_tuning", ("emi", "evi")), ("paper_tuning_esi", ("es
         seeds=TUNING_SEEDS,
         resources=dataclasses.replace(RESOURCES, mem_gb=16, timeout_min=240),
         arms=[
-            arm(f"{name}_L{budget}_c{rate_name(rate)}", ours(name, penalty_rate=rate, replan_every=budget), BELIEF)
+            arm(f"{name}_L{budget}_c{rate_name(rate)}", ours(name, penalty_rate=rate, replan_length=budget), BELIEF)
             for name in names
             for budget in (25, 50, 100)
             for rate in (0.0, 0.5, 1.0, 2.0)

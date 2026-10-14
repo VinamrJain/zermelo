@@ -38,9 +38,9 @@ CHANNELS = (
     "objective_state/targets",
     "objective_state/visited",
     "objective_state/steps_to_completion",
-    "agent_state/scores.waypoint",
-    "agent_state/scores.candidate_indices",
-    "agent_state/time_steps_since_waypoint",
+    "agent_state/choice.target",
+    "agent_state/choice.candidate_indices",
+    "agent_state/steps_since_target",
 )
 """What a still is drawn from, as the names a record holds them under"""
 
@@ -105,9 +105,9 @@ def still(run: Path, out: Path) -> None:
                 ax.plot(t_lon, t_lat, "*", ms=14, color="m" if seen else "none", mec="m", mew=1.5)
         ax.set_aspect(1 / np.cos(np.radians(np.mean(lat))))
         ax.set_xlabel("lon")
-    if "agent_state/scores.waypoint" in held:  # an arm with a rule: every waypoint it aimed at
-        decided = np.flatnonzero(held["agent_state/time_steps_since_waypoint"][1:] == 0) + 1  # the moves a waypoint was chosen at
-        aimed = np.unique(held["agent_state/scores.waypoint"][decided])
+    if "agent_state/choice.target" in held:  # an arm with a rule: every waypoint it aimed at
+        decided = np.flatnonzero(held["agent_state/steps_since_target"][1:] == 0) + 1  # the moves a waypoint was chosen at
+        aimed = np.unique(held["agent_state/choice.target"][decided])
         axes[0].plot(lon[aimed % n_lon], lat[aimed // n_lon], "x", color="orange", ms=6, label="waypoints")
     if visiting:
         axes[0].plot([], [], "*", ms=10, color="m", mec="m", label="target, visited")

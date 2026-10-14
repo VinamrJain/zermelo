@@ -1,0 +1,296 @@
+"""`U(d)`: the utility of a dataset, what its observations are worth to the task"""
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Any
+
+import jax
+import jax.numpy as jnp
+from jax.scipy.linalg import cho_solve, solve_triangular
+from jax.scipy.stats import norm
+from jaxtyping import Array, Bool, Float, Int, PRNGKeyArray
+
+from zermelo.interface import Subset
+from zermelo.methods.path_eui.belief import Belief, Dataset, coordinates
+
+
+class Utility(ABC):
+    """`U(d)` under a belief's model, counting only the observations made on a candidate state"""
+
+    @abstractmethod
+    def __call__(self, key: PRNGKeyArray, belief: Belief, dataset: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
+        """What `dataset` is worth, one score per leading batch axis of `dataset`"""
+
+
+def observation_is_counted(dataset: Dataset, candidates: Subset[Any]) -> Bool[Array, "*batch n"]:
+    """Which observations a utility counts: observed, and made on a candidate state"""
+    return dataset.is_observed & candidates.live[dataset.state_index]
+
+
+def context_of_latest_observation(dataset: Dataset) -> Float[Array, " n_context"]:
+    """The context the belief is read at to score `dataset`: its latest observation's
+
+    context_value[-1, ..., -1, :], one -1 per leading batch axis of a (*batch, n, n_context) array.
+    """
+    return dataset.context_value[(-1,) * (dataset.context_value.ndim - 1)]
+
+
+def magnitude_over_components(values: Float[Array, "*batch n m"], components: tuple[int, ...]) -> Float[Array, "*batch n"]:
+    """||values[components]||"""
+    return jnp.linalg.norm(values[..., jnp.asarray(components)], axis=-1)
+
+
+@dataclass(frozen=True)
+class MaxMagnitude(Utility):
+    """U(D) = max over the counted observations of ||measurement[components]||, the incumbent beta_n"""
+
+    components: tuple[int, ...]
+    """Which components of the field are measured"""
+
+    def __call__(self, key: PRNGKeyArray, belief: Belief, dataset: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
+        # 0.0 is the infimum of a magnitude, so a dataset with no counted observation scores the floor rather than -inf
+        return jnp.max(
+            jnp.where(observation_is_counted(dataset, candidates), magnitude_over_components(dataset.measurement, self.components), 0.0),
+            axis=-1,
+        )
+
+
+@dataclass(frozen=True)
+class SumMagnitude(Utility):
+    """U(D) = sum over the counted observations of ||measurement[components]||, the magnitude collected over the set"""
+
+    components: tuple[int, ...]
+    """Which components of the field are measured"""
+
+    def __call__(self, key: PRNGKeyArray, belief: Belief, dataset: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
+        return jnp.sum(
+            jnp.where(observation_is_counted(dataset, candidates), magnitude_over_components(dataset.measurement, self.components), 0.0),
+            axis=-1,
+        )
+
+
+@dataclass(frozen=True)
+class TotalVariance(Utility):
+    """U(D) = - sum over the candidate states c and j in components of Var[f_j(c) | the states D was read at]
+
+    U(D) = sum over j in components of [ - sum over c of k_n,g(c, c)  +  trace( k_n,g(C, w) [k_n,g(w, w) + 1e-6 I]^-1 k_n,g(w, C) ) ],   g = group_of[j]
+    w = the imagined observations, those of D past the belief's own dataset, taken as exact
+    """
+
+    components: tuple[int, ...]
+    """Which components of the field count"""
+
+    def __call__(self, key: PRNGKeyArray, belief: Belief, dataset: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
+        context = context_of_latest_observation(dataset)
+        candidate_states = jnp.flatnonzero(candidates.live)  # (n_candidates_scored,)
+        components = jnp.asarray(self.components)
+        variance_now = jnp.sum(
+            belief.mean_and_variance(candidate_states, context)[1][:, components]
+        )  # sum over c and components of k_n(c, c)
+        imagined_states, imagined_is_live = imagined_observations(belief, dataset)
+        if imagined_states.shape[-1] == 0:
+            return jnp.broadcast_to(-variance_now, imagined_states.shape[:-1])
+        if imagined_states.ndim == 1:
+            return (
+                belief.over_components(
+                    variance_explained(belief, candidate_states, imagined_states, imagined_is_live, context), self.components
+                )
+                - variance_now
+            )
+        # one leading batch element at a time: the covariance to the candidates is (n_candidates_scored, n_candidates_scored, n_imagined) per walk
+        return (
+            jnp.stack(
+                [
+                    belief.over_components(variance_explained(belief, candidate_states, states, is_live, context), self.components)
+                    for states, is_live in zip(imagined_states, imagined_is_live, strict=True)
+                ]
+            )
+            - variance_now
+        )
+
+
+def variance_explained(
+    belief: Belief,
+    candidate_states: Int[Array, " n_candidates_scored"],
+    imagined_states: Int[Array, "*batch n_imagined"],
+    imagined_is_live: Bool[Array, "*batch n_imagined"],
+    context: Float[Array, " n_context"],
+) -> Float[Array, "*batch groups"]:
+    """trace( k_n(C, w) [k_n(w, w) + 1e-6 I]^-1 k_n(w, C) ) per group, an unobserved slot of `w` made an identity row that removes nothing"""
+    both_live = (imagined_is_live[..., :, None] & imagined_is_live[..., None, :])[..., None, :, :]  # (*batch, 1, n_imagined, n_imagined)
+    among_imagined = jnp.where(both_live, belief.posterior_covariance(imagined_states, imagined_states, context), 0.0)
+    among_imagined = among_imagined + jnp.where(imagined_is_live, 1e-6, 1.0)[..., None, None, :] * jnp.eye(imagined_states.shape[-1])
+    to_candidates = belief.posterior_covariance(
+        candidate_states, imagined_states, context
+    )  # (*batch, groups, n_candidates_scored, n_imagined)
+    to_candidates = jnp.where(imagined_is_live[..., None, None, :], to_candidates, 0.0)
+    whitened = solve_triangular(
+        jnp.linalg.cholesky(among_imagined), jnp.swapaxes(to_candidates, -1, -2), lower=True
+    )  # (*batch, groups, n_imagined, n_candidates_scored)
+    return jnp.sum(whitened**2, axis=(-1, -2))
+
+
+@dataclass(frozen=True)
+class PosteriorSpread(Utility):
+    """The posterior standard deviations at the counted observations' states, summed:  sum over observations of sqrt( sum over j in components of var_j )"""
+
+    components: tuple[int, ...]
+    """Which components of the field count"""
+
+    def __call__(self, key: PRNGKeyArray, belief: Belief, dataset: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
+        var = belief.mean_and_variance(dataset.state_index, context_of_latest_observation(dataset))[1][..., jnp.asarray(self.components)]
+        spread = jnp.sqrt(jnp.sum(var, axis=-1))  # components independent
+        return jnp.sum(jnp.where(observation_is_counted(dataset, candidates), spread, 0.0), axis=-1)
+
+
+@dataclass(frozen=True)
+class ExpectedImprovement(Utility):
+    """The largest `E[(|f(z)| - beta)^+]` over the counted observations' states, f the one component, `beta` the largest magnitude collected so far"""
+
+    components: tuple[int, ...]
+    """Which component of the field is measured, exactly one"""
+
+    def __call__(self, key: PRNGKeyArray, belief: Belief, dataset: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
+        if len(self.components) != 1:
+            raise ValueError(
+                f"a closed-form improvement of a magnitude is over one component, and {self.components} names {len(self.components)}"
+            )
+        component = self.components[0]
+        collected = belief.dataset  # the incumbent comes from what has actually been observed, not from the dataset scored
+        # zero where nothing has been read yet, which is the infimum of a magnitude and makes the tails below disjoint
+        beta = jnp.max(
+            jnp.where(observation_is_counted(collected, candidates), magnitude_over_components(collected.measurement, self.components), 0.0)
+        )
+        mean, var = belief.mean_and_variance(dataset.state_index, context_of_latest_observation(dataset))
+        mu, spread = mean[..., component], jnp.sqrt(jnp.maximum(var[..., component], 1e-12))  # (*batch, n): spread floored to 1e-6
+        # |f| clears beta above or below, disjointly for beta >= 0, so the two tails add. Each is
+        # `E[(x - c)^+] = gap * Phi(gap / spread) + spread * phi(gap / spread)` at its own gap
+        over, under = (mu - beta) / spread, (-mu - beta) / spread
+        subtract_dataset_utility = (
+            (mu - beta) * norm.cdf(over) + (-mu - beta) * norm.cdf(under) + spread * (norm.pdf(over) + norm.pdf(under))
+        )
+        return jnp.max(
+            jnp.where(observation_is_counted(dataset, candidates), subtract_dataset_utility, 0.0), axis=-1
+        )  # 0.0 floors an improvement
+
+
+@dataclass(frozen=True)
+class UpperConfidence(Utility):
+    """The largest optimistic magnitude `||mu(z)[components]|| + c * s(z)` at the counted observations' states"""
+
+    c: float
+    """How much of the spread to add"""
+
+    components: tuple[int, ...]
+    """Which components of the field are measured"""
+
+    def __call__(self, key: PRNGKeyArray, belief: Belief, dataset: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
+        mean, var = belief.mean_and_variance(dataset.state_index, context_of_latest_observation(dataset))
+        components = jnp.asarray(self.components)
+        bound = jnp.linalg.norm(mean[..., components], axis=-1) + self.c * jnp.sqrt(jnp.sum(var[..., components], axis=-1))
+        return jnp.max(jnp.where(observation_is_counted(dataset, candidates), bound, 0.0), axis=-1)  # 0.0 floors a magnitude
+
+
+@dataclass(frozen=True)
+class GoalsReached(Utility):
+    """U(D) = number of candidates within `radius` of some observation's state, on embedded coordinates"""
+
+    radius: float
+    """How near a candidate an observation must sit to reach it"""
+
+    def __call__(self, key: PRNGKeyArray, belief: Belief, dataset: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
+        with jax.ensure_compile_time_eval():
+            coords = coordinates(candidates.base)  # (n_states, k)
+            targets = coords[jnp.flatnonzero(candidates.live)]  # (n_candidates_scored, k)
+        gap = coords[dataset.state_index][..., None, :] - targets  # (*batch, n, n_candidates_scored, k)
+        near = jnp.sum(gap**2, axis=-1) <= self.radius**2  # (*batch, n, n_candidates_scored)
+        return jnp.sum(jnp.any(near & dataset.is_observed[..., None], axis=-2), axis=-1).astype(float)
+
+
+@dataclass(frozen=True)
+class Uniform(Utility):
+    """A uniform draw per scored dataset, ignoring the dataset"""
+
+    def __call__(self, key: PRNGKeyArray, belief: Belief, dataset: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
+        return jax.random.uniform(key, dataset.state_index.shape[:-1])
+
+
+def half_log_det(
+    covariance: Float[Array, "*batch groups n n"], measurement_noise: Float[Array, " groups"]
+) -> Float[Array, "*batch groups"]:
+    """(1/2) log det( I + covariance / measurement_noise^2 ) per group"""
+    chol = jnp.linalg.cholesky(covariance / measurement_noise[:, None, None] ** 2 + jnp.eye(covariance.shape[-1]))
+    return jnp.sum(jnp.log(jnp.diagonal(chol, axis1=-2, axis2=-1)), axis=-1)
+
+
+def imagined_observations(belief: Belief, dataset: Dataset) -> tuple[Int[Array, "*batch n_imagined"], Bool[Array, "*batch n_imagined"]]:
+    """The imagined observations: those of `dataset` past the belief's own, and which of them are observed"""
+    n_conditioned = belief.dataset.state_index.shape[0]
+    return dataset.state_index[..., n_conditioned:], dataset.is_observed[..., n_conditioned:]
+
+
+@dataclass(frozen=True)
+class InformationGain(Utility):
+    """U(D) = sum over j in components of (1/2) log det( I + K_n,g(w, w) / noise_g^2 ),   g = group_of[j]: the information the imagined
+    observations carry about those components
+
+    w = the imagined observations, an unobserved slot made an identity row that carries nothing
+    """
+
+    components: tuple[int, ...]
+    """Which components of the field count"""
+
+    def __call__(self, key: PRNGKeyArray, belief: Belief, dataset: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
+        context = context_of_latest_observation(dataset)
+        imagined_states, imagined_is_live = imagined_observations(belief, dataset)
+        if imagined_states.shape[-1] == 0:
+            return jnp.zeros(imagined_states.shape[:-1])
+        both_live = (imagined_is_live[..., :, None] & imagined_is_live[..., None, :])[..., None, :, :]
+        among_imagined = jnp.where(both_live, belief.posterior_covariance(imagined_states, imagined_states, context), 0.0)
+        return belief.over_components(half_log_det(among_imagined, belief.measurement_noise), self.components)
+
+
+@dataclass(frozen=True)
+class RegionInformation(Utility):
+    """U(D) = sum over j in components of (1/2) [ log det( I + K_n,g(w, w) / noise_g^2 ) - log det( I + S_g / noise_g^2 ) ],   g = group_of[j]:
+    the information the imagined observations carry about those components at the candidate states C
+
+    S_g = K_n,g(w, w) - K_n,g(w, C) [K_n,g(C, C) + 1e-6 I]^-1 K_n,g(C, w)
+    w = the imagined observations, an unobserved slot made an identity row that carries nothing
+    """
+
+    components: tuple[int, ...]
+    """Which components of the field count"""
+
+    def __call__(self, key: PRNGKeyArray, belief: Belief, dataset: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
+        context = context_of_latest_observation(dataset)
+        imagined_states, imagined_is_live = imagined_observations(belief, dataset)
+        if imagined_states.shape[-1] == 0:
+            return jnp.zeros(imagined_states.shape[:-1])
+        candidate_states = jnp.flatnonzero(candidates.live)  # (n_candidates_scored,)
+        among_candidates = belief.posterior_covariance(
+            candidate_states, candidate_states, context
+        )  # (groups, n_candidates_scored, n_candidates_scored)
+        chol_candidates = jnp.linalg.cholesky(among_candidates + 1e-6 * jnp.eye(candidate_states.shape[0]))
+        inverse_candidates = jnp.vectorize(lambda chol: cho_solve((chol, True), jnp.eye(chol.shape[0])), signature="(n,n)->(n,n)")(
+            chol_candidates
+        )  # (groups, n_candidates_scored, n_candidates_scored): [K_n(C, C) + 1e-6 I]^-1
+
+        def one(states: Int[Array, "*batch n_imagined"], is_live: Bool[Array, "*batch n_imagined"]) -> Float[Array, " *batch"]:
+            """The bracket summed over the components, one per leading batch element"""
+            both_live = (is_live[..., :, None] & is_live[..., None, :])[..., None, :, :]
+            among_imagined = jnp.where(both_live, belief.posterior_covariance(states, states, context), 0.0)
+            to_candidates = jnp.where(
+                is_live[..., None, :, None], belief.posterior_covariance(states, candidate_states, context), 0.0
+            )  # (*batch, groups, n_imagined, n_candidates_scored)
+            explained = jnp.einsum("...bic,bcd,...bjd->...bij", to_candidates, inverse_candidates, to_candidates)
+            measurement_noise = belief.measurement_noise
+            return belief.over_components(
+                half_log_det(among_imagined, measurement_noise) - half_log_det(among_imagined - explained, measurement_noise),
+                self.components,
+            )
+
+        if imagined_states.ndim <= 2:
+            return one(imagined_states, imagined_is_live)
+        # one leading batch element at a time: the covariance to the candidates is (n_candidates_scored, n_imagined, n_candidates_scored) per walk
+        return jnp.stack([one(states, is_live) for states, is_live in zip(imagined_states, imagined_is_live, strict=True)])

@@ -46,7 +46,11 @@ if "--top" in sys.argv:  # the N arms of lowest median cumulative regret, the ta
 panels = [(name, words, scale) for name, (words, scale) in CURVES.items() if name.endswith("regret") or sweep not in REGRET_ONLY_SWEEPS]
 
 # the x up to which every arm walked at random: the x of the last opening time_step, every ruled arm sharing one count
-opening_steps = {int(config["method"]["opening_steps"]) for *_, config in runs if config.get("method") is not None}
+opening_steps = {
+    int(config["method"].get("random_opening_steps", config["method"].get("opening_steps")))
+    for *_, config in runs
+    if config.get("method") is not None
+}
 opening_x = float(np.sort(curves["x"].unique())[max(opening_steps) - 1]) if opening_steps and max(opening_steps) > 0 else None
 
 # an arm with no rule claims nothing it learned, so the panels read off a claim leave it out

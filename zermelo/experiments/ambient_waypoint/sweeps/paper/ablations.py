@@ -23,7 +23,7 @@ sweep(
     seeds=range(N_SEEDS),
     resources=dataclasses.replace(RESOURCES, mem_gb=16, timeout_min=240),
     arms=[
-        arm(f"{name}_o{steps}", dataclasses.replace(ours(name), opening_steps=steps), matched_belief(AMBIENT1_CONTROL1))
+        arm(f"{name}_o{steps}", dataclasses.replace(ours(name), random_opening_steps=steps), matched_belief(AMBIENT1_CONTROL1))
         for name in ("emi", "evi")
         for steps in (0, 25, 50, 100)
     ],

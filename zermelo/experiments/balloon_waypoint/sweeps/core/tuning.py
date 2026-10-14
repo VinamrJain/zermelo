@@ -21,18 +21,27 @@ BELIEFS = {"error": error_belief(), "wind": wind_belief()}
 
 
 def _method(
-    utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, penalty_rate: float, replan_every: int, cost_weight: float
+    utility: Implementation,
+    *,
+    subtract_dataset_utility: bool,
+    n_field_samples: int,
+    n_paths_per_field: int,
+    penalty_rate: float,
+    replan_length: int,
+    cost_weight: float,
 ) -> MethodConfig:
     """One acquisition on a value-iteration planner, at the settings the acquisitions differ in"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(replan_every=replan_every, radius=ARRIVAL_RADIUS_KM, target_chunk=TARGET_CHUNK, cost_weight=cost_weight),
-        improvement=improvement,
-        n_fields=n_fields,
-        n_walks=n_walks,
+        planner=value_iteration(
+            replan_length=replan_length, radius=ARRIVAL_RADIUS_KM, targets_per_solve=TARGET_CHUNK, cost_weight=cost_weight
+        ),
+        subtract_dataset_utility=subtract_dataset_utility,
+        n_field_samples=n_field_samples,
+        n_paths_per_field=n_paths_per_field,
         penalty_rate=penalty_rate,
-        n_candidates=N_CANDIDATES,
-        opening_steps=OPENING_STEPS,
+        n_candidates_scored=N_CANDIDATES,
+        random_opening_steps=OPENING_STEPS,
     )
 
 
@@ -46,19 +55,19 @@ sweep(
     resources=dataclasses.replace(RESOURCES, partition="default_partition"),
     arms=[
         arm(
-            f"esi_L{replan_every}_wind_cw{str(cost_weight).replace('.', 'p')}_sr{str(penalty_rate).replace('.', 'p')}",
+            f"esi_L{replan_length}_wind_cw{str(cost_weight).replace('.', 'p')}_sr{str(penalty_rate).replace('.', 'p')}",
             _method(
                 sum_magnitude(),
-                improvement=True,
-                n_fields=16,
-                n_walks=16,
+                subtract_dataset_utility=True,
+                n_field_samples=16,
+                n_paths_per_field=16,
                 penalty_rate=penalty_rate,
-                replan_every=replan_every,
+                replan_length=replan_length,
                 cost_weight=cost_weight,
             ),
             BELIEFS["wind"],
         )
-        for replan_every in (10, 25, 50)
+        for replan_length in (10, 25, 50)
         for cost_weight in (0.0, 0.5, 1.0, 2.0)
         for penalty_rate in (0.0, 0.5, 1.0, 2.0)
     ],

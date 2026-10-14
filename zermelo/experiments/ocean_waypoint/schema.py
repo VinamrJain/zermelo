@@ -147,22 +147,22 @@ class MethodConfig:
     planner: Any = MISSING
     """Which policy carries the balloon to a waypoint, as a dotted path with its own arguments"""
 
-    n_fields: int = MISSING
+    n_field_samples: int = MISSING
     """Field draws averaged over (zero reads the posterior mean alone)"""
 
-    n_walks: int = MISSING
+    n_paths_per_field: int = MISSING
     """Walks rolled per candidate (zero prices travel from the planner's own table)"""
 
-    improvement: bool = MISSING
+    subtract_dataset_utility: bool = MISSING
     """Whether a candidate is scored by the increment it would add rather than its level"""
 
     penalty_rate: float = MISSING
     """`lambda`: a full-budget trip is charged this share of the spread of the candidate values (zero charges nothing)"""
 
-    n_candidates: int | None = MISSING
+    n_candidates_scored: int | None = MISSING
     """Cap on candidates scored per move (None scores every one, 0 the target alone)"""
 
-    opening_steps: int = MISSING
+    random_opening_steps: int = MISSING
     """time_steps of uniform random walking taken before the rule starts"""
 
 

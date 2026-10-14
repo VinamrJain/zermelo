@@ -21,13 +21,13 @@ def _method(penalty_rate: float) -> MethodConfig:
     """This sweep's held values"""
     return MethodConfig(
         utility=max_magnitude(),
-        planner=value_iteration(replan_every=PLANNING_BUDGET, radius=0.5, target_chunk=None),
-        improvement=True,
-        n_fields=16,
-        n_walks=16,
+        planner=value_iteration(replan_length=PLANNING_BUDGET, radius=0.5, targets_per_solve=None),
+        subtract_dataset_utility=True,
+        n_field_samples=16,
+        n_paths_per_field=16,
         penalty_rate=penalty_rate,
-        n_candidates=None,
-        opening_steps=OPENING_STEPS,
+        n_candidates_scored=None,
+        random_opening_steps=OPENING_STEPS,
     )
 
 

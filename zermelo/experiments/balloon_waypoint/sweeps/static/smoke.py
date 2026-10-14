@@ -14,13 +14,13 @@ def _method(utility: Implementation) -> MethodConfig:
     """Expected improvement of `utility` over 2 imagined walks under 2 drawn fields, replanning every 3 time_steps"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(replan_every=3, radius=120.0, target_chunk=None, cost_weight=0.0),
-        improvement=True,
-        n_fields=2,
-        n_walks=2,
+        planner=value_iteration(replan_length=3, radius=120.0, targets_per_solve=None, cost_weight=0.0),
+        subtract_dataset_utility=True,
+        n_field_samples=2,
+        n_paths_per_field=2,
         penalty_rate=1.0,
-        n_candidates=16,
-        opening_steps=0,
+        n_candidates_scored=16,
+        random_opening_steps=0,
     )
 
 

@@ -9,6 +9,16 @@ import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Float, Int
 
+RENAMED_CHANNELS = {
+    "agent_state/time_steps_since_waypoint": "agent_state/steps_since_target",
+    "agent_state/scores.waypoint": "agent_state/choice.target",
+    "agent_state/scores.imagined_walk_to_waypoint": "agent_state/choice.imagined_path_to_target",
+    "agent_state/scores.candidate_indices": "agent_state/choice.candidate_indices",
+    "agent_state/scores.acquisition_value": "agent_state/choice.acquisition_value",
+    "agent_state/scores.route.act": "agent_state/choice.policy_to_target.action",
+}
+"""Channel names a record written before 2026-10-15 holds, and what they are called now"""
+
 
 @dataclass(frozen=True)
 class Record:
@@ -81,7 +91,7 @@ class Record:
         plain: dict[str, Any] = {}
         with np.load(path / "record.npz") as npz:
             for name in npz.files:
-                block, _, channel = name.partition("/")
+                block, _, channel = RENAMED_CHANNELS.get(name, name).partition("/")
                 if channel:
                     blocks[block][channel] = jnp.asarray(npz[name])
                 else:

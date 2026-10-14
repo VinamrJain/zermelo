@@ -220,14 +220,16 @@ def read(path: Path) -> Replay:
     claim = at_each_snapshot(np.asarray(record.objective_state["claim"]), snapshots, int(record.config["claim_every"])).copy()
     claim[0] = np.nan  # the objective opens with zeros in the shape of a claim, which is not one
 
-    index = np.asarray(record.agent_state["scores.waypoint"]) if method is not None else np.zeros(0, int)
+    index = np.asarray(record.agent_state["choice.target"]) if method is not None else np.zeros(0, int)
     replans = 1 + np.flatnonzero(np.diff(index))  # snapshots at which a new waypoint took force
     plan = None
     if replans.size:
         made = np.arange(index.size) >= replans[0]  # (snapshots,) a plan is in force from the first one onward
         made_at = replans[np.clip(np.searchsorted(replans, np.arange(index.size), "right") - 1, 0, None)]  # (snapshots,)
-        walk = grid[np.asarray(record.agent_state["scores.imagined_walk_to_waypoint"])]  # (snapshots, steps, 2)
-        act = np.asarray(record.agent_state["scores.route.act"])[:, :, 0]  # (snapshots, n_states) the plan's choice at every cell
+        walk = grid[np.asarray(record.agent_state["choice.imagined_path_to_target"])]  # (snapshots, steps, 2)
+        act = np.asarray(record.agent_state["choice.policy_to_target.action"])[
+            :, :, 0
+        ]  # (snapshots, n_states) the plan's choice at every cell
         plan = Plan(
             opening_moves=opening_moves(record.config, int(record.reward.shape[0])),
             waypoint=np.where(made[:, None], grid[index], np.nan),
@@ -236,8 +238,8 @@ def read(path: Path) -> Replay:
             steer=np.where(
                 made[:, None], transition.control_step * offsets[np.asarray(transition.choices(jnp.asarray(act)))[..., 0]], np.nan
             ),
-            scored=np.asarray(record.agent_state["scores.candidate_indices"]),
-            acquisition=np.asarray(record.agent_state["scores.acquisition_value"]),
+            scored=np.asarray(record.agent_state["choice.candidate_indices"]),
+            acquisition=np.asarray(record.agent_state["choice.acquisition_value"]),
         )
 
     return Replay(
@@ -251,7 +253,9 @@ def read(path: Path) -> Replay:
         prior_sd=float(belief["amplitude"]),
         cell=cell,
         pad=pad,
-        leg=int(method["planner"]["replan_every"]) if method is not None else int(record.reward.shape[0]),
+        leg=int(method["planner"].get("replan_length", method["planner"].get("replan_every")))
+        if method is not None
+        else int(record.reward.shape[0]),
         path=position,
         drift=drift,
         control=np.stack([np.zeros_like(steered), steered], -1),

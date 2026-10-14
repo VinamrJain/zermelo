@@ -43,7 +43,7 @@ MAX_DEVIATION, MIN_RANK = 1e-5, 1 - 1e-12
 
 
 def dummy_problem() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """The problem both sides solve: the grid, the cells read, and what was read there."""
+    """The problem both sides solve_shortest_paths: the grid, the cells read, and what was read there."""
     coords = (SPACING * np.arange(N_CELLS, dtype=np.float64))[:, None]  # (n_cells, 1)
     rng = np.random.default_rng(SEED)
     read = np.sort(rng.choice(N_CELLS, N_READ, replace=False))  # (n_read,) cell indices, each read once
@@ -81,8 +81,8 @@ def botorch_values() -> dict[str, Any]:
         mean, variance = posterior.mean.numpy()[:, 0], posterior.variance.numpy()[:, 0]  # (n_cells,) each
         # |f| clears beta above or below, disjointly, and each tail is one standard call
         batched = x.unsqueeze(1)  # (n_cells, 1, 1): an acquisition takes a batch of one-point candidate sets
-        improvement = ExpectedImprovement(model, best_f=beta, maximize=True)(batched)
-        improvement = improvement + ExpectedImprovement(model, best_f=-beta, maximize=False)(batched)
+        subtract_dataset_utility = ExpectedImprovement(model, best_f=beta, maximize=True)(batched)
+        subtract_dataset_utility = improvement + ExpectedImprovement(model, best_f=-beta, maximize=False)(batched)
     return {
         "gram": covar(x).to_dense().detach().numpy(),  # (n_cells, n_cells)
         "mean": mean,
@@ -102,8 +102,8 @@ def our_values() -> dict[str, Any]:
     import gpjax
     import jax.numpy as jnp
 
-    from zermelo.methods.waypoint_bo.belief import Dataset, GPBelief
-    from zermelo.methods.waypoint_bo.utility import ExpectedImprovement, PosteriorSpread, UpperConfidence
+    from zermelo.methods.path_eui.belief import Dataset, GPBelief
+    from zermelo.methods.path_eui.utility import ExpectedImprovement, PosteriorSpread, UpperConfidence
     from zermelo.problems.ambient_dynamics import PaddedGridDomain
 
     _, read, y = dummy_problem()
@@ -121,7 +121,7 @@ def our_values() -> dict[str, Any]:
         refit=False,
         refit_steps=0,
     ).condition(Dataset(jnp.asarray(read), jnp.asarray(y)[:, None], jnp.ones(N_READ, bool)))
-    mean, variance = belief.predict(jnp.arange(N_CELLS))  # (n_cells, 1) each
+    mean, variance = belief.mean_and_variance(jnp.arange(N_CELLS))  # (n_cells, 1) each
     # one cell per batch element, so a utility reduces over a single row and comes back as one value per cell
     cells = Dataset(jnp.arange(N_CELLS)[:, None], jnp.zeros((N_CELLS, 1, 1)), jnp.ones((N_CELLS, 1), bool))
     candidates = grid.narrow(jnp.ones(N_CELLS, bool))

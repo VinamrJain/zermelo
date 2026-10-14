@@ -21,7 +21,7 @@ LEARNED: Literal["ocean_current", "wind", "both"] = "both"
 """Which part of the field the episode is scored on, and the rules count: the ocean current, the wind, or both"""
 
 WORLD = dataclasses.replace(GULF_STREAM_2019JUN, objective="learn", learned=LEARNED)
-"""The same frame, scored on the ocean current learned over the target box, which is also where a waypoint may be aimed"""
+"""The same frame, scored on the ocean current learned over the target box, which is also where a target may be aimed"""
 
 N_WALKS = 16
 """`M` walks the path-aware rules imagine per candidate, under the posterior mean"""
@@ -30,19 +30,23 @@ PENALTY_RATE = 1.0
 """`lambda`: a full-budget trip costs the path-aware rules this many spreads of the candidate values"""
 
 
-def _method(utility: Implementation, *, n_walks: int, penalty_rate: float) -> MethodConfig:
+def _method(utility: Implementation, *, n_paths_per_field: int, penalty_rate: float) -> MethodConfig:
     """One rule on a value-iteration planner, a full-budget trip charged `penalty_rate` of the spread of the candidate values"""
     return MethodConfig(
         utility=utility,
         planner=value_iteration(
-            backup_iterations=HORIZON_LENGTH, replan_every=PLANNING_BUDGET, radius=ARRIVAL_RADIUS_KM, target_chunk=None, cost_weight=0.0
+            value_iterations=HORIZON_LENGTH,
+            replan_length=PLANNING_BUDGET,
+            radius=ARRIVAL_RADIUS_KM,
+            targets_per_solve=None,
+            cost_weight=0.0,
         ),
-        improvement=True,
-        n_fields=0,
-        n_walks=n_walks,
+        subtract_dataset_utility=True,
+        n_field_samples=0,
+        n_paths_per_field=n_paths_per_field,
         penalty_rate=penalty_rate,
-        n_candidates=None,
-        opening_steps=0,
+        n_candidates_scored=None,
+        random_opening_steps=0,
     )
 
 
@@ -57,10 +61,14 @@ for date, frame_hour in STILL_FRAMES.items():
         resources=RESOURCES,
         arms=[
             # E over walks tau of [ sum over c of Var(c | D) - Var(c | D + obs(tau)) ]
-            arm("evi", _method(total_variance(SCORED_COMPONENTS[LEARNED]), n_walks=N_WALKS, penalty_rate=PENALTY_RATE), field_belief()),
+            arm(
+                "evi",
+                _method(total_variance(SCORED_COMPONENTS[LEARNED]), n_paths_per_field=N_WALKS, penalty_rate=PENALTY_RATE),
+                field_belief(),
+            ),
             # the posterior spread at the destination alone: the point information gain, since every destination is a candidate
-            arm("max_var", _method(posterior_spread(SCORED_COMPONENTS[LEARNED]), n_walks=0, penalty_rate=0.0), field_belief()),
-            arm("rand_wp", _method(uniform(), n_walks=0, penalty_rate=0.0), field_belief()),
+            arm("max_var", _method(posterior_spread(SCORED_COMPONENTS[LEARNED]), n_paths_per_field=0, penalty_rate=0.0), field_belief()),
+            arm("rand_wp", _method(uniform(), n_paths_per_field=0, penalty_rate=0.0), field_belief()),
             arm("rand_act", None, field_belief()),  # no rule at all
         ],
     )

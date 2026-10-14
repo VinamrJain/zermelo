@@ -42,17 +42,19 @@ def _belief(oracle: bool) -> BeliefConfig:
     )
 
 
-def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, cost_weight: float) -> MethodConfig:
+def _method(
+    utility: Implementation, *, subtract_dataset_utility: bool, n_field_samples: int, n_paths_per_field: int, cost_weight: float
+) -> MethodConfig:
     """One rule on a value-iteration planner, at the settings the arms differ in"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(replan_every=3, radius=120.0, target_chunk=None, cost_weight=cost_weight),
-        improvement=improvement,
-        n_fields=n_fields,
-        n_walks=n_walks,
+        planner=value_iteration(replan_length=3, radius=120.0, targets_per_solve=None, cost_weight=cost_weight),
+        subtract_dataset_utility=subtract_dataset_utility,
+        n_field_samples=n_field_samples,
+        n_paths_per_field=n_paths_per_field,
         penalty_rate=0.5,
-        n_candidates=16,
-        opening_steps=3,  # three uniform moves, leaving three the rule decides
+        n_candidates_scored=16,
+        random_opening_steps=3,  # three uniform moves, leaving three the rule decides
     )
 
 
@@ -74,10 +76,26 @@ for name, resources in (
         resources=resources,
         arms=[
             # the priced arm, so a smoke run walks both the charged plan and the unpriced one
-            arm("mean", _method(max_magnitude(), improvement=True, n_fields=0, n_walks=0, cost_weight=0.25), _belief(oracle=False)),
-            arm("oracle", _method(max_magnitude(), improvement=True, n_fields=0, n_walks=0, cost_weight=0.0), _belief(oracle=True)),
-            arm("ucb", _method(upper_confidence(c=2.0), improvement=False, n_fields=0, n_walks=0, cost_weight=0.0), _belief(oracle=False)),
-            arm("evi", _method(total_variance(), improvement=True, n_fields=2, n_walks=2, cost_weight=0.25), _belief(oracle=False)),
+            arm(
+                "mean",
+                _method(max_magnitude(), subtract_dataset_utility=True, n_field_samples=0, n_paths_per_field=0, cost_weight=0.25),
+                _belief(oracle=False),
+            ),
+            arm(
+                "oracle",
+                _method(max_magnitude(), subtract_dataset_utility=True, n_field_samples=0, n_paths_per_field=0, cost_weight=0.0),
+                _belief(oracle=True),
+            ),
+            arm(
+                "ucb",
+                _method(upper_confidence(c=2.0), subtract_dataset_utility=False, n_field_samples=0, n_paths_per_field=0, cost_weight=0.0),
+                _belief(oracle=False),
+            ),
+            arm(
+                "evi",
+                _method(total_variance(), subtract_dataset_utility=True, n_field_samples=2, n_paths_per_field=2, cost_weight=0.25),
+                _belief(oracle=False),
+            ),
             arm("random", None, _belief(oracle=False)),  # no rule at all
         ],
     )

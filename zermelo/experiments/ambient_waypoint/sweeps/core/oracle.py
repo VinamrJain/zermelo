@@ -19,29 +19,49 @@ BELIEF = dataclasses.replace(matched_belief(AMBIENT1_CONTROL1), oracle=True)
 
 
 def _method(
-    utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, penalty_rate: float, replan_every: int
+    utility: Implementation,
+    *,
+    subtract_dataset_utility: bool,
+    n_field_samples: int,
+    n_paths_per_field: int,
+    penalty_rate: float,
+    replan_length: int,
 ) -> MethodConfig:
     """One acquisition on a value-iteration planner, at the settings the acquisitions differ in"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(replan_every=replan_every, radius=0.5, target_chunk=None),
-        improvement=improvement,
-        n_fields=n_fields,
-        n_walks=n_walks,
+        planner=value_iteration(replan_length=replan_length, radius=0.5, targets_per_solve=None),
+        subtract_dataset_utility=subtract_dataset_utility,
+        n_field_samples=n_field_samples,
+        n_paths_per_field=n_paths_per_field,
         penalty_rate=penalty_rate,
-        n_candidates=None,
-        opening_steps=OPENING_STEPS,
+        n_candidates_scored=None,
+        random_opening_steps=OPENING_STEPS,
     )
 
 
-def _baseline(utility: Implementation, n_fields: int) -> MethodConfig:
-    """A rule reading the posterior (or `n_fields` draws of it) at the candidates, charging no travel"""
-    return _method(utility, improvement=False, n_fields=n_fields, n_walks=0, penalty_rate=0.0, replan_every=PLANNING_BUDGET)
+def _baseline(utility: Implementation, n_field_samples: int) -> MethodConfig:
+    """A rule reading the posterior (or `n_field_samples` draws of it) at the candidates, charging no travel"""
+    return _method(
+        utility,
+        subtract_dataset_utility=False,
+        n_field_samples=n_field_samples,
+        n_paths_per_field=0,
+        penalty_rate=0.0,
+        replan_length=PLANNING_BUDGET,
+    )
 
 
-def _ours(utility: Implementation, *, penalty_rate: float = 0.5, replan_every: int = PLANNING_BUDGET) -> MethodConfig:
+def _ours(utility: Implementation, *, penalty_rate: float = 0.5, replan_length: int = PLANNING_BUDGET) -> MethodConfig:
     """Expected improvement of `utility` over 16 imagined walks under 16 drawn fields, a full-budget trip charged `penalty_rate` of the spread"""
-    return _method(utility, improvement=True, n_fields=16, n_walks=16, penalty_rate=penalty_rate, replan_every=replan_every)
+    return _method(
+        utility,
+        subtract_dataset_utility=True,
+        n_field_samples=16,
+        n_paths_per_field=16,
+        penalty_rate=penalty_rate,
+        replan_length=replan_length,
+    )
 
 
 # the oracle's spread is zero, so every rule that reads a spread or an improvement of the posterior mean is left out
@@ -57,9 +77,9 @@ sweep(
         arm("rand_act", None, BELIEF),
         arm("rand_wp", _baseline(uniform(), 0), BELIEF),
         arm("ts", _baseline(max_magnitude(), 1), BELIEF),  # one draw of the truth is the truth
-        arm("emi_L1", _ours(max_magnitude(), replan_every=1), BELIEF),
+        arm("emi_L1", _ours(max_magnitude(), replan_length=1), BELIEF),
         arm("emi_L25", _ours(max_magnitude()), BELIEF),
-        arm("emi_L50", _ours(max_magnitude(), replan_every=50), BELIEF),
+        arm("emi_L50", _ours(max_magnitude(), replan_length=50), BELIEF),
         arm("emi_c1", _ours(max_magnitude(), penalty_rate=1.0), BELIEF),
     ],
 )

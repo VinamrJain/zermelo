@@ -15,17 +15,17 @@ from zermelo.experiments.ambient_waypoint.setup import arm, max_magnitude, sweep
 BELIEF = matched_belief(AMBIENT1_CONTROL1)
 
 
-def _method(n_candidates: int | None) -> MethodConfig:
+def _method(n_candidates_scored: int | None) -> MethodConfig:
     """This sweep's held values"""
     return MethodConfig(
         utility=max_magnitude(),
-        planner=value_iteration(replan_every=PLANNING_BUDGET, radius=0.5, target_chunk=None),
-        improvement=True,
-        n_fields=16,
-        n_walks=16,
+        planner=value_iteration(replan_length=PLANNING_BUDGET, radius=0.5, targets_per_solve=None),
+        subtract_dataset_utility=True,
+        n_field_samples=16,
+        n_paths_per_field=16,
         penalty_rate=0.5,
-        n_candidates=n_candidates,
-        opening_steps=OPENING_STEPS,
+        n_candidates_scored=n_candidates_scored,
+        random_opening_steps=OPENING_STEPS,
     )
 
 

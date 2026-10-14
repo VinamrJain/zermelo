@@ -14,10 +14,10 @@ def _small(method: MethodConfig, cost_weight: float) -> MethodConfig:
     """`method` with two draws, sixteen candidates and a three-step planner pricing an altitude change at `cost_weight`"""
     return dataclasses.replace(
         method,
-        planner=value_iteration(replan_every=3, radius=120.0, target_chunk=None, cost_weight=cost_weight),
-        n_fields=2,
-        n_walks=min(method.n_walks, 2),
-        n_candidates=16,
+        planner=value_iteration(replan_length=3, radius=120.0, targets_per_solve=None, cost_weight=cost_weight),
+        n_field_samples=2,
+        n_paths_per_field=min(method.n_paths_per_field, 2),
+        n_candidates_scored=16,
     )
 
 

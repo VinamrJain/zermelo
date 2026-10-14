@@ -45,7 +45,11 @@ for swept, arms in (
     (
         "paper_fields_paths",
         [
-            arm(f"{name}_fields{fields}_paths{paths}", dataclasses.replace(ours(name), n_fields=fields, n_walks=paths), MATCHED)
+            arm(
+                f"{name}_fields{fields}_sample_component{paths}",
+                dataclasses.replace(ours(name), n_field_samples=fields, n_paths_per_field=paths),
+                MATCHED,
+            )
             for name in ("emi", "evi")
             for fields, paths in (
                 (0, 16),
@@ -56,7 +60,7 @@ for swept, arms in (
                 (16, 1),
                 (16, 4),
                 (16, 32),
-            )  # 0 fields scores the mean field
+            )  # 0 fields choice the mean field
         ],
     ),
     (
@@ -78,7 +82,7 @@ for swept, arms in (
         [
             arm(
                 f"{name}_{planner}",
-                dataclasses.replace(method, planner=build(replan_every=PLANNING_BUDGET, radius=0.5, target_chunk=None)),
+                dataclasses.replace(method, planner=build(replan_length=PLANNING_BUDGET, radius=0.5, targets_per_solve=None)),
                 MATCHED,
             )
             for planner, build in PLANNERS.items()

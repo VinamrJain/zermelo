@@ -10,10 +10,10 @@ from hydra.utils import get_class, instantiate
 
 from zermelo.experiments.balloon_waypoint.schema import RunConfig
 from zermelo.interface import Agent
+from zermelo.methods.path_eui.acquisition import Acquisition
+from zermelo.methods.path_eui.agent import PathEUIAgent, posterior_mean_and_log_variance
+from zermelo.methods.path_eui.belief import BeliefKernel, GPBelief, OracleBelief
 from zermelo.methods.random_agent import RandomAgent
-from zermelo.methods.waypoint_bo.acquisition import Acquisition
-from zermelo.methods.waypoint_bo.agent import WaypointAgent, posterior_moments
-from zermelo.methods.waypoint_bo.belief import BeliefKernel, GPBelief, OracleBelief
 from zermelo.problems.balloon import (
     GaussianError,
     GEFSError,
@@ -84,29 +84,29 @@ def assemble(cfg: RunConfig) -> Episode:
     agent: Agent[Any]
     if cfg.method is None:
         # no rule and no update: it claims the prior every step
-        agent = RandomAgent(claim=posterior_moments(belief, jnp.zeros(sum(context.values()))))
+        agent = RandomAgent(claim=posterior_mean_and_log_variance(belief, jnp.zeros(sum(context.values()))))
     else:
-        agent = WaypointAgent(
+        agent = PathEUIAgent(
             candidates=candidates,
             transition=transition,
             belief=belief,
             acquisition=Acquisition(
                 utility=instantiate(cfg.method.utility, _target_whitelist_=WHITELIST),
                 planner=instantiate(cfg.method.planner, _target_whitelist_=WHITELIST),
-                n_fields=cfg.method.n_fields,
-                n_walks=cfg.method.n_walks,
-                n_candidates=cfg.method.n_candidates,
-                improvement=cfg.method.improvement,
+                n_field_samples=cfg.method.n_field_samples,
+                n_paths_per_field=cfg.method.n_paths_per_field,
+                n_candidates_scored=cfg.method.n_candidates_scored,
+                subtract_dataset_utility=cfg.method.subtract_dataset_utility,
                 penalty_rate=cfg.method.penalty_rate,
             ),
             position_key="position",
-            reading_key="wind",
+            measurement_key="wind",
             context_key="context",
             prior_mean_key="forecast" if cfg.belief.forecast_as_prior_mean else None,
-            target_key=None,
+            goal_key=None,
             budget_column=list(context).index("balloon_resource"),
             horizon=cfg.horizon,
-            opening_steps=cfg.method.opening_steps,
+            random_opening_steps=cfg.method.random_opening_steps,
             claim_every=cfg.claim_every,
         )
     # the settings as plain data, carried onto the record

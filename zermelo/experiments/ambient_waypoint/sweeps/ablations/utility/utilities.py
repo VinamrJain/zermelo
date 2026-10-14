@@ -27,23 +27,25 @@ from zermelo.experiments.ambient_waypoint.setup import (
 BELIEF = matched_belief(AMBIENT1_CONTROL1)
 
 
-def _method(utility: Implementation, *, improvement: bool, n_fields: int, n_walks: int, penalty_rate: float) -> MethodConfig:
+def _method(
+    utility: Implementation, *, subtract_dataset_utility: bool, n_field_samples: int, n_paths_per_field: int, penalty_rate: float
+) -> MethodConfig:
     """This sweep's held values"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(replan_every=PLANNING_BUDGET, radius=0.5, target_chunk=None),
-        improvement=improvement,
-        n_fields=n_fields,
-        n_walks=n_walks,
+        planner=value_iteration(replan_length=PLANNING_BUDGET, radius=0.5, targets_per_solve=None),
+        subtract_dataset_utility=subtract_dataset_utility,
+        n_field_samples=n_field_samples,
+        n_paths_per_field=n_paths_per_field,
         penalty_rate=penalty_rate,
-        n_candidates=None,
-        opening_steps=OPENING_STEPS,
+        n_candidates_scored=None,
+        random_opening_steps=OPENING_STEPS,
     )
 
 
-def _sampled(utility: Implementation, *, improvement: bool) -> MethodConfig:
+def _sampled(utility: Implementation, *, subtract_dataset_utility: bool) -> MethodConfig:
     """`utility` at this sweep's draw counts and charge"""
-    return _method(utility, improvement=improvement, n_fields=16, n_walks=16, penalty_rate=0.5)
+    return _method(utility, subtract_dataset_utility=subtract_dataset_utility, n_field_samples=16, n_paths_per_field=16, penalty_rate=0.5)
 
 
 sweep(
@@ -56,11 +58,15 @@ sweep(
     resources=dataclasses.replace(RESOURCES, mem_gb=16, timeout_min=480, array_parallelism=40),
     # an increment differs from a level only for `max_magnitude`, the one rule reading the imagined readings
     arms=[
-        arm("max_magnitude", _sampled(max_magnitude(), improvement=True), BELIEF),
-        arm("posterior_spread", _sampled(posterior_spread(), improvement=False), BELIEF),
-        arm("ucb2", _sampled(upper_confidence(2.0), improvement=False), BELIEF),
-        arm("ei", _sampled(expected_improvement(), improvement=False), BELIEF),
+        arm("max_magnitude", _sampled(max_magnitude(), subtract_dataset_utility=True), BELIEF),
+        arm("posterior_spread", _sampled(posterior_spread(), subtract_dataset_utility=False), BELIEF),
+        arm("ucb2", _sampled(upper_confidence(2.0), subtract_dataset_utility=False), BELIEF),
+        arm("ei", _sampled(expected_improvement(), subtract_dataset_utility=False), BELIEF),
         # a charge would bias a uniform draw, which spans [0, 1] whatever the field
-        arm("random_search", _method(uniform(), improvement=False, n_fields=0, n_walks=0, penalty_rate=0.0), BELIEF),
+        arm(
+            "random_search",
+            _method(uniform(), subtract_dataset_utility=False, n_field_samples=0, n_paths_per_field=0, penalty_rate=0.0),
+            BELIEF,
+        ),
     ],
 )

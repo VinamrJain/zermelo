@@ -99,78 +99,78 @@ def _built(path: str, **arguments: Any) -> Implementation:
 
 def information_gain(components: tuple[int, ...]) -> Implementation:
     """sum over j in components of (1/2) log det(I + K_n,g / noise_g^2) over a walk's readings, g the group of j"""
-    return _built("zermelo.methods.waypoint_bo.utility.InformationGain", components=components)
+    return _built("zermelo.methods.path_eui.utility.InformationGain", components=components)
 
 
 def region_information(components: tuple[int, ...]) -> Implementation:
     """sum over j in components of (1/2) [log det(I + K_n,g(w, w) / noise_g^2) - log det(I + S_g / noise_g^2)] over a walk's readings w, S_b its covariance given the candidates, g the group of j"""
-    return _built("zermelo.methods.waypoint_bo.utility.RegionInformation", components=components)
+    return _built("zermelo.methods.path_eui.utility.RegionInformation", components=components)
 
 
 def max_magnitude(components: tuple[int, ...]) -> Implementation:
     """The largest reading magnitude over `components` among the cells scored"""
-    return _built("zermelo.methods.waypoint_bo.utility.MaxMagnitude", components=components)
+    return _built("zermelo.methods.path_eui.utility.MaxMagnitude", components=components)
 
 
 def sum_magnitude(components: tuple[int, ...]) -> Implementation:
     """The reading magnitudes over `components` among the cells scored, summed"""
-    return _built("zermelo.methods.waypoint_bo.utility.SumMagnitude", components=components)
+    return _built("zermelo.methods.path_eui.utility.SumMagnitude", components=components)
 
 
 def total_variance(components: tuple[int, ...]) -> Implementation:
     """Minus the posterior variance of `components` summed over every candidate state, given where the dataset was read"""
-    return _built("zermelo.methods.waypoint_bo.utility.TotalVariance", components=components)
+    return _built("zermelo.methods.path_eui.utility.TotalVariance", components=components)
 
 
 def posterior_spread(components: tuple[int, ...]) -> Implementation:
     """The posterior standard deviations of `components` at the scored cells, summed"""
-    return _built("zermelo.methods.waypoint_bo.utility.PosteriorSpread", components=components)
+    return _built("zermelo.methods.path_eui.utility.PosteriorSpread", components=components)
 
 
 def upper_confidence(c: float, components: tuple[int, ...]) -> Implementation:
     """The largest optimistic magnitude `||mean|| + c * spread` over `components` at the scored cells"""
-    return _built("zermelo.methods.waypoint_bo.utility.UpperConfidence", c=c, components=components)
+    return _built("zermelo.methods.path_eui.utility.UpperConfidence", c=c, components=components)
 
 
 def expected_improvement(components: tuple[int, ...]) -> Implementation:
     """`E[(|f| - beta)^+]` at each scored cell in closed form over one component, `beta` the largest magnitude read so far"""
-    return _built("zermelo.methods.waypoint_bo.utility.ExpectedImprovement", components=components)
+    return _built("zermelo.methods.path_eui.utility.ExpectedImprovement", components=components)
 
 
-def targets_reached(radius: float) -> Implementation:
+def goals_reached(radius: float) -> Implementation:
     """How many candidates lie within `radius` of some reading's state"""
-    return _built("zermelo.methods.waypoint_bo.utility.TargetsReached", radius=radius)
+    return _built("zermelo.methods.path_eui.utility.GoalsReached", goal_radius=radius)
 
 
 def uniform() -> Implementation:
     """A draw ignoring the data"""
-    return _built("zermelo.methods.waypoint_bo.utility.Uniform")
+    return _built("zermelo.methods.path_eui.utility.Uniform")
 
 
-# --- planners: how the actor is carried to a waypoint, and how that walk is priced ----------------------------------
+# --- planners: how the actor is carried to a target, and how that walk is priced ----------------------------------
 
 
 def value_iteration(
-    backup_iterations: int, replan_every: int, radius: float, target_chunk: int | None, cost_weight: float
+    value_iterations: int, replan_length: int, radius: float, targets_per_solve: int | None, cost_weight: float
 ) -> Implementation:
-    """`v_0 = 0`, `v_{k+1}(s) = 0 on arrival, else min over a of c(s, a) + sum over s' of P(s' | s, a) v_k(s')`, `backup_iterations` rounds"""
+    """`v_0 = 0`, `v_{k+1}(s) = 0 on arrival, else min over a of c(s, a) + sum over s' of P(s' | s, a) v_k(s')`, `value_iterations` rounds"""
     return _built(
-        "zermelo.methods.waypoint_bo.planner.ValueIteration",
-        backup_iterations=backup_iterations,
-        replan_every=replan_every,
-        radius=radius,
-        target_chunk=target_chunk,
+        "zermelo.methods.path_eui.planner.ValueIteration",
+        value_iterations=value_iterations,
+        replan_length=replan_length,
+        goal_radius=radius,
+        targets_per_solve=targets_per_solve,
         cost_weight=cost_weight,
     )
 
 
-def greedy(backup_iterations: int, replan_every: int, radius: float, target_chunk: int | None, cost_weight: float) -> Implementation:
+def greedy(value_iterations: int, replan_length: int, radius: float, targets_per_solve: int | None, cost_weight: float) -> Implementation:
     """One backup on the distance to the target: the act whose next cell is nearest it in expectation"""
     return _built(
-        "zermelo.methods.waypoint_bo.planner.Greedy",
-        backup_iterations=backup_iterations,
-        replan_every=replan_every,
-        radius=radius,
-        target_chunk=target_chunk,
+        "zermelo.methods.path_eui.planner.Greedy",
+        value_iterations=value_iterations,
+        replan_length=replan_length,
+        goal_radius=radius,
+        targets_per_solve=targets_per_solve,
         cost_weight=cost_weight,
     )

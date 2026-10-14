@@ -18,7 +18,7 @@ BELIEF = static_error_belief()
 
 RATE_ARMS = {
     swept: [
-        arm(f"{name}_L{budget}_c{rate_name(rate)}", ours(name, penalty_rate=rate, replan_every=budget), BELIEF)
+        arm(f"{name}_L{budget}_c{rate_name(rate)}", ours(name, penalty_rate=rate, replan_length=budget), BELIEF)
         for name in names
         for budget in (25, 50, 100)
         for rate in (0.0, 0.5, 1.0, 2.0)
