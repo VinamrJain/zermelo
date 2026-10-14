@@ -1,16 +1,16 @@
 """What a boat is scored on: reaching a target, learning the ocean current over a region, finding where it runs fastest, or visiting every target
 
-W(position) = (u, v)      the ocean current, m/s
+field(position) = (W_u, W_v, U_u, U_v)    the ocean current W and the wind U, m/s
 target                    the grid point to reach, drawn once per episode
 candidates                the grid points a waypoint may be aimed at and a claim is scored on
 at every time_step, from the state arrived in:
     arrived               = arrived before, or ||position - target|| <= arrival_km on the tangent plane
     reward                = 0 where arrived, else -1
     steps_to_arrival      = time_steps rewarded -1 so far
-    truth[c]              = W(c) at candidate c                                    (n_candidates, 2)
-claim                     (u, v) predicted at every candidate, as means then log-variances
+    truth[c]              = field(c) at candidate c                                (n_candidates, channels)
+claim                     field predicted at every candidate, as means then log-variances   (n_candidates, 2 channels)
 or, learning the region:
-    information           = (1/2) sum over candidates and components of (prior_log_variance - claimed log-variance), nats
+    information           = (1/2) sum over candidates and the scored channels of (prior_log_variance - claimed log-variance), nats
     reward                = information gained this time_step
 or, searching the region for the fastest current:
     best_observed         = max over positions z_u stood on so far, z_u a candidate, of ||W(z_u)||
@@ -31,6 +31,7 @@ import jax.numpy as jnp
 from jaxtyping import Array, Bool, Float, Int
 
 from zermelo.interface import BoxDomain, Decision, Domain, FunctionDomain, Objective, Subset
+from zermelo.problems.ocean.field import CHANNELS, OCEAN_CURRENT
 from zermelo.problems.ocean.grid import PlaneGrid
 
 
@@ -61,8 +62,8 @@ class ReachTarget(Objective[dict[str, Float[Array, "..."]]]):
 
     @property
     def claim_domain(self) -> Domain:
-        """A claim is a function: the mean of (u, v) at any candidate, then their log-variances"""
-        return FunctionDomain(self.candidates, BoxDomain((4,)))
+        """A claim is a function: the mean of the field at any candidate, then its log-variances"""
+        return FunctionDomain(self.candidates, BoxDomain((2 * CHANNELS,)))
 
     def at_target(self, state: dict[str, Any]) -> Bool[Array, ""]:
         """Whether `state` is within arrival_km of its target"""
@@ -70,12 +71,12 @@ class ReachTarget(Objective[dict[str, Float[Array, "..."]]]):
 
     def reset(self, state: dict[str, Any]) -> dict[str, Float[Array, "..."]]:
         """The objective's memory before any time_step, nothing claimed yet"""
-        truth = state["field"](self.candidate_states)  # (n_candidates, 2)
+        truth = state["field"](self.candidate_states)  # (n_candidates, channels)
         return {
             "truth": truth,
             "arrived": self.at_target(state).astype(jnp.float32),
             "steps_to_arrival": jnp.zeros(()),
-            "claim": jnp.zeros((truth.shape[0], 4)),  # (n_candidates, 4)
+            "claim": jnp.zeros((truth.shape[0], 2 * CHANNELS)),  # (n_candidates, 2 channels)
         }
 
     def score(
@@ -99,8 +100,11 @@ class LearnRegion(Objective[dict[str, Float[Array, "..."]]]):
     candidates: Subset[dict[str, Any]]
     """The states a waypoint may be aimed at and a claim is scored on, over the state domain a belief is maintained on"""
 
-    prior_log_variance: float
-    """log Var[f(c)] per component before any reading, the level information is counted from"""
+    prior_log_variance: Float[Array, " channels"]
+    """log Var[field(c)] per channel before any reading, the level information is counted from"""
+
+    scored: slice
+    """Which channels of the field the information is counted over"""
 
     candidate_states: dict[str, Any] = dataclasses.field(init=False, repr=False)
     """The live candidates, gathered once"""
@@ -112,18 +116,18 @@ class LearnRegion(Objective[dict[str, Float[Array, "..."]]]):
 
     @property
     def claim_domain(self) -> Domain:
-        """A claim is a function: the mean of (u, v) at any candidate, then their log-variances"""
-        return FunctionDomain(self.candidates, BoxDomain((4,)))
+        """A claim is a function: the mean of the field at any candidate, then its log-variances"""
+        return FunctionDomain(self.candidates, BoxDomain((2 * CHANNELS,)))
 
-    def information(self, claim: Float[Array, "n_candidates 4"]) -> Float[Array, ""]:
-        """(1/2) sum over candidates and components of (prior_log_variance - claimed log-variance)"""
-        return 0.5 * jnp.sum(self.prior_log_variance - claim[:, 2:4])
+    def information(self, claim: Float[Array, "n_candidates claim_width"]) -> Float[Array, ""]:
+        """(1/2) sum over candidates and the scored channels of (prior_log_variance - claimed log-variance)"""
+        return 0.5 * jnp.sum(self.prior_log_variance[self.scored] - claim[:, CHANNELS:][:, self.scored])
 
     def reset(self, state: dict[str, Any]) -> dict[str, Float[Array, "..."]]:
         """The objective's memory before any time_step: the prior claimed, nothing learned"""
-        truth = state["field"](self.candidate_states)  # (n_candidates, 2)
-        prior = jnp.concatenate([jnp.zeros((truth.shape[0], 2)), jnp.full((truth.shape[0], 2), self.prior_log_variance)], axis=-1)
-        return {"truth": truth, "information": jnp.zeros(()), "claim": prior}  # claim (n_candidates, 4)
+        truth = state["field"](self.candidate_states)  # (n_candidates, channels)
+        prior = jnp.concatenate([jnp.zeros_like(truth), jnp.broadcast_to(self.prior_log_variance, truth.shape)], axis=-1)
+        return {"truth": truth, "information": jnp.zeros(()), "claim": prior}  # claim (n_candidates, 2 channels)
 
     def score(
         self, objective_state: dict[str, Float[Array, "..."]], state: dict[str, Any], decision: Decision, next_state: dict[str, Any]
@@ -151,23 +155,23 @@ class SearchMagnitude(Objective[dict[str, Float[Array, "..."]]]):
 
     @property
     def claim_domain(self) -> Domain:
-        """A claim is a function: the mean of (u, v) at any candidate, then their log-variances"""
-        return FunctionDomain(self.candidates, BoxDomain((4,)))
+        """A claim is a function: the mean of the field at any candidate, then its log-variances"""
+        return FunctionDomain(self.candidates, BoxDomain((2 * CHANNELS,)))
 
     def speed_at(self, state: dict[str, Any]) -> tuple[Float[Array, ""], Bool[Array, ""]]:
         """||W(position)|| where the boat stands, and whether that position is a candidate"""
         position = {"position": state["position"]}
-        return jnp.linalg.norm(state["field"](position)), self.candidates.live[self.candidates.index_of(position)]
+        return jnp.linalg.norm(state["field"](position)[OCEAN_CURRENT]), self.candidates.live[self.candidates.index_of(position)]
 
     def reset(self, state: dict[str, Any]) -> dict[str, Float[Array, "..."]]:
         """The objective's memory before any time_step, nothing claimed yet"""
-        truth = state["field"](self.candidate_states)  # (n_candidates, 2)
+        truth = state["field"](self.candidate_states)  # (n_candidates, channels)
         speed, on_candidate = self.speed_at(state)
         return {
             "truth": truth,
             "best_observed_magnitude": jnp.where(on_candidate, speed, 0.0),
-            "best_possible_magnitude": jnp.max(jnp.linalg.norm(truth, axis=-1)),
-            "claim": jnp.zeros((truth.shape[0], 4)),  # (n_candidates, 4)
+            "best_possible_magnitude": jnp.max(jnp.linalg.norm(truth[:, OCEAN_CURRENT], axis=-1)),
+            "claim": jnp.zeros((truth.shape[0], 2 * CHANNELS)),  # (n_candidates, 2 channels)
         }
 
     def score(
@@ -206,8 +210,8 @@ class VisitTargets(Objective[dict[str, Float[Array, "..."]]]):
 
     @property
     def claim_domain(self) -> Domain:
-        """A claim is a function: the mean of (u, v) at any target, then their log-variances"""
-        return FunctionDomain(self.candidates, BoxDomain((4,)))
+        """A claim is a function: the mean of the field at any target, then its log-variances"""
+        return FunctionDomain(self.candidates, BoxDomain((2 * CHANNELS,)))
 
     def near(self, state: dict[str, Any]) -> Float[Array, " n_targets"]:
         """1 at each target within arrival_km of `state`"""
@@ -216,13 +220,13 @@ class VisitTargets(Objective[dict[str, Float[Array, "..."]]]):
 
     def reset(self, state: dict[str, Any]) -> dict[str, Float[Array, "..."]]:
         """The objective's memory before any time_step, nothing claimed yet"""
-        truth = state["field"](self.candidate_states)  # (n_targets, 2)
+        truth = state["field"](self.candidate_states)  # (n_targets, channels)
         return {
             "targets": self.candidate_states["position"],  # (n_targets, 2) as (lat, lon)
             "truth": truth,
             "visited": self.near(state),
             "steps_to_completion": jnp.zeros(()),
-            "claim": jnp.zeros((truth.shape[0], 4)),  # (n_targets, 4)
+            "claim": jnp.zeros((truth.shape[0], 2 * CHANNELS)),  # (n_targets, 2 channels)
         }
 
     def score(

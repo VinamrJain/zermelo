@@ -3,13 +3,13 @@
 state = (position, target, field)
     position    (lat, lon) degrees of the grid point the boat is at
     target      (lat, lon) degrees of the grid point to reach, never written
-    field       W, the ocean current: W(position) = (u, v) in m/s, u eastward and v northward
+    field       (W, U) the ocean current and the wind: field(position) = (W_u, W_v, U_u, U_v) in m/s, u eastward and v northward
 action in {0, ..., n_headings}
     k < n_headings     sail at heading 2 pi k / n_headings, counted from east towards north
     k = n_headings     drift: no way through the water
 step_hours             hours in one time_step
 
-    through_water   = polar speed at the heading, under the wind at position, times the heading's unit vector     m/s
+    through_water   = polar speed at the heading, under U(position), times the heading's unit vector     m/s
     carried_to      = position moved by step_hours * 3.6 * (through_water + W(position)) km on the tangent plane
     position'       ~ one of the four grid points around carried_to, with probabilities whose mean position is carried_to
 """
@@ -25,6 +25,7 @@ from jax.tree_util import register_dataclass
 from jaxtyping import Array, Float, Int, PRNGKeyArray
 
 from zermelo.interface import DiscreteDomain, Domain, Function, ProductDomain, Transition, TransitionKernel
+from zermelo.problems.ocean.field import OCEAN_CURRENT, WIND
 from zermelo.problems.ocean.grid import PlaneGrid
 
 type Act = Int[Array, ""]
@@ -66,14 +67,10 @@ class Polar:
 
 @dataclass(frozen=True)
 class OceanTransition(Transition[Act]):
-    """The ocean current carries the boat, the heading moves it through the water, and it lands on a grid point nearby"""
+    """The ocean current carries the boat, the heading moves it through the water under the wind, and it lands on a grid point nearby"""
 
     grid: PlaneGrid
     polar: Polar
-
-    wind_on_grid: Float[Array, "pos uv"]
-    """U, the wind at every grid point, (u, v) in m/s, known to the boat"""
-
     n_headings: int
     step_hours: float
 
@@ -91,15 +88,15 @@ class OceanTransition(Transition[Act]):
         angle = 2 * math.pi * jnp.arange(self.n_headings) / self.n_headings
         return jnp.concatenate([jnp.stack([jnp.cos(angle), jnp.sin(angle)], axis=-1), jnp.zeros((1, 2))])
 
-    def through_water(self, position: Float[Array, "*batch 2"], action: Int[Array, "*batch"]) -> Float[Array, "*batch 2"]:
-        """The boat's velocity through the water at `position` under `action`, (east, north) m/s"""
+    def through_water(self, wind: Float[Array, "*batch 2"], action: Int[Array, "*batch"]) -> Float[Array, "*batch 2"]:
+        """The boat's velocity through the water under `action` in `wind`, (east, north) m/s"""
         heading = self.headings[action]  # (*batch, 2)
-        wind = self.wind_on_grid[self.grid.flat_index(position)]
         return self.polar.speed(heading, wind)[..., None] * heading
 
     def carried_to(self, state: dict[str, Any], action: Int[Array, "*batch"]) -> Float[Array, "*batch 2"]:
         """`carried_to` as (lat, lon) degrees; 3.6 turns m/s * hours into km"""
-        velocity = self.through_water(state["position"], action) + state["field"]({"position": state["position"]})  # (*batch, 2)
+        field = state["field"]({"position": state["position"]})  # (*batch, 4): the ocean current, then the wind
+        velocity = self.through_water(field[..., WIND], action) + field[..., OCEAN_CURRENT]  # (*batch, 2)
         return self.grid.displaced(state["position"], velocity * self.step_hours * 3.6)
 
     def __call__(self, key: PRNGKeyArray, state: dict[str, Any], action: Act) -> dict[str, Any]:
@@ -109,8 +106,8 @@ class OceanTransition(Transition[Act]):
         return {**state, "position": self.grid.from_index(grid_point_index[drawn])}
 
     def kernel(self, hypothesis: Function) -> "OceanKernel":
-        """The law at every state under every action, with `hypothesis` in place of the ocean current an episode drew"""
-        under = {"position": self.grid.elements(), "field": hypothesis}  # (pos, 2)
+        """The law at every state under every action, with `hypothesis` in place of the field an episode drew"""
+        under = {"position": self.grid.elements(), "field": hypothesis}  # (pos, 4)
         actions = jnp.arange(self.n_headings + 1)
         next_pos, prob = jax.vmap(
             lambda a: self.grid.landing_grid_points(self.carried_to(under, jnp.broadcast_to(a, (self.grid.size(),))))

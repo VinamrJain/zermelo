@@ -1,6 +1,13 @@
 import dataclasses
 
-from zermelo.experiments.ocean_waypoint.registry import GULF_STREAM_2019JUN, RECORDED, error_belief, oracle_belief
+from zermelo.experiments.ocean_waypoint.registry import (
+    GULF_STREAM_2019JUN,
+    LEARNED_BLOCKS,
+    OCEAN_CURRENT_BLOCK,
+    RECORDED,
+    error_belief,
+    oracle_belief,
+)
 from zermelo.experiments.ocean_waypoint.schema import BeliefConfig, MethodConfig, Resources
 from zermelo.experiments.ocean_waypoint.setup import (
     Implementation,
@@ -27,12 +34,18 @@ WORLD = dataclasses.replace(
 
 
 def _belief(oracle: bool) -> BeliefConfig:
-    """The model an arm holds: the drawn error's own numbers, or the true ocean current itself"""
-    (place,) = error_belief().kernel_factors
+    """The model an arm holds: the drawn error's own numbers in every block, or the true field itself"""
+    belief = oracle_belief() if oracle else error_belief()
     return dataclasses.replace(
-        oracle_belief() if oracle else error_belief(),
-        kernel_factors=[dataclasses.replace(place, lengthscale=[WORLD.error_lengthscale_km] * 2)],
-        amplitude=WORLD.error_scale,
+        belief,
+        blocks=[
+            dataclasses.replace(
+                block,
+                kernel_factors=[dataclasses.replace(place, lengthscale=[WORLD.error_lengthscale_km] * 2) for place in block.kernel_factors],
+                amplitude=WORLD.error_scale,
+            )
+            for block in belief.blocks
+        ],
         n_features=32,
         refit_steps=20,
     )
@@ -86,9 +99,15 @@ sweep(
     seeds=[0],
     resources=Resources(cpus=1, mem_gb=8, timeout_min=20, gres=None, partition="dean", constraint="avx2", array_parallelism=10),
     arms=[
-        arm("evi", _method(total_variance(), n_fields=0, n_walks=2, n_candidates=8), _belief(oracle=False)),
-        arm("eii", _method(region_information(WORLD.noise_ms), n_fields=0, n_walks=2, n_candidates=8), _belief(oracle=False)),
-        arm("max_var", _method(posterior_spread(), n_fields=0, n_walks=0, n_candidates=8), _belief(oracle=False)),
+        arm("evi", _method(total_variance(LEARNED_BLOCKS[WORLD.learned]), n_fields=0, n_walks=2, n_candidates=8), _belief(oracle=False)),
+        arm(
+            "eii", _method(region_information(LEARNED_BLOCKS[WORLD.learned]), n_fields=0, n_walks=2, n_candidates=8), _belief(oracle=False)
+        ),
+        arm(
+            "max_var",
+            _method(posterior_spread(LEARNED_BLOCKS[WORLD.learned]), n_fields=0, n_walks=0, n_candidates=8),
+            _belief(oracle=False),
+        ),
         arm("rand_act", None, _belief(oracle=False)),
     ],
 )
@@ -108,8 +127,8 @@ sweep(
     seeds=[0],
     resources=Resources(cpus=1, mem_gb=8, timeout_min=20, gres=None, partition="dean", constraint="avx2", array_parallelism=10),
     arms=[
-        arm("emi", _method(max_magnitude(), n_fields=2, n_walks=2, n_candidates=8), _belief(oracle=False)),
-        arm("mc_ei", _method(max_magnitude(), n_fields=2, n_walks=0, n_candidates=8), _belief(oracle=False)),
+        arm("emi", _method(max_magnitude(OCEAN_CURRENT_BLOCK), n_fields=2, n_walks=2, n_candidates=8), _belief(oracle=False)),
+        arm("mc_ei", _method(max_magnitude(OCEAN_CURRENT_BLOCK), n_fields=2, n_walks=0, n_candidates=8), _belief(oracle=False)),
         arm("rand_act", None, _belief(oracle=False)),
     ],
 )

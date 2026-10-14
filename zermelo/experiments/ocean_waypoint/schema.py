@@ -47,7 +47,10 @@ class ProblemConfig:
     """Wind speed at which the boat reaches 1 - 1/e of `top_speed_ms` (0 ignores the wind's speed)"""
 
     noise_ms: float = MISSING
-    """Standard deviation of a reading's error per component (m/s)"""
+    """Standard deviation of an ocean current reading's error per component (m/s)"""
+
+    wind_noise_ms: float = MISSING
+    """Standard deviation of a wind reading's error per component (m/s)"""
 
     error_scale: float = MISSING
     """Standard deviation of a drawn error (m/s)"""
@@ -79,6 +82,9 @@ class ProblemConfig:
     n_targets: int = MISSING
     """How many targets a visiting episode draws, unread under the other objectives"""
 
+    learned: Literal["ocean_current", "wind", "both"] = MISSING
+    """Which part of the field a learning episode is scored on, unread under the other objectives"""
+
 
 @dataclass
 class BeliefKernelConfig:
@@ -95,23 +101,34 @@ class BeliefKernelConfig:
 
 
 @dataclass
-class BeliefConfig:
-    """A method's own model of the ocean current"""
+class BeliefBlockConfig:
+    """One Gaussian process over a block of the field's channels"""
 
-    oracle: bool = MISSING
-    """Whether the method is handed the true ocean current instead of fitting one"""
+    width: int = MISSING
+    """How many channels the block holds"""
 
     kernel_factors: list[BeliefKernelConfig] = MISSING
     """The factors the kernel is a product of"""
-
-    forecast_as_prior_mean: bool = MISSING
-    """Whether the belief learns the ocean current about the forecast, or about zero"""
 
     amplitude: float = MISSING
     """Standard deviation the belief assumes of what it learns"""
 
     noise: float = MISSING
     """Standard deviation the method assumes a reading has"""
+
+
+@dataclass
+class BeliefConfig:
+    """A method's own model of the field: independent blocks, the ocean current then the wind"""
+
+    oracle: bool = MISSING
+    """Whether the method is handed the true field instead of fitting one"""
+
+    blocks: list[BeliefBlockConfig] = MISSING
+    """One Gaussian process per block of channels, in the field's order"""
+
+    forecast_as_prior_mean: bool = MISSING
+    """Whether the belief learns the field about the forecast, or about zero"""
 
     n_features: int = MISSING
     refit: bool = MISSING

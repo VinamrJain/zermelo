@@ -26,10 +26,7 @@ class ArrayQueueConf(SlurmQueueConf):
     """Empty the submitting library writes a workload key here"""
 
     additional_parameters: dict[str, Any] = field(
-        default_factory=lambda: {
-            "requeue": True,
-            "exclude": "lil-compute-05,unicorn-compute-03,unicorn-compute-01,bhattacharjee-compute-03,rocky",
-        }
+        default_factory=lambda: {"requeue": True, "exclude": "unicorn-compute-03,unicorn-compute-01,bhattacharjee-compute-03,rocky"}
     )
     """Requeue asks the scheduler to resubmit an evicted job, which reruns from the start and overwrites itself; the excluded nodes cannot run a job"""
 

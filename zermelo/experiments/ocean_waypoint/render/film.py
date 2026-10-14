@@ -3,8 +3,9 @@
 Top: ||W|| shaded with its streamlines, the wind as a quiver, land masked, the track fading behind the boat, the boat as a
 triangle pointing along its heading, at the boat the wind, the ocean current, the heading through the water and the net motion as
 arrows, the target with its arrival ring, the waypoint aimed at and the walk imagined to it; beside it the numbers of the move.
-Bottom: the belief's mean speed ||mu_t|| on the truth's scale, its spread (var_u + var_v)^(1/2) on the prior's, and the polar, boat speed against heading for the wind at
-the boat with the heading marked. Moves are interpolated over `SUBFRAMES` frames; the film ends a few moves after arrival.
+Bottom: the belief's mean current speed ||mu_t|| on the truth's scale, its current spread (var_u + var_v)^(1/2) on the prior's, the polar, boat speed
+against heading for the wind at the boat with the heading marked, and the belief's wind spread on its prior's. Moves are interpolated over `SUBFRAMES`
+frames; the film ends a few moves after arrival.
 
 The heading is not recorded: it is read back as the net motion of the move less the ocean current at the point it left.
 """
@@ -30,7 +31,8 @@ from matplotlib.projections.polar import PolarAxes  # noqa: E402
 
 from zermelo.experiments.ocean_waypoint.metrics.data import channels, claimed  # noqa: E402
 from zermelo.experiments.ocean_waypoint.schema import Resources  # noqa: E402
-from zermelo.problems.ocean import KM_PER_DEGREE, PlaneGrid  # noqa: E402
+from zermelo.problems.ocean import KM_PER_DEGREE, OCEAN_CURRENT, PlaneGrid  # noqa: E402
+from zermelo.problems.ocean import WIND as WIND_CHANNELS  # noqa: E402
 from zermelo.problems.ocean.transition import Polar  # noqa: E402
 
 SUBFRAMES = 6
@@ -159,7 +161,7 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
         r, c = int(np.argmin(np.abs(lat - point[0]))), int(np.argmin(np.abs(lon - point[1])))
         return np.nan_to_num(np.array([sheet_u[r, c], sheet_v[r, c]]))
 
-    truth = held["objective_state/truth"][0]  # (n_candidates, 2) as (u, v), still over the episode
+    truth = held["objective_state/truth"][0][:, OCEAN_CURRENT]  # (n_candidates, 2) as (u, v), still over the episode
     true_u, true_v = on_grid(truth[:, 0]), on_grid(truth[:, 1])
     true_speed = np.hypot(true_u, true_v)
     track, target = held["state/position"].astype(float), held["state/target"][0].astype(float)  # (T + 1, 2) and (2,) as (lat, lon)
@@ -172,7 +174,7 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     km_per_degree = np.array([KM_PER_DEGREE, KM_PER_DEGREE * cos_mid])  # per degree of (lat, lon)
     distance = np.linalg.norm((track - target) * km_per_degree, axis=-1)  # (T + 1,) km
     last = min(track.shape[0] - 1, int(np.argmax(arrived)) + AFTER_ARRIVAL) if arrived.any() else track.shape[0] - 1
-    claims = held["objective_state/claim"]  # (T + 1, n_candidates, 4)
+    claims = held["objective_state/claim"]  # (T + 1, n_candidates, 8)
     waypoints = held.get("agent_state/scores.waypoint")
     walks = held.get("agent_state/scores.imagined_walk_to_waypoint")  # (T + 1, L) flat indices, the last repeated past the end
 
@@ -204,11 +206,11 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     main = fig.add_subplot(grid[0, :3])
     side = fig.add_subplot(grid[0, 3])  # the numbers of the move and the legend, beside the map
     side.axis("off")
-    error_ax, learned_ax = fig.add_subplot(grid[1, 0]), fig.add_subplot(grid[1, 1])
+    error_ax, learned_ax, wind_ax = fig.add_subplot(grid[1, 0]), fig.add_subplot(grid[1, 1]), fig.add_subplot(grid[1, 3])
     rose = fig.add_subplot(grid[1, 2], projection="polar", facecolor="#0b0f14")
     if not isinstance(rose, PolarAxes):
         raise TypeError("a polar subplot was asked for")
-    for ax in (main, error_ax, learned_ax):
+    for ax in (main, error_ax, learned_ax, wind_ax):
         ax.set_facecolor("#0b0f14")
         ax.set_xticks(np.arange(-75, -54, 5))
         ax.set_aspect(1 / cos_mid)
@@ -334,13 +336,17 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     (rose_wind,) = rose.plot([], [], color=WIND, lw=3)
 
     # bottom: what the belief holds so far, its mean on the truth's scale and its spread on the prior's
-    prior_spread = float(np.sqrt(2.0)) * float(config["belief"]["amplitude"])  # (var_u + var_v)^(1/2) before any reading
+    current_block, wind_block = config["belief"]["blocks"]  # the ocean current's Gaussian process, then the wind's
+    prior_spread = float(np.sqrt(2.0)) * float(current_block["amplitude"])  # (var_u + var_v)^(1/2) before any reading
+    wind_prior_spread = float(np.sqrt(2.0)) * float(wind_block["amplitude"])
     blank = on_grid(np.zeros(candidates.size))
     error_mesh = error_ax.pcolormesh(lon, lat, blank, shading="nearest", cmap="YlGnBu_r", vmin=0, vmax=np.nanmax(true_speed))
     learned_mesh = learned_ax.pcolormesh(lon, lat, blank, shading="nearest", cmap="viridis", vmin=0, vmax=prior_spread)
-    for ax, mesh, words in (
-        (error_ax, error_mesh, "belief's mean speed  ||mu||  (m/s)"),
-        (learned_ax, learned_mesh, "belief's spread  (var_u + var_v)^(1/2)  (m/s)"),
+    wind_mesh = wind_ax.pcolormesh(lon, lat, blank, shading="nearest", cmap="viridis", vmin=0, vmax=wind_prior_spread)
+    for ax, mesh, words, top in (
+        (error_ax, error_mesh, "belief's mean current speed  ||mu||  (m/s)", None),
+        (learned_ax, learned_mesh, "belief's current spread  (var_u + var_v)^(1/2)  (m/s)", prior_spread),
+        (wind_ax, wind_mesh, "belief's wind spread  (m/s)", wind_prior_spread),
     ):
         ax.pcolormesh(lon, lat, land_sheet, shading="nearest", cmap=land_cmap, vmin=0, vmax=1, zorder=3)
         ax.set_title(words, fontsize=12, pad=6)
@@ -348,10 +354,11 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
             ax.plot(target[1], target[0], marker="*", ms=12, color=TARGET, mec="white", mew=0.5, zorder=6, ls="none")
         bar = fig.colorbar(mesh, ax=ax, orientation="horizontal", fraction=0.06, pad=0.22, shrink=0.85)
         bar.ax.tick_params(labelsize=9, colors="#bbbbbb")
-    bar.set_ticks([0, prior_spread / 2, prior_spread])
-    bar.set_ticklabels(["0", f"{prior_spread / 2:.2f}", f"{prior_spread:.2f} prior"])
-    small_tracks = [ax.plot([], [], color=TRACK, lw=1.3, alpha=0.9, zorder=5)[0] for ax in (error_ax, learned_ax)]
-    small_boats = [ax.plot([], [], marker="o", ms=5, color="white", zorder=6, ls="none")[0] for ax in (error_ax, learned_ax)]
+        if top is not None:  # a spread is drawn on its prior's scale
+            bar.set_ticks([0, top / 2, top])
+            bar.set_ticklabels(["0", f"{top / 2:.2f}", f"{top:.2f} prior"])
+    small_tracks = [ax.plot([], [], color=TRACK, lw=1.3, alpha=0.9, zorder=5)[0] for ax in (error_ax, learned_ax, wind_ax)]
+    small_boats = [ax.plot([], [], marker="o", ms=5, color="white", zorder=6, ls="none")[0] for ax in (error_ax, learned_ax, wind_ax)]
 
     arm = run.name.split(",")[0].removeprefix("arm=")
     fig.suptitle(
@@ -390,9 +397,10 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
         if waypoints is not None:
             w = int(waypoints[t])
             aim.set_data([lon[w % n_lon]], [lat[w // n_lon]])
-        mean_t, spread_t = claimed(claims[t])
+        mean_t, spread_t = claimed(claims[t], OCEAN_CURRENT)
         error_mesh.set_array(on_grid(np.linalg.norm(mean_t, axis=-1)).ravel())
         learned_mesh.set_array(on_grid(spread_t).ravel())
+        wind_mesh.set_array(on_grid(claimed(claims[t], WIND_CHANNELS)[1]).ravel())
         if walks is not None:
             steps = walks[t]
             kept = np.r_[True, steps[1:] != steps[:-1]]  # the walk ends where its index stops changing

@@ -8,7 +8,8 @@ from zermelo.experiments.ocean_waypoint.registry import (
     N_SEEDS,
     RECORDED,
     RESOURCES,
-    ocean_current_belief,
+    STILL_FRAMES,
+    field_belief,
     oracle_belief,
 )
 from zermelo.experiments.ocean_waypoint.schema import MethodConfig
@@ -53,20 +54,21 @@ def _nearest_unvisited() -> MethodConfig:
     return _method(targets_reached(ARRIVAL_RADIUS_KM), n_fields=0, n_walks=0, penalty_rate=0.5)
 
 
-sweep(
-    "visit",
-    problem=WORLD,
-    horizon=HORIZON_LENGTH,
-    claim_every=CLAIM_EVERY_STEPS,
-    recorded={**RECORDED, "objective_state/targets": 1, "objective_state/visited": 1, "objective_state/steps_to_completion": 1},
-    seeds=list(range(N_SEEDS)),
-    resources=dataclasses.replace(RESOURCES, constraint="avx2&gpu-high"),  # 48 GB cards and up
-    arms=[
-        arm("etr_l0", _expected_targets_reached(0.0), ocean_current_belief()),
-        arm("etr_l05", _expected_targets_reached(0.5), ocean_current_belief()),
-        arm("etr_l1", _expected_targets_reached(1.0), ocean_current_belief()),
-        arm("nearest", _nearest_unvisited(), ocean_current_belief()),
-        arm("oracle_etr", _expected_targets_reached(0.5), oracle_belief()),
-        arm("rand_wp", _method(uniform(), n_fields=0, n_walks=0, penalty_rate=0.0), ocean_current_belief()),
-    ],
-)
+for date, frame_hour in STILL_FRAMES.items():
+    sweep(
+        f"visit_{date}",
+        problem=dataclasses.replace(WORLD, frame_hour=frame_hour),
+        horizon=HORIZON_LENGTH,
+        claim_every=CLAIM_EVERY_STEPS,
+        recorded={**RECORDED, "objective_state/targets": 1, "objective_state/visited": 1, "objective_state/steps_to_completion": 1},
+        seeds=list(range(N_SEEDS)),
+        resources=dataclasses.replace(RESOURCES, constraint="avx2&gpu-high"),  # 48 GB cards and up
+        arms=[
+            arm("etr_l0", _expected_targets_reached(0.0), field_belief()),
+            arm("etr_l05", _expected_targets_reached(0.5), field_belief()),
+            arm("etr_l1", _expected_targets_reached(1.0), field_belief()),
+            arm("nearest", _nearest_unvisited(), field_belief()),
+            arm("oracle_etr", _expected_targets_reached(0.5), oracle_belief()),
+            arm("rand_wp", _method(uniform(), n_fields=0, n_walks=0, penalty_rate=0.0), field_belief()),
+        ],
+    )

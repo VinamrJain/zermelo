@@ -4,8 +4,8 @@
 
 Three panels, over the candidate box in degrees:
     truth      ||W|| at every grid point, the boat's track, the target, the waypoints it aimed at
-    claimed    ||mu_T|| at every candidate at the last move
-    spread     sqrt(exp(v_T,u) + exp(v_T,v)) at every candidate at the last move
+    claimed    ||mu_T|| of the ocean current at every candidate at the last move
+    spread     sqrt(exp(v_T,u) + exp(v_T,v)) of the ocean current, then of the wind, at every candidate at the last move
 """
 
 import argparse
@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 from zermelo.experiments.ocean_waypoint.metrics.data import channels, claimed, latest_launch, settings  # noqa: E402
 from zermelo.experiments.ocean_waypoint.render.film import candidate_box, film, send  # noqa: E402
+from zermelo.problems.ocean import OCEAN_CURRENT, WIND  # noqa: E402
 
 SWEEPS = Path("results") / __package__.split(".")[-2]
 """Where a sweep named rather than pointed at is looked for: this experiment's own results"""
@@ -71,15 +72,16 @@ def still(run: Path, out: Path) -> None:
         sheet[candidates] = per_candidate
         return sheet.reshape(n_lat, n_lon)
 
-    mean, spread = claimed(held["objective_state/claim"][-1])  # (n_candidates, 2) and (n_candidates,)
-    speed = np.linalg.norm(mean, axis=-1)
+    mean, spread = claimed(held["objective_state/claim"][-1], OCEAN_CURRENT)  # (n_candidates, 2) and (n_candidates,)
+    _, wind_spread = claimed(held["objective_state/claim"][-1], WIND)
     track = held["state/position"]  # (time_steps + 1, 2) as (lat, lon)
     sheets = [
-        ("true ocean current speed (m/s)", on_grid(np.linalg.norm(held["objective_state/truth"][-1], axis=-1))),
-        ("claimed speed (m/s)", on_grid(speed)),
-        ("claimed spread (m/s)", on_grid(spread)),
+        ("true ocean current speed (m/s)", on_grid(np.linalg.norm(held["objective_state/truth"][-1][:, OCEAN_CURRENT], axis=-1))),
+        ("claimed current speed (m/s)", on_grid(np.linalg.norm(mean, axis=-1))),
+        ("claimed current spread (m/s)", on_grid(spread)),
+        ("claimed wind spread (m/s)", on_grid(wind_spread)),
     ]
-    fig, axes = plt.subplots(1, 3, figsize=(16, 4.2), constrained_layout=True)
+    fig, axes = plt.subplots(1, 4, figsize=(21, 4.2), constrained_layout=True)
     top = np.nanmax(sheets[0][1])
     for ax, (words, sheet) in zip(axes, sheets, strict=True):
         drawn = ax.pcolormesh(lon, lat, sheet, shading="nearest", cmap="viridis", vmin=0, vmax=top if "spread" not in words else None)

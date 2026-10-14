@@ -168,9 +168,10 @@ def write_figure(
             lines.append(rf"    \opening{{{opening_x:g}}}")
         if i == 0:
             lines.append(r"    \legend{" + ", ".join(f"{{{labels[a]}}}" for a in acquisitions) + "}")
+    last = len(panels) - columns * (rows - 1)  # panels in the last row
     lines += [
         r"\end{groupplot}",
-        rf"\node[anchor=north, yshift=-28pt] at ($(group c1r{rows}.south)!0.5!(group c{columns}r{rows}.south)$) {{\pgfplotslegendfromname{{legend:{path.stem}}}}};",
+        rf"\node[anchor=north, yshift=-28pt] at ($(group c1r{rows}.south)!0.5!(group c{last}r{rows}.south)$) {{\pgfplotslegendfromname{{legend:{path.stem}}}}};",
         r"\end{tikzpicture}",
         r"\end{document}",
         "",

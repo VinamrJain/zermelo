@@ -1,38 +1,38 @@
 """What a boat is handed each time_step
 
-reading = {position, ocean_current, target, forecast}
-    position       (position,): the state the ocean current was measured at
-    ocean_current  W there plus N(0, noise_ms^2 I), (u, v) in m/s
+reading = {position, field_reading, target, forecast}
+    position       (position,): the state the field was measured at
+    field_reading  field there plus N(0, diag(noise_ms^2)), (W_u, W_v, U_u, U_v) in m/s
     target         (position,): the grid point to reach, in the form `position` takes
-    forecast       F, callable at any position
+    forecast       the forecast, callable at any position
 """
 
 from dataclasses import dataclass
 from typing import Any
 
 import jax
-from jaxtyping import PRNGKeyArray
+from jaxtyping import Array, Float, PRNGKeyArray
 
 from zermelo.interface import BoxDomain, Domain, FunctionDomain, ProductDomain, Readout
-from zermelo.problems.ocean.field import OceanCurrent
+from zermelo.problems.ocean.field import CHANNELS, GridField
 
 
 @dataclass(frozen=True)
-class PointOceanCurrent(Readout):
-    """W at the state itself, what a boat reads off its own drift, with the target and F handed over beside it"""
+class PointField(Readout):
+    """The field at the state itself, what a boat reads off its own drift and its anemometer, with the target and the forecast handed over beside it"""
 
-    forecast: OceanCurrent
-    """F, the one object handed over at every time_step"""
+    forecast: GridField
+    """The one object handed over at every time_step"""
 
     states: ProductDomain
-    """(position,): the domain a belief over the ocean current is written on"""
+    """(position,): the domain a belief over the field is written on"""
 
-    noise_ms: float
-    """Standard deviation of the reading's error per component"""
+    noise_ms: Float[Array, " channels"]
+    """Standard deviation of the reading's error per channel"""
 
     @property
     def context(self) -> dict[str, int]:
-        """The ocean current never moves, so a reading is placed by its position alone"""
+        """The field never moves, so a reading is placed by its position alone"""
         return {}
 
     @property
@@ -41,9 +41,9 @@ class PointOceanCurrent(Readout):
         return ProductDomain(
             {
                 "position": self.states,
-                "ocean_current": BoxDomain((2,)),
+                "field_reading": BoxDomain((CHANNELS,)),
                 "target": self.states,
-                "forecast": FunctionDomain(self.states, BoxDomain((2,))),
+                "forecast": FunctionDomain(self.states, BoxDomain((CHANNELS,))),
             }
         )
 
@@ -51,7 +51,7 @@ class PointOceanCurrent(Readout):
         """The reading before acting"""
         return {
             "position": {part: state[part] for part in self.states.parts},
-            "ocean_current": state["field"]({"position": state["position"]}) + self.noise_ms * jax.random.normal(key, (2,)),
+            "field_reading": state["field"]({"position": state["position"]}) + self.noise_ms * jax.random.normal(key, (CHANNELS,)),
             "target": {"position": state["target"]},
             "forecast": self.forecast,
         }
