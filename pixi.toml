@@ -30,10 +30,11 @@ args = ["experiment", "name"]
 cmd = "python -m zermelo.experiments.{{ experiment }} +sweep={{ name }} hydra/launcher=slurm"
 description = "Submit one sweep as a Slurm array, on the partition its own resources block names"
 
-[tasks.draw]
-args = ["experiment", "directory"]
-cmd = "python -m zermelo.experiments.{{ experiment }}.metrics {{ directory }}"
-description = "Draw the figures and metrics for one sweep or launch directory"
+# Put `--` before any argument: `pixi run fig fig_ocean_search -- search`
+[tasks.fig]
+args = ["script"]
+cmd = "python -m figures.{{ script }}"
+description = "Draw one paper figure or table into results/figures/ from the newest launch of its sweeps; figures/redraw.sh draws them all"
 
 # Same target and flags as `render`; `-- --help` lists them
 [tasks.film]
@@ -88,7 +89,7 @@ omegaconf = "==2.4.0.dev15"        # pinned explicitly: a range alone will not r
 [feature.cuda.tasks.smoke-gpu]
 args = ["experiment"]
 cmd = "python -m zermelo.experiments.{{ experiment }} +sweep=smoke_gpu hydra/launcher=slurm"
-description = "Submit the smoke runs to a gpu node as a Slurm array, then draw the launch directory it prints"
+description = "Submit the smoke runs to a gpu node as a Slurm array"
 
 # The accelerator wheels; `default` runs on the processor
 [feature.cuda.pypi-dependencies]
