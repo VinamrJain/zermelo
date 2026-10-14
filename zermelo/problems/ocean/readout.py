@@ -14,7 +14,7 @@ import jax
 from jaxtyping import Array, Float, PRNGKeyArray
 
 from zermelo.interface import BoxDomain, Domain, FunctionDomain, ProductDomain, Readout
-from zermelo.problems.ocean.field import CHANNELS, GridField
+from zermelo.problems.ocean.field import COMPONENTS, GridField
 
 
 @dataclass(frozen=True)
@@ -27,8 +27,8 @@ class PointField(Readout):
     states: ProductDomain
     """(position,): the domain a belief over the field is written on"""
 
-    noise_ms: Float[Array, " channels"]
-    """Standard deviation of the reading's error per channel"""
+    noise_ms: Float[Array, " components"]
+    """Standard deviation of the reading's error per component"""
 
     @property
     def context(self) -> dict[str, int]:
@@ -41,9 +41,9 @@ class PointField(Readout):
         return ProductDomain(
             {
                 "position": self.states,
-                "field_reading": BoxDomain((CHANNELS,)),
+                "field_reading": BoxDomain((COMPONENTS,)),
                 "target": self.states,
-                "forecast": FunctionDomain(self.states, BoxDomain((CHANNELS,))),
+                "forecast": FunctionDomain(self.states, BoxDomain((COMPONENTS,))),
             }
         )
 
@@ -51,7 +51,7 @@ class PointField(Readout):
         """The reading before acting"""
         return {
             "position": {part: state[part] for part in self.states.parts},
-            "field_reading": state["field"]({"position": state["position"]}) + self.noise_ms * jax.random.normal(key, (CHANNELS,)),
+            "field_reading": state["field"]({"position": state["position"]}) + self.noise_ms * jax.random.normal(key, (COMPONENTS,)),
             "target": {"position": state["target"]},
             "forecast": self.forecast,
         }

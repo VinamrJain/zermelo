@@ -32,12 +32,12 @@ class OracleBelief(Belief):
         return cls(positions, Dataset.empty(rows, m, sum(context.values())), field, context)
 
     @property
-    def widths(self) -> tuple[int, ...]:
-        """One block of every channel"""
-        return (self.data.state_value.shape[-1],)
+    def group_of(self) -> Int[Array, " components"]:
+        """Zeros: every component in the one group"""
+        return jnp.zeros(self.data.state_value.shape[-1], jnp.int32)
 
     @property
-    def reading_noise(self) -> Float[Array, " blocks"]:
+    def reading_noise(self) -> Float[Array, " groups"]:
         """1, unread: the truth has no spread to weigh it against"""
         return jnp.ones(1)
 
@@ -67,7 +67,7 @@ class OracleBelief(Belief):
 
     def posterior_covariance(
         self, a: Int[Array, "*batch_a n_a"], b: Int[Array, "*batch_b n_b"], context: Float[Array, " n_context"]
-    ) -> Float[Array, "*batch blocks n_a n_b"]:
+    ) -> Float[Array, "*batch groups n_a n_b"]:
         """Zero everywhere: the truth has no spread"""
         return jnp.zeros((*jnp.broadcast_shapes(a.shape[:-1], b.shape[:-1]), 1, a.shape[-1], b.shape[-1]))
 

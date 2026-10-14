@@ -76,7 +76,7 @@ def still(run: Path, out: Path) -> None:
     _, wind_spread = claimed(held["objective_state/claim"][-1], WIND)
     track = held["state/position"]  # (time_steps + 1, 2) as (lat, lon)
     sheets = [
-        ("true ocean current speed (m/s)", on_grid(np.linalg.norm(held["objective_state/truth"][-1][:, OCEAN_CURRENT], axis=-1))),
+        ("true ocean current speed (m/s)", on_grid(np.linalg.norm(held["objective_state/truth"][-1][:, list(OCEAN_CURRENT)], axis=-1))),
         ("claimed current speed (m/s)", on_grid(np.linalg.norm(mean, axis=-1))),
         ("claimed current spread (m/s)", on_grid(spread)),
         ("claimed wind spread (m/s)", on_grid(wind_spread)),

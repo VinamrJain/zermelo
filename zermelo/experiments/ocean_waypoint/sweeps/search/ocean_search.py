@@ -6,7 +6,6 @@ from zermelo.experiments.ocean_waypoint.registry import (
     GULF_STREAM_2019JUN,
     HORIZON_LENGTH,
     N_SEEDS,
-    OCEAN_CURRENT_BLOCK,
     PLANNING_BUDGET,
     RECORDED,
     RESOURCES,
@@ -15,6 +14,7 @@ from zermelo.experiments.ocean_waypoint.registry import (
 )
 from zermelo.experiments.ocean_waypoint.schema import MethodConfig
 from zermelo.experiments.ocean_waypoint.setup import Implementation, arm, max_magnitude, sweep, uniform, upper_confidence, value_iteration
+from zermelo.problems.ocean import OCEAN_CURRENT
 
 WORLD = dataclasses.replace(GULF_STREAM_2019JUN, objective="search")
 """The same frame, scored on the fastest ocean current stood on inside the target box, which is also where a waypoint may be aimed"""
@@ -53,11 +53,11 @@ for date, frame_hour in STILL_FRAMES.items():
         resources=dataclasses.replace(RESOURCES, constraint="avx2&gpu-high"),  # 48 GB cards and up
         arms=[
             # E over fields f and walks tau of max(0, max over z in tau of ||f(z)|| - beta_n)
-            arm("emi", _method(max_magnitude(OCEAN_CURRENT_BLOCK), improvement=True, n_fields=N_FIELDS, n_walks=N_WALKS), field_belief()),
+            arm("emi", _method(max_magnitude(OCEAN_CURRENT), improvement=True, n_fields=N_FIELDS, n_walks=N_WALKS), field_belief()),
             # E over fields f of max(0, ||f(x)|| - beta_n) at the destination alone
-            arm("mc_ei", _method(max_magnitude(OCEAN_CURRENT_BLOCK), improvement=True, n_fields=N_FIELDS, n_walks=0), field_belief()),
-            arm("ucb", _method(upper_confidence(2.0, OCEAN_CURRENT_BLOCK), improvement=False, n_fields=0, n_walks=0), field_belief()),
-            arm("ts", _method(max_magnitude(OCEAN_CURRENT_BLOCK), improvement=False, n_fields=1, n_walks=0), field_belief()),
+            arm("mc_ei", _method(max_magnitude(OCEAN_CURRENT), improvement=True, n_fields=N_FIELDS, n_walks=0), field_belief()),
+            arm("ucb", _method(upper_confidence(2.0, OCEAN_CURRENT), improvement=False, n_fields=0, n_walks=0), field_belief()),
+            arm("ts", _method(max_magnitude(OCEAN_CURRENT), improvement=False, n_fields=1, n_walks=0), field_belief()),
             arm("rand_wp", _method(uniform(), improvement=False, n_fields=0, n_walks=0), field_belief()),
             arm("rand_act", None, field_belief()),  # no rule at all
         ],

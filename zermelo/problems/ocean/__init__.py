@@ -13,7 +13,7 @@ reward = -1 until within arrival_km of target, 0 from then on; or the nats learn
 A plan and a belief are written over position alone
 """
 
-from zermelo.problems.ocean.field import CHANNELS, OCEAN_CURRENT, WIND, FixedError, ForecastError, ForecastPrior, GaussianError, GridField
+from zermelo.problems.ocean.field import COMPONENTS, OCEAN_CURRENT, WIND, FixedError, ForecastError, ForecastPrior, GaussianError, GridField
 from zermelo.problems.ocean.grid import KM_PER_DEGREE, PlaneGrid
 from zermelo.problems.ocean.objective import LearnRegion, ReachTarget, SearchMagnitude, VisitTargets
 from zermelo.problems.ocean.readout import PointField
@@ -31,7 +31,7 @@ from zermelo.problems.ocean.world import (
 )
 
 __all__ = [
-    "CHANNELS",
+    "COMPONENTS",
     "KM_PER_DEGREE",
     "OCEAN_CURRENT",
     "WIND",

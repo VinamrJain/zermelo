@@ -9,15 +9,15 @@ import jax.numpy as jnp
 from hydra.utils import get_class, instantiate
 from jaxtyping import Array, Float
 
-from zermelo.experiments.ocean_waypoint.registry import SCORED_CHANNELS
+from zermelo.experiments.ocean_waypoint.registry import SCORED_COMPONENTS
 from zermelo.experiments.ocean_waypoint.schema import RunConfig
 from zermelo.interface import Agent
 from zermelo.methods.random_agent import RandomAgent
 from zermelo.methods.waypoint_bo.acquisition import Acquisition
 from zermelo.methods.waypoint_bo.agent import WaypointAgent, posterior_moments
-from zermelo.methods.waypoint_bo.belief import BeliefKernel, BlockBelief, Dataset, GPBelief, OracleBelief
+from zermelo.methods.waypoint_bo.belief import BeliefKernel, Dataset, GPBelief, GroupedBelief, OracleBelief
 from zermelo.problems.ocean import (
-    CHANNELS,
+    COMPONENTS,
     FixedError,
     ForecastError,
     GaussianError,
@@ -37,9 +37,12 @@ WHITELIST = ("zermelo.*", "gpjax.*")
 """Which modules a setting may name"""
 
 
-def prior_amplitude(cfg: RunConfig) -> Float[Array, " channels"]:
-    """The standard deviation the belief assumes of each channel before any reading"""
-    return jnp.concatenate([jnp.full(block.width, block.amplitude) for block in cfg.belief.blocks])
+def prior_amplitude(cfg: RunConfig) -> Float[Array, " components"]:
+    """The standard deviation the belief assumes of each component before any reading"""
+    amplitude = jnp.zeros(COMPONENTS)
+    for group in cfg.belief.groups:
+        amplitude = amplitude.at[jnp.asarray(group.components)].set(group.amplitude)
+    return amplitude
 
 
 def assemble(cfg: RunConfig) -> Episode:
@@ -47,7 +50,7 @@ def assemble(cfg: RunConfig) -> Episode:
     k_world, k_agent, k_steps = jax.random.split(jax.random.key(cfg.seed), 3)
     data = load_ocean(Path(__file__).resolve().parents[3] / cfg.problem.data_path, cfg.problem.grid_stride)
     grid = data.grid
-    truth = data.field(data.frame(cfg.problem.frame_hour))  # (pos, channels)
+    truth = data.field(data.frame(cfg.problem.frame_hour))  # (pos, components)
     error: ForecastError
     if cfg.problem.forecast_lag_hours > 0:
         predicted = data.field(data.frame(cfg.problem.frame_hour - cfg.problem.forecast_lag_hours))
@@ -71,7 +74,7 @@ def assemble(cfg: RunConfig) -> Episode:
     target_box = box & grid.inside(
         cfg.problem.target_lat_min, cfg.problem.target_lat_max, cfg.problem.target_lon_min, cfg.problem.target_lon_max
     )
-    noise_ms = jnp.asarray([cfg.problem.noise_ms] * 2 + [cfg.problem.wind_noise_ms] * 2)  # (channels,)
+    noise_ms = jnp.asarray([cfg.problem.noise_ms] * 2 + [cfg.problem.wind_noise_ms] * 2)  # (components,)
     world = ocean_world(
         grid, states, predicted, error, transition, noise_ms, target_box, target_box
     )  # the boat starts in the target box too
@@ -84,7 +87,7 @@ def assemble(cfg: RunConfig) -> Episode:
     objective = (  # under learn and search the region of interest is the target box
         ocean_objective(states, grid, box, cfg.problem.arrival_km)
         if cfg.problem.objective == "reach"
-        else learn_objective(states, target_box, 2.0 * jnp.log(prior_amplitude(cfg)), SCORED_CHANNELS[cfg.problem.learned])
+        else learn_objective(states, target_box, 2.0 * jnp.log(prior_amplitude(cfg)), SCORED_COMPONENTS[cfg.problem.learned])
         if cfg.problem.objective == "learn"
         else search_objective(states, target_box)
         if cfg.problem.objective == "search"
@@ -92,34 +95,35 @@ def assemble(cfg: RunConfig) -> Episode:
     )
     candidates = objective.candidates
     context = world.readout.context
-    if sum(block.width for block in cfg.belief.blocks) != CHANNELS:
+    if sorted(j for group in cfg.belief.groups for j in group.components) != list(range(COMPONENTS)):
         raise ValueError(
-            f"the belief's blocks span {sum(block.width for block in cfg.belief.blocks)} channels and the field has {CHANNELS}"
+            f"the belief's groups cover {[group.components for group in cfg.belief.groups]} and the field has {COMPONENTS} components"
         )
     belief = (
         # the field of the world the episode runs in, drawn on its key
-        OracleBelief.empty(states, cfg.horizon, CHANNELS, world.reset(k_world)[0]["field"], context)
+        OracleBelief.empty(states, cfg.horizon, COMPONENTS, world.reset(k_world)[0]["field"], context)
         if cfg.belief.oracle
-        else BlockBelief(
+        else GroupedBelief(
             states,
-            Dataset.empty(cfg.horizon, CHANNELS, sum(context.values())),  # one row per move, the readings an episode folds in
+            Dataset.empty(cfg.horizon, COMPONENTS, sum(context.values())),  # one row per move, the readings an episode folds in
             tuple(
                 GPBelief.empty(
                     states,
                     cfg.horizon,
-                    block.width,
+                    len(group.components),
                     n_context=sum(context.values()),
-                    kernel_factors=tuple(BeliefKernel.of(get_class(f.kernel), f.parts, f.lengthscale) for f in block.kernel_factors),
+                    kernel_factors=tuple(BeliefKernel.of(get_class(f.kernel), f.parts, f.lengthscale) for f in group.kernel_factors),
                     context=context,
-                    amplitude=jnp.asarray(block.amplitude),
-                    noise=jnp.asarray(block.noise),
+                    amplitude=jnp.asarray(group.amplitude),
+                    noise=jnp.asarray(group.noise),
                     n_features=cfg.belief.n_features,
                     refit=cfg.belief.refit,
                     refit_steps=cfg.belief.refit_steps,
                     prior_mean=None,  # the forecast the reading carries, set at the first reading
                 )
-                for block in cfg.belief.blocks
+                for group in cfg.belief.groups
             ),
+            tuple(tuple(group.components) for group in cfg.belief.groups),
         )
     )
     agent: Agent[Any]

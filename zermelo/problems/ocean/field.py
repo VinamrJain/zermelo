@@ -17,14 +17,14 @@ from jaxtyping import Array, Float, PRNGKeyArray
 from zermelo.interface import Domain, FunctionDomain, Prior
 from zermelo.problems.ocean.grid import PlaneGrid
 
-OCEAN_CURRENT = slice(0, 2)
-"""The channels of the field holding W"""
+OCEAN_CURRENT = (0, 1)
+"""The components of the field holding W"""
 
-WIND = slice(2, 4)
-"""The channels of the field holding U"""
+WIND = (2, 3)
+"""The components of the field holding U"""
 
-CHANNELS = 4
-"""How wide the field is: W then U"""
+COMPONENTS = 4
+"""How many components the field has: W then U"""
 
 
 @register_dataclass
@@ -32,13 +32,13 @@ CHANNELS = 4
 class GridField:
     """The field over the whole grid, read at the grid point nearest a state's position"""
 
-    field_on_grid: Float[Array, "pos channels"]
+    field_on_grid: Float[Array, "pos components"]
     """(W_u, W_v, U_u, U_v) at every grid point"""
 
     grid: PlaneGrid = dataclasses.field(metadata=dict(static=True))
     """What `pos` is indexed by"""
 
-    def __call__(self, state: dict[str, Any]) -> Float[Array, "*batch channels"]:
+    def __call__(self, state: dict[str, Any]) -> Float[Array, "*batch components"]:
         """field_on_grid[flat index of position]"""
         return self.field_on_grid[self.grid.flat_index(state["position"])]
 
@@ -47,13 +47,13 @@ class ForecastError(ABC):
     """Where forecast_error comes from, for a truth field = forecast + forecast_error"""
 
     @abstractmethod
-    def sample(self, key: PRNGKeyArray, grid: PlaneGrid) -> Float[Array, "pos channels"]:
+    def sample(self, key: PRNGKeyArray, grid: PlaneGrid) -> Float[Array, "pos components"]:
         """One draw of forecast_error at every grid point"""
 
 
 @dataclass(frozen=True)
 class GaussianError(ForecastError):
-    """forecast_error ~ N(0, K) over grid points, independently per channel, with
+    """forecast_error ~ N(0, K) over grid points, independently per component, with
 
     K(a, b) = amplitude_ms^2 * exp(-||embed(a) - embed(b)||^2 / (2 * length_scale_km^2))
     """
@@ -64,7 +64,7 @@ class GaussianError(ForecastError):
     jitter: float
     """Added to K's diagonal relative to amplitude_ms^2, so the factorisation succeeds"""
 
-    def sample(self, key: PRNGKeyArray, grid: PlaneGrid) -> Float[Array, "pos channels"]:
+    def sample(self, key: PRNGKeyArray, grid: PlaneGrid) -> Float[Array, "pos components"]:
         """L @ white, for L the Cholesky factor of K. Time O(pos^3), memory O(pos^2)"""
         points = grid.embed(grid.elements())  # (pos, 2)
         gap = jnp.sum((points[:, None, :] - points[None, :, :]) ** 2, axis=-1)  # (pos, pos)
@@ -72,7 +72,7 @@ class GaussianError(ForecastError):
         factor = self.amplitude_ms * jnp.linalg.cholesky(correlation)
         if jnp.isnan(factor).any():  # a singular K returns NaN rather than raising
             raise ValueError(f"K over {grid.size()} positions at {self.length_scale_km} km does not factorise at jitter {self.jitter}")
-        return factor @ jax.random.normal(key, (grid.size(), CHANNELS))
+        return factor @ jax.random.normal(key, (grid.size(), COMPONENTS))
 
 
 @register_dataclass
@@ -80,10 +80,10 @@ class GaussianError(ForecastError):
 class FixedError(ForecastError):
     """forecast_error = field - forecast as the data holds it, the same at every draw"""
 
-    error: Float[Array, "pos channels"]
+    error: Float[Array, "pos components"]
     """field - forecast at every grid point"""
 
-    def sample(self, key: PRNGKeyArray, grid: PlaneGrid) -> Float[Array, "pos channels"]:
+    def sample(self, key: PRNGKeyArray, grid: PlaneGrid) -> Float[Array, "pos components"]:
         """`error`, whatever the key"""
         return self.error
 
@@ -92,7 +92,7 @@ class FixedError(ForecastError):
 class ForecastPrior(Prior[GridField]):
     """field = forecast + forecast_error, forecast fixed and forecast_error taken once per episode"""
 
-    forecast: Float[Array, "pos channels"]
+    forecast: Float[Array, "pos components"]
     """The forecast at every grid point"""
 
     error: ForecastError

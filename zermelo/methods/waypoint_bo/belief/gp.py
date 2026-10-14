@@ -1,4 +1,4 @@
-"""`GPBelief`: exact Gaussian process regression over coordinate rows, one kernel shared by every channel"""
+"""`GPBelief`: exact Gaussian process regression over coordinate rows, one kernel shared by every component"""
 
 import dataclasses
 import warnings
@@ -62,7 +62,7 @@ def _whiten(chol: Float[Array, "rows rows"], keep: Bool[Array, " rows"], cross: 
 @register_dataclass
 @dataclass(frozen=True)
 class GPBelief(Belief):
-    """`m` Gaussian processes over the field's components, independent, sharing one kernel, about a given prior mean:
+    """One Gaussian process per component of the field, independent, sharing one kernel, about a given prior mean:
 
     f(state, context) = prior_mean(state, context) + e(state, context),   e ~ GP(0, k)
     """
@@ -97,12 +97,12 @@ class GPBelief(Belief):
         return cls(positions, Dataset.empty(rows, m, n_context), **config)
 
     @property
-    def widths(self) -> tuple[int, ...]:
-        """One block of every channel"""
-        return (self.data.state_value.shape[-1],)
+    def group_of(self) -> Int[Array, " components"]:
+        """Zeros: every component in the one group"""
+        return jnp.zeros(self.data.state_value.shape[-1], jnp.int32)
 
     @property
-    def reading_noise(self) -> Float[Array, " blocks"]:
+    def reading_noise(self) -> Float[Array, " groups"]:
         return self.noise[None]
 
     def with_prior_mean(self, prior_mean: Function | None) -> "GPBelief":
@@ -225,8 +225,8 @@ class GPBelief(Belief):
 
     def posterior_covariance(
         self, first_states: Int[Array, "*batch_a n_a"], second_states: Int[Array, "*batch_b n_b"], context: Float[Array, " n_context"]
-    ) -> Float[Array, "*batch blocks n_a n_b"]:
-        """k_n(a, b) = k(a, b) - V_a^T V_b,   V = L^-1 k(X_n, .),   each side whitened once over its own batch, as the one block
+    ) -> Float[Array, "*batch groups n_a n_b"]:
+        """k_n(a, b) = k(a, b) - V_a^T V_b,   V = L^-1 k(X_n, .),   each side whitened once over its own batch, as the one group
 
         Memory O(rows (n_a + n_b) + n_a n_b) per batch element.
         """

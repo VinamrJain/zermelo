@@ -3,7 +3,7 @@
 arrived_t    1 once the boat is within arrival_km of the target, 0 before
 g, b_t       max over candidates of ||W||, and the largest ||W|| stood on at a candidate by time_step t
 field(c)     (W_u, W_v, U_u, U_v) at every candidate c, the truth: the ocean current W and the wind U
-mu_t, v_t    the means and the log-variances claimed per channel at every candidate after time_step t
+mu_t, v_t    the means and the log-variances claimed per component at every candidate after time_step t
 """
 
 import json
@@ -129,10 +129,10 @@ def acquisition_label(arm: str) -> str:
     return arm.replace("_", " ")
 
 
-def claimed(claim: Any, channels: slice) -> tuple[Any, Any]:
-    """What a claim predicts over `channels` and the spread it holds there: `mu` and `(sum over the channels of exp(v))^(1/2)`"""
-    m = claim.shape[-1] // 2
-    mean, log_variance = claim[..., :m][..., channels], np.maximum(claim[..., m:][..., channels], LOG_VARIANCE_FLOOR)
+def claimed(claim: Any, components: tuple[int, ...]) -> tuple[Any, Any]:
+    """What a claim predicts over `components` and the spread it holds there: `mu` and `(sum over the components of exp(v))^(1/2)`"""
+    m, chosen = claim.shape[-1] // 2, list(components)
+    mean, log_variance = claim[..., :m][..., chosen], np.maximum(claim[..., m:][..., chosen], LOG_VARIANCE_FLOOR)
     return mean, np.sqrt(np.sum(np.exp(log_variance), axis=-1))
 
 
@@ -147,15 +147,15 @@ def episode_curves(held: dict[str, Any], claim_every: int, prior_log_variance: n
     distance_to_target       ||position - target|| on the plane tangent at the box's middle latitude, km
     arrived                  1 once within arrival_km of the target
     rmse                     sqrt(mean over candidates and components of (W - mu_t)^2)
-    posterior_variance       mean over candidates of exp(v_t,u) + exp(v_t,v) over W's channels
+    posterior_variance       mean over candidates of exp(v_t,u) + exp(v_t,v) over W's components
     wind_rmse, wind_posterior_variance    the same over U
-    information              (1/2) sum over candidates and W's channels of (prior_log_variance - v_t), nats the claim's marginals have shed since the prior
-    wind_information         the same over U's channels
+    information              (1/2) sum over candidates and W's components of (prior_log_variance - v_t), nats the claim's marginals have shed since the prior
+    wind_information         the same over U's components
     simple_regret       g - b_t, nan unless the episode searches for the fastest current
     cumulative_regret   sum over u <= t of (g - b_u)
     targets_visited     how many targets the boat has been within arrival_km of, nan unless the episode visits targets
     """
-    truth = held["objective_state/truth"][1:]  # (time_steps, candidates, channels)
+    truth = held["objective_state/truth"][1:]  # (time_steps, candidates, components)
     arrived = held.get("objective_state/arrived", np.zeros(truth.shape[0] + 1))[1:]  # (time_steps,): never, when learning the region
     position, target = held["state/position"][1:], held["state/target"][1:]  # (time_steps, 2) as (lat, lon) degrees
     km_per_degree = KM_PER_DEGREE * np.array([1.0, np.cos(np.radians(np.mean(target[:, 0])))])
@@ -164,8 +164,8 @@ def episode_curves(held: dict[str, Any], claim_every: int, prior_log_variance: n
     mean, spread = claimed(claim, OCEAN_CURRENT)  # (time_steps, candidates, 2) and (time_steps, candidates)
     wind_mean, wind_spread = claimed(claim, WIND)
     stored = held["objective_state/claim"]
-    log_variance = np.maximum(stored[..., stored.shape[-1] // 2 :], LOG_VARIANCE_FLOOR)  # (snapshots, candidates, channels)
-    shed = 0.5 * (prior_log_variance - log_variance)  # (snapshots, candidates, channels)
+    log_variance = np.maximum(stored[..., stored.shape[-1] // 2 :], LOG_VARIANCE_FLOOR)  # (snapshots, candidates, components)
+    shed = 0.5 * (prior_log_variance - log_variance)  # (snapshots, candidates, components)
     regret = (
         (held["objective_state/best_possible_magnitude"] - held["objective_state/best_observed_magnitude"])[1:]
         if "objective_state/best_possible_magnitude" in held
@@ -174,12 +174,12 @@ def episode_curves(held: dict[str, Any], claim_every: int, prior_log_variance: n
     return {
         "distance_to_target": distance,
         "arrived": arrived,
-        "rmse": np.sqrt(np.mean((mean - truth[..., OCEAN_CURRENT]) ** 2, axis=(-2, -1))),
+        "rmse": np.sqrt(np.mean((mean - truth[..., list(OCEAN_CURRENT)]) ** 2, axis=(-2, -1))),
         "posterior_variance": np.mean(spread**2, axis=-1),
-        "wind_rmse": np.sqrt(np.mean((wind_mean - truth[..., WIND]) ** 2, axis=(-2, -1))),
+        "wind_rmse": np.sqrt(np.mean((wind_mean - truth[..., list(WIND)]) ** 2, axis=(-2, -1))),
         "wind_posterior_variance": np.mean(wind_spread**2, axis=-1),
-        "information": at_each_snapshot(np.sum(shed[..., OCEAN_CURRENT], axis=(-2, -1)), arrived.size + 1, claim_every)[1:],
-        "wind_information": at_each_snapshot(np.sum(shed[..., WIND], axis=(-2, -1)), arrived.size + 1, claim_every)[1:],
+        "information": at_each_snapshot(np.sum(shed[..., list(OCEAN_CURRENT)], axis=(-2, -1)), arrived.size + 1, claim_every)[1:],
+        "wind_information": at_each_snapshot(np.sum(shed[..., list(WIND)], axis=(-2, -1)), arrived.size + 1, claim_every)[1:],
         "simple_regret": regret,
         "cumulative_regret": np.cumsum(regret),
         "targets_visited": np.sum(held["objective_state/visited"][1:], axis=-1)
@@ -188,9 +188,23 @@ def episode_curves(held: dict[str, Any], claim_every: int, prior_log_variance: n
     }
 
 
+def belief_groups(config: dict[str, Any]) -> list[tuple[list[int], float]]:
+    """(components, amplitude) of each group of the belief; a record from before 2026-10-15 stores `blocks` of a `width` in order"""
+    if "groups" in config["belief"]:
+        return [(list(group["components"]), float(group["amplitude"])) for group in config["belief"]["groups"]]
+    groups, first = [], 0
+    for block in config["belief"]["blocks"]:
+        groups.append((list(range(first, first + block["width"])), float(block["amplitude"])))
+        first += block["width"]
+    return groups
+
+
 def prior_log_variance(config: dict[str, Any]) -> np.ndarray:
-    """(channels,): 2 log amplitude of the block each channel sits in, the level a claim's log-variance is counted from"""
-    return np.concatenate([np.full(block["width"], 2.0 * np.log(block["amplitude"])) for block in config["belief"]["blocks"]])
+    """(components,): 2 log amplitude of the group each component sits in, the level a claim's log-variance is counted from"""
+    out = np.zeros(sum(len(components) for components, _ in belief_groups(config)))
+    for components, amplitude in belief_groups(config):
+        out[components] = 2.0 * np.log(amplitude)
+    return out
 
 
 def opening_moves(config: dict[str, Any], moves: int) -> int:

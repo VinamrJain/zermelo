@@ -97,44 +97,44 @@ def _built(path: str, **arguments: Any) -> Implementation:
 # --- utilities: which quantity of a belief a rule maximizes --------------------------------------------------------
 
 
-def information_gain(blocks: tuple[int, ...]) -> Implementation:
-    """sum over the counted blocks b of (widths[b] / 2) log det(I + K_n,b / noise_b^2) over a walk's readings"""
-    return _built("zermelo.methods.waypoint_bo.utility.InformationGain", blocks=blocks)
+def information_gain(components: tuple[int, ...]) -> Implementation:
+    """sum over j in components of (1/2) log det(I + K_n,g / noise_g^2) over a walk's readings, g the group of j"""
+    return _built("zermelo.methods.waypoint_bo.utility.InformationGain", components=components)
 
 
-def region_information(blocks: tuple[int, ...]) -> Implementation:
-    """sum over the counted blocks b of (widths[b] / 2) [log det(I + K_n,b(w, w) / noise_b^2) - log det(I + S_b / noise_b^2)] over a walk's readings w, S_b its covariance given the candidates"""
-    return _built("zermelo.methods.waypoint_bo.utility.RegionInformation", blocks=blocks)
+def region_information(components: tuple[int, ...]) -> Implementation:
+    """sum over j in components of (1/2) [log det(I + K_n,g(w, w) / noise_g^2) - log det(I + S_g / noise_g^2)] over a walk's readings w, S_b its covariance given the candidates, g the group of j"""
+    return _built("zermelo.methods.waypoint_bo.utility.RegionInformation", components=components)
 
 
-def max_magnitude(block: int) -> Implementation:
-    """The largest reading magnitude over one block's channels among the cells scored"""
-    return _built("zermelo.methods.waypoint_bo.utility.MaxMagnitude", block=block)
+def max_magnitude(components: tuple[int, ...]) -> Implementation:
+    """The largest reading magnitude over `components` among the cells scored"""
+    return _built("zermelo.methods.waypoint_bo.utility.MaxMagnitude", components=components)
 
 
-def sum_magnitude(block: int) -> Implementation:
-    """The reading magnitudes over one block's channels among the cells scored, summed"""
-    return _built("zermelo.methods.waypoint_bo.utility.SumMagnitude", block=block)
+def sum_magnitude(components: tuple[int, ...]) -> Implementation:
+    """The reading magnitudes over `components` among the cells scored, summed"""
+    return _built("zermelo.methods.waypoint_bo.utility.SumMagnitude", components=components)
 
 
-def total_variance(blocks: tuple[int, ...]) -> Implementation:
-    """Minus the posterior variance of the counted blocks summed over every candidate state, given where the dataset was read"""
-    return _built("zermelo.methods.waypoint_bo.utility.TotalVariance", blocks=blocks)
+def total_variance(components: tuple[int, ...]) -> Implementation:
+    """Minus the posterior variance of `components` summed over every candidate state, given where the dataset was read"""
+    return _built("zermelo.methods.waypoint_bo.utility.TotalVariance", components=components)
 
 
-def posterior_spread(blocks: tuple[int, ...]) -> Implementation:
-    """The posterior standard deviations of the counted blocks at the scored cells, summed"""
-    return _built("zermelo.methods.waypoint_bo.utility.PosteriorSpread", blocks=blocks)
+def posterior_spread(components: tuple[int, ...]) -> Implementation:
+    """The posterior standard deviations of `components` at the scored cells, summed"""
+    return _built("zermelo.methods.waypoint_bo.utility.PosteriorSpread", components=components)
 
 
-def upper_confidence(c: float, block: int) -> Implementation:
-    """The largest optimistic magnitude `||mean|| + c * spread` over one block's channels at the scored cells"""
-    return _built("zermelo.methods.waypoint_bo.utility.UpperConfidence", c=c, block=block)
+def upper_confidence(c: float, components: tuple[int, ...]) -> Implementation:
+    """The largest optimistic magnitude `||mean|| + c * spread` over `components` at the scored cells"""
+    return _built("zermelo.methods.waypoint_bo.utility.UpperConfidence", c=c, components=components)
 
 
-def expected_improvement(block: int) -> Implementation:
-    """`E[(|f| - beta)^+]` at each scored cell in closed form over a one-channel block, `beta` the largest magnitude read so far"""
-    return _built("zermelo.methods.waypoint_bo.utility.ExpectedImprovement", block=block)
+def expected_improvement(components: tuple[int, ...]) -> Implementation:
+    """`E[(|f| - beta)^+]` at each scored cell in closed form over one component, `beta` the largest magnitude read so far"""
+    return _built("zermelo.methods.waypoint_bo.utility.ExpectedImprovement", components=components)
 
 
 def targets_reached(radius: float) -> Implementation:

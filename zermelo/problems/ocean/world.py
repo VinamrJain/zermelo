@@ -8,7 +8,7 @@ import numpy as np
 from jaxtyping import Array, Bool, Float
 
 from zermelo.interface import BoxDomain, FunctionDomain, ProductDomain, ProductPrior, Uniform, World
-from zermelo.problems.ocean.field import CHANNELS, ForecastError, ForecastPrior, GridField
+from zermelo.problems.ocean.field import COMPONENTS, ForecastError, ForecastPrior, GridField
 from zermelo.problems.ocean.grid import PlaneGrid
 from zermelo.problems.ocean.objective import LearnRegion, ReachTarget, SearchMagnitude, VisitTargets
 from zermelo.problems.ocean.readout import PointField
@@ -35,7 +35,7 @@ class OceanData:
             raise ValueError(f"the data holds no frame at hour {hour}; it runs from hour {float(self.hour[0])} to {float(self.hour[-1])}")
         return int(at[0])
 
-    def field(self, frame: int) -> Float[Array, "pos channels"]:
+    def field(self, frame: int) -> Float[Array, "pos components"]:
         """(W, U) at every grid point of one frame"""
         return jnp.concatenate([self.ocean_current[frame], self.wind[frame]], axis=-1)
 
@@ -80,17 +80,21 @@ def ocean_transition(grid: PlaneGrid, polar: Polar, n_headings: int, step_hours:
 def ocean_world(
     grid: PlaneGrid,
     states: ProductDomain,
-    forecast: Float[Array, "pos channels"],
+    forecast: Float[Array, "pos components"],
     error: ForecastError,
     transition: OceanTransition,
-    noise_ms: Float[Array, " channels"],
+    noise_ms: Float[Array, " components"],
     start_box: Bool[Array, " pos"],
     target_box: Bool[Array, " pos"],
 ) -> World:
     """The problem a forecast poses: the boat starts at a grid point drawn uniformly from `start_box`, its target is drawn uniformly from `target_box`, and the field is that forecast plus an error"""
     return World(
         state_domain=ProductDomain(
-            {"position": grid.narrow(start_box), "target": grid.narrow(target_box), "field": FunctionDomain(states, BoxDomain((CHANNELS,)))}
+            {
+                "position": grid.narrow(start_box),
+                "target": grid.narrow(target_box),
+                "field": FunctionDomain(states, BoxDomain((COMPONENTS,))),
+            }
         ),
         prior=ProductPrior({"position": Uniform(), "target": Uniform(), "field": ForecastPrior(forecast, error, grid)}),
         transition=transition,
@@ -104,9 +108,9 @@ def ocean_objective(states: ProductDomain, grid: PlaneGrid, box: Bool[Array, " p
 
 
 def learn_objective(
-    states: ProductDomain, box: Bool[Array, " pos"], prior_log_variance: Float[Array, " channels"], scored: slice
+    states: ProductDomain, box: Bool[Array, " pos"], prior_log_variance: Float[Array, " components"], scored: tuple[int, ...]
 ) -> LearnRegion:
-    """What the episode is scored on: information about the field's `scored` channels over the grid points `box` marks, waypoints aimed inside it"""
+    """What the episode is scored on: information about the field's `scored` components over the grid points `box` marks, waypoints aimed inside it"""
     return LearnRegion(states.narrow(box), prior_log_variance, scored)
 
 

@@ -2,8 +2,8 @@
 
 import dataclasses
 
-from zermelo.experiments.ocean_waypoint.schema import BeliefBlockConfig, BeliefConfig, BeliefKernelConfig, ProblemConfig, Resources
-from zermelo.problems.ocean import CHANNELS, OCEAN_CURRENT, WIND
+from zermelo.experiments.ocean_waypoint.schema import BeliefConfig, BeliefGroupConfig, BeliefKernelConfig, ProblemConfig, Resources
+from zermelo.problems.ocean import OCEAN_CURRENT, WIND
 
 GULF_STREAM_2019JUN = ProblemConfig(
     data_path="zermelo/problems/ocean/data/gulf_stream_2019jun.npz",
@@ -39,21 +39,21 @@ GULF_STREAM_2019JUN = ProblemConfig(
 """The Gulf Stream after Cape Hatteras, one frame of June 2019 held still, a sailboat of Saildrone speed"""
 
 
-def _block(place_km: float, amplitude: float, noise: float) -> BeliefBlockConfig:
+def _group(components: tuple[int, ...], place_km: float, amplitude: float, noise: float) -> BeliefGroupConfig:
     """One Gaussian process over (u, v) at the correlation length and spread of what it learns"""
-    return BeliefBlockConfig(
-        width=2,
+    return BeliefGroupConfig(
+        components=list(components),
         kernel_factors=[BeliefKernelConfig(kernel="gpjax.kernels.Matern52", parts=["position"], lengthscale=[place_km] * 2)],
         amplitude=amplitude,
         noise=noise,
     )
 
 
-def _belief(forecast_as_prior_mean: bool, ocean_current: BeliefBlockConfig, wind: BeliefBlockConfig) -> BeliefConfig:
-    """A belief over the field as two blocks, no refitting"""
+def _belief(forecast_as_prior_mean: bool, ocean_current: BeliefGroupConfig, wind: BeliefGroupConfig) -> BeliefConfig:
+    """A belief over the field as two groups, no refitting"""
     return BeliefConfig(
         oracle=False,
-        blocks=[ocean_current, wind],
+        groups=[ocean_current, wind],
         forecast_as_prior_mean=forecast_as_prior_mean,
         n_features=256,
         refit=False,
@@ -69,14 +69,18 @@ WIND_PLACE_KM, WIND_AMPLITUDE = 180.0, 4.5
 def error_belief() -> BeliefConfig:
     """Learns field - forecast about the forecast: W - F correlated over 40 km, spread 0.38 m/s"""
     return _belief(
-        True, _block(40.0, 0.38, GULF_STREAM_2019JUN.noise_ms), _block(WIND_PLACE_KM, WIND_AMPLITUDE, GULF_STREAM_2019JUN.wind_noise_ms)
+        True,
+        _group(OCEAN_CURRENT, 40.0, 0.38, GULF_STREAM_2019JUN.noise_ms),
+        _group(WIND, WIND_PLACE_KM, WIND_AMPLITUDE, GULF_STREAM_2019JUN.wind_noise_ms),
     )
 
 
 def field_belief() -> BeliefConfig:
     """Learns the field about zero: W correlated over 55 km, spread 0.48 m/s; U over WIND_PLACE_KM, spread WIND_AMPLITUDE"""
     return _belief(
-        False, _block(55.0, 0.48, GULF_STREAM_2019JUN.noise_ms), _block(WIND_PLACE_KM, WIND_AMPLITUDE, GULF_STREAM_2019JUN.wind_noise_ms)
+        False,
+        _group(OCEAN_CURRENT, 55.0, 0.48, GULF_STREAM_2019JUN.noise_ms),
+        _group(WIND, WIND_PLACE_KM, WIND_AMPLITUDE, GULF_STREAM_2019JUN.wind_noise_ms),
     )
 
 
@@ -85,14 +89,8 @@ def oracle_belief() -> BeliefConfig:
     return dataclasses.replace(field_belief(), oracle=True)
 
 
-OCEAN_CURRENT_BLOCK, WIND_BLOCK = 0, 1
-"""Which block of the belief holds W, and which U"""
-
-LEARNED_BLOCKS = {"ocean_current": (OCEAN_CURRENT_BLOCK,), "wind": (WIND_BLOCK,), "both": (OCEAN_CURRENT_BLOCK, WIND_BLOCK)}
-"""The blocks a learning rule counts, by what the episode is scored on"""
-
-SCORED_CHANNELS = {"ocean_current": OCEAN_CURRENT, "wind": WIND, "both": slice(0, CHANNELS)}
-"""The channels of the field a learning episode is scored on, by what it is scored on"""
+SCORED_COMPONENTS = {"ocean_current": OCEAN_CURRENT, "wind": WIND, "both": OCEAN_CURRENT + WIND}
+"""The components of the field a learning episode is scored on and a learning rule counts, by what it is scored on"""
 
 
 PLANNING_BUDGET = 25

@@ -35,69 +35,65 @@ def query_context(data: Dataset) -> Float[Array, " n_context"]:
     return data.context_value[(-1,) * (data.context_value.ndim - 1)]
 
 
-def magnitude(values: Float[Array, "*batch n m"], belief: Belief, block: int) -> Float[Array, "*batch n"]:
-    """||values[block's channels]||"""
-    return jnp.linalg.norm(values[..., belief.channels((block,))], axis=-1)
+def magnitude(values: Float[Array, "*batch n m"], components: tuple[int, ...]) -> Float[Array, "*batch n"]:
+    """||values[components]||"""
+    return jnp.linalg.norm(values[..., jnp.asarray(components)], axis=-1)
 
 
 @dataclass(frozen=True)
 class MaxMagnitude(Utility):
-    """U(D) = max over the counted rows of ||state_value|| over one block's channels, the incumbent beta_n"""
+    """U(D) = max over the counted rows of ||state_value[components]||, the incumbent beta_n"""
 
-    block: int
-    """Which block of the field is measured"""
+    components: tuple[int, ...]
+    """Which components of the field are measured"""
 
     def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
         # 0.0 is the infimum of a magnitude, so a set with no counted row scores the floor rather than -inf
-        return jnp.max(
-            jnp.where(row_counts_toward_utility(data, candidates), magnitude(data.state_value, belief, self.block), 0.0), axis=-1
-        )
+        return jnp.max(jnp.where(row_counts_toward_utility(data, candidates), magnitude(data.state_value, self.components), 0.0), axis=-1)
 
 
 @dataclass(frozen=True)
 class SumMagnitude(Utility):
-    """U(D) = sum over the counted rows of ||state_value|| over one block's channels, the magnitude collected over the set"""
+    """U(D) = sum over the counted rows of ||state_value[components]||, the magnitude collected over the set"""
 
-    block: int
-    """Which block of the field is measured"""
+    components: tuple[int, ...]
+    """Which components of the field are measured"""
 
     def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
-        return jnp.sum(
-            jnp.where(row_counts_toward_utility(data, candidates), magnitude(data.state_value, belief, self.block), 0.0), axis=-1
-        )
+        return jnp.sum(jnp.where(row_counts_toward_utility(data, candidates), magnitude(data.state_value, self.components), 0.0), axis=-1)
 
 
 @dataclass(frozen=True)
 class TotalVariance(Utility):
-    """U(D) = - sum over the candidate states c and the channels of the counted blocks of Var[f(c) | the states D was read at]
+    """U(D) = - sum over the candidate states c and j in components of Var[f_j(c) | the states D was read at]
 
-    U(D) = sum over counted blocks b of widths[b] * [ - sum over c of k_n,b(c, c)  +  trace( k_n,b(C, w) [k_n,b(w, w) + 1e-6 I]^-1 k_n,b(w, C) ) ]
+    U(D) = sum over j in components of [ - sum over c of k_n,g(c, c)  +  trace( k_n,g(C, w) [k_n,g(w, w) + 1e-6 I]^-1 k_n,g(w, C) ) ],   g = group_of[j]
     w = the rows of D past the belief's own buffer, not yet conditioned on, taken as exact readings
     """
 
-    blocks: tuple[int, ...]
-    """Which blocks of the field count"""
+    components: tuple[int, ...]
+    """Which components of the field count"""
 
     def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
         context = query_context(data)
         candidate_states = jnp.flatnonzero(candidates.live)  # (n_candidates,)
-        channels = belief.channels(tuple(self.blocks))
-        variance_now = jnp.sum(belief.predict(candidate_states, context)[1][:, channels])  # sum over c and channels of k_n(c, c)
+        components = jnp.asarray(self.components)
+        variance_now = jnp.sum(belief.predict(candidate_states, context)[1][:, components])  # sum over c and components of k_n(c, c)
         imagined_states, imagined_is_live = imagined_rows(belief, data)
         if imagined_states.shape[-1] == 0:
             return jnp.broadcast_to(-variance_now, imagined_states.shape[:-1])
         if imagined_states.ndim == 1:
             return (
-                belief.over_blocks(
-                    variance_removed(belief, candidate_states, imagined_states, imagined_is_live, context), tuple(self.blocks)
+                belief.over_components(
+                    variance_removed(belief, candidate_states, imagined_states, imagined_is_live, context), self.components
                 )
                 - variance_now
             )
-        # one leading batch element at a time: the block to the candidates is (n_candidates, n_candidates, n_imagined) per walk
+        # one leading batch element at a time: the covariance to the candidates is (n_candidates, n_candidates, n_imagined) per walk
         return (
             jnp.stack(
                 [
-                    belief.over_blocks(variance_removed(belief, candidate_states, states, is_live, context), tuple(self.blocks))
+                    belief.over_components(variance_removed(belief, candidate_states, states, is_live, context), self.components)
                     for states, is_live in zip(imagined_states, imagined_is_live, strict=True)
                 ]
             )
@@ -111,52 +107,50 @@ def variance_removed(
     imagined_states: Int[Array, "*batch n_imagined"],
     imagined_is_live: Bool[Array, "*batch n_imagined"],
     context: Float[Array, " n_context"],
-) -> Float[Array, "*batch blocks"]:
-    """trace( k_n(C, w) [k_n(w, w) + 1e-6 I]^-1 k_n(w, C) ) per block, a dead row of `w` made an identity row that removes nothing"""
+) -> Float[Array, "*batch groups"]:
+    """trace( k_n(C, w) [k_n(w, w) + 1e-6 I]^-1 k_n(w, C) ) per group, a dead row of `w` made an identity row that removes nothing"""
     both_live = (imagined_is_live[..., :, None] & imagined_is_live[..., None, :])[..., None, :, :]  # (*batch, 1, n_imagined, n_imagined)
     among_imagined = jnp.where(both_live, belief.posterior_covariance(imagined_states, imagined_states, context), 0.0)
     among_imagined = among_imagined + jnp.where(imagined_is_live, 1e-6, 1.0)[..., None, None, :] * jnp.eye(imagined_states.shape[-1])
-    to_candidates = belief.posterior_covariance(candidate_states, imagined_states, context)  # (*batch, blocks, n_candidates, n_imagined)
+    to_candidates = belief.posterior_covariance(candidate_states, imagined_states, context)  # (*batch, groups, n_candidates, n_imagined)
     to_candidates = jnp.where(imagined_is_live[..., None, None, :], to_candidates, 0.0)
     whitened = solve_triangular(
         jnp.linalg.cholesky(among_imagined), jnp.swapaxes(to_candidates, -1, -2), lower=True
-    )  # (*batch, blocks, n_imagined, n_candidates)
+    )  # (*batch, groups, n_imagined, n_candidates)
     return jnp.sum(whitened**2, axis=(-1, -2))
 
 
 @dataclass(frozen=True)
 class PosteriorSpread(Utility):
-    """The posterior standard deviations at the counted rows' states, summed:  sum over rows of sqrt( sum over the counted blocks' channels of var )"""
+    """The posterior standard deviations at the counted rows' states, summed:  sum over rows of sqrt( sum over j in components of var_j )"""
 
-    blocks: tuple[int, ...]
-    """Which blocks of the field count"""
+    components: tuple[int, ...]
+    """Which components of the field count"""
 
     def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
-        var = belief.predict(data.state_index, query_context(data))[1][..., belief.channels(tuple(self.blocks))]
-        spread = jnp.sqrt(jnp.sum(var, axis=-1))  # channels independent
+        var = belief.predict(data.state_index, query_context(data))[1][..., jnp.asarray(self.components)]
+        spread = jnp.sqrt(jnp.sum(var, axis=-1))  # components independent
         return jnp.sum(jnp.where(row_counts_toward_utility(data, candidates), spread, 0.0), axis=-1)
 
 
 @dataclass(frozen=True)
 class ExpectedImprovement(Utility):
-    """The largest `E[(|f(z)| - beta)^+]` over the counted rows' states, f one block's one channel, `beta` the largest magnitude collected so far"""
+    """The largest `E[(|f(z)| - beta)^+]` over the counted rows' states, f the one component, `beta` the largest magnitude collected so far"""
 
-    block: int
-    """Which block of the field is measured, one channel wide"""
+    components: tuple[int, ...]
+    """Which component of the field is measured, exactly one"""
 
     def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
-        channel = belief.channels((self.block,))
-        if channel.shape[0] != 1:
+        if len(self.components) != 1:
             raise ValueError(
-                f"a closed-form improvement of a magnitude needs a one-channel block, and block {self.block} has {channel.shape[0]}"
+                f"a closed-form improvement of a magnitude is over one component, and {self.components} names {len(self.components)}"
             )
+        component = self.components[0]
         collected = belief.data  # the incumbent comes from what has actually been read, not from the scored rows
         # zero where nothing has been read yet, which is the infimum of a magnitude and makes the tails below disjoint
-        beta = jnp.max(
-            jnp.where(row_counts_toward_utility(collected, candidates), magnitude(collected.state_value, belief, self.block), 0.0)
-        )
+        beta = jnp.max(jnp.where(row_counts_toward_utility(collected, candidates), magnitude(collected.state_value, self.components), 0.0))
         mean, var = belief.predict(data.state_index, query_context(data))
-        mu, spread = mean[..., channel[0]], jnp.sqrt(jnp.maximum(var[..., channel[0]], 1e-12))  # (*batch, n): spread floored to 1e-6
+        mu, spread = mean[..., component], jnp.sqrt(jnp.maximum(var[..., component], 1e-12))  # (*batch, n): spread floored to 1e-6
         # |f| clears beta above or below, disjointly for beta >= 0, so the two tails add. Each is
         # `E[(x - c)^+] = gap * Phi(gap / spread) + spread * phi(gap / spread)` at its own gap
         over, under = (mu - beta) / spread, (-mu - beta) / spread
@@ -166,18 +160,18 @@ class ExpectedImprovement(Utility):
 
 @dataclass(frozen=True)
 class UpperConfidence(Utility):
-    """The largest optimistic magnitude `||mu(z)|| + c * s(z)` over one block's channels at the counted rows' states"""
+    """The largest optimistic magnitude `||mu(z)[components]|| + c * s(z)` at the counted rows' states"""
 
     c: float
     """How much of the spread to add"""
 
-    block: int
-    """Which block of the field is measured"""
+    components: tuple[int, ...]
+    """Which components of the field are measured"""
 
     def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
         mean, var = belief.predict(data.state_index, query_context(data))
-        channels = belief.channels((self.block,))
-        bound = jnp.linalg.norm(mean[..., channels], axis=-1) + self.c * jnp.sqrt(jnp.sum(var[..., channels], axis=-1))
+        components = jnp.asarray(self.components)
+        bound = jnp.linalg.norm(mean[..., components], axis=-1) + self.c * jnp.sqrt(jnp.sum(var[..., components], axis=-1))
         return jnp.max(jnp.where(row_counts_toward_utility(data, candidates), bound, 0.0), axis=-1)  # 0.0 floors a magnitude
 
 
@@ -205,8 +199,8 @@ class Uniform(Utility):
         return jax.random.uniform(key, data.state_index.shape[:-1])
 
 
-def half_log_det(covariance: Float[Array, "*batch blocks n n"], noise: Float[Array, " blocks"]) -> Float[Array, "*batch blocks"]:
-    """(1/2) log det( I + covariance / noise^2 ) per block"""
+def half_log_det(covariance: Float[Array, "*batch groups n n"], noise: Float[Array, " groups"]) -> Float[Array, "*batch groups"]:
+    """(1/2) log det( I + covariance / noise^2 ) per group"""
     chol = jnp.linalg.cholesky(covariance / noise[:, None, None] ** 2 + jnp.eye(covariance.shape[-1]))
     return jnp.sum(jnp.log(jnp.diagonal(chol, axis1=-2, axis2=-1)), axis=-1)
 
@@ -219,14 +213,14 @@ def imagined_rows(belief: Belief, data: Dataset) -> tuple[Int[Array, "*batch n_i
 
 @dataclass(frozen=True)
 class InformationGain(Utility):
-    """U(D) = sum over the counted blocks b of (widths[b] / 2) log det( I + K_n,b(w, w) / noise_b^2 ), the information the imagined rows
-    carry about those blocks' channels
+    """U(D) = sum over j in components of (1/2) log det( I + K_n,g(w, w) / noise_g^2 ),   g = group_of[j]: the information the imagined
+    rows carry about those components
 
     w = the rows of D past the belief's own buffer, a dead row made an identity row that carries nothing
     """
 
-    blocks: tuple[int, ...]
-    """Which blocks of the field count"""
+    components: tuple[int, ...]
+    """Which components of the field count"""
 
     def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
         context = query_context(data)
@@ -235,20 +229,20 @@ class InformationGain(Utility):
             return jnp.zeros(imagined_states.shape[:-1])
         both_live = (imagined_is_live[..., :, None] & imagined_is_live[..., None, :])[..., None, :, :]
         among_imagined = jnp.where(both_live, belief.posterior_covariance(imagined_states, imagined_states, context), 0.0)
-        return belief.over_blocks(half_log_det(among_imagined, belief.reading_noise), tuple(self.blocks))
+        return belief.over_components(half_log_det(among_imagined, belief.reading_noise), self.components)
 
 
 @dataclass(frozen=True)
 class RegionInformation(Utility):
-    """U(D) = sum over the counted blocks b of (widths[b] / 2) [ log det( I + K_n,b(w, w) / noise_b^2 ) - log det( I + S_b / noise_b^2 ) ],
-    the information the imagined rows carry about those blocks' channels at the candidate states C
+    """U(D) = sum over j in components of (1/2) [ log det( I + K_n,g(w, w) / noise_g^2 ) - log det( I + S_g / noise_g^2 ) ],   g = group_of[j]:
+    the information the imagined rows carry about those components at the candidate states C
 
-    S_b = K_n,b(w, w) - K_n,b(w, C) [K_n,b(C, C) + 1e-6 I]^-1 K_n,b(C, w)
+    S_g = K_n,g(w, w) - K_n,g(w, C) [K_n,g(C, C) + 1e-6 I]^-1 K_n,g(C, w)
     w = the rows of D past the belief's own buffer, a dead row made an identity row that carries nothing
     """
 
-    blocks: tuple[int, ...]
-    """Which blocks of the field count"""
+    components: tuple[int, ...]
+    """Which components of the field count"""
 
     def __call__(self, key: PRNGKeyArray, belief: Belief, data: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
         context = query_context(data)
@@ -256,26 +250,26 @@ class RegionInformation(Utility):
         if imagined_states.shape[-1] == 0:
             return jnp.zeros(imagined_states.shape[:-1])
         candidate_states = jnp.flatnonzero(candidates.live)  # (n_candidates,)
-        among_candidates = belief.posterior_covariance(candidate_states, candidate_states, context)  # (blocks, n_candidates, n_candidates)
+        among_candidates = belief.posterior_covariance(candidate_states, candidate_states, context)  # (groups, n_candidates, n_candidates)
         chol_candidates = jnp.linalg.cholesky(among_candidates + 1e-6 * jnp.eye(candidate_states.shape[0]))
         inverse_candidates = jnp.vectorize(lambda chol: cho_solve((chol, True), jnp.eye(chol.shape[0])), signature="(n,n)->(n,n)")(
             chol_candidates
-        )  # (blocks, n_candidates, n_candidates): [K_n(C, C) + 1e-6 I]^-1
+        )  # (groups, n_candidates, n_candidates): [K_n(C, C) + 1e-6 I]^-1
 
         def one(states: Int[Array, "*batch n_imagined"], is_live: Bool[Array, "*batch n_imagined"]) -> Float[Array, " *batch"]:
-            """The bracket weighted and summed over the counted blocks, one per leading batch element"""
+            """The bracket summed over the components, one per leading batch element"""
             both_live = (is_live[..., :, None] & is_live[..., None, :])[..., None, :, :]
             among_imagined = jnp.where(both_live, belief.posterior_covariance(states, states, context), 0.0)
             to_candidates = jnp.where(
                 is_live[..., None, :, None], belief.posterior_covariance(states, candidate_states, context), 0.0
-            )  # (*batch, blocks, n_imagined, n_candidates)
+            )  # (*batch, groups, n_imagined, n_candidates)
             explained = jnp.einsum("...bic,bcd,...bjd->...bij", to_candidates, inverse_candidates, to_candidates)
             noise = belief.reading_noise
-            return belief.over_blocks(
-                half_log_det(among_imagined, noise) - half_log_det(among_imagined - explained, noise), tuple(self.blocks)
+            return belief.over_components(
+                half_log_det(among_imagined, noise) - half_log_det(among_imagined - explained, noise), self.components
             )
 
         if imagined_states.ndim <= 2:
             return one(imagined_states, imagined_is_live)
-        # one leading batch element at a time: the block to the candidates is (n_candidates, n_imagined, n_candidates) per walk
+        # one leading batch element at a time: the covariance to the candidates is (n_candidates, n_imagined, n_candidates) per walk
         return jnp.stack([one(states, is_live) for states, is_live in zip(imagined_states, imagined_is_live, strict=True)])

@@ -1,7 +1,6 @@
 """The contract: `D_n` as a `Dataset`, one field of a belief's as a `BeliefField`, and what every model of the field answers"""
 
 import dataclasses
-import itertools
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Self
@@ -87,9 +86,9 @@ class BeliefField:
 
 
 class Belief(ABC):
-    """A model of the field over `positions`, conditioned on `data`, as independent blocks of its channels:
+    """A model of the field `f: state -> R^components` over `positions`, conditioned on `data`
 
-    f = (f_1, ..., f_B),   block b the next widths[b] channels
+    Components modelled together form a group; groups are independent of each other.
     """
 
     positions: Domain
@@ -99,28 +98,17 @@ class Belief(ABC):
 
     @property
     @abstractmethod
-    def widths(self) -> tuple[int, ...]:
-        """Channels in each block, summing to the field's `m`"""
+    def group_of(self) -> Int[Array, " components"]:
+        """Which group models each component, groups numbered from 0"""
 
     @property
     @abstractmethod
-    def reading_noise(self) -> Float[Array, " blocks"]:
-        """Standard deviation of a reading's error per channel, one per block"""
+    def reading_noise(self) -> Float[Array, " groups"]:
+        """Standard deviation of a reading's error, one per group"""
 
-    def edges(self) -> list[tuple[int, int]]:
-        """(first channel, one past the last) of each block"""
-        ends = list(itertools.accumulate(self.widths))
-        return list(zip([0, *ends[:-1]], ends, strict=True))
-
-    def channels(self, blocks: tuple[int, ...]) -> Int[Array, " channels"]:
-        """The field's channel indices the `blocks` cover, in order"""
-        edges = self.edges()
-        return jnp.concatenate([jnp.arange(*edges[b]) for b in blocks])
-
-    def over_blocks(self, per_block: Float[Array, "*batch blocks"], blocks: tuple[int, ...]) -> Float[Array, " *batch"]:
-        """sum over b in `blocks` of widths[b] * per_block[..., b]"""
-        chosen = jnp.asarray(blocks)
-        return jnp.sum(jnp.asarray(self.widths)[chosen] * jnp.take(per_block, chosen, axis=-1), axis=-1)
+    def over_components(self, per_group: Float[Array, "*batch groups"], components: tuple[int, ...]) -> Float[Array, " *batch"]:
+        """sum over j in `components` of per_group[..., group_of[j]]"""
+        return jnp.sum(jnp.take(per_group, self.group_of[jnp.asarray(components)], axis=-1), axis=-1)
 
     @abstractmethod
     def with_prior_mean(self, prior_mean: Function | None) -> Self:
@@ -134,13 +122,13 @@ class Belief(ABC):
     def predict(
         self, state_index: Int[Array, "*batch n"], context: Float[Array, " n_context"]
     ) -> tuple[Float[Array, "*batch n m"], Float[Array, "*batch n m"]]:
-        """Posterior mean and per-component variance at those states, at one context"""
+        """Posterior mean and variance of each component at those states, at one context"""
 
     @abstractmethod
     def posterior_covariance(
         self, a: Int[Array, "*batch_a n_a"], b: Int[Array, "*batch_b n_b"], context: Float[Array, " n_context"]
-    ) -> Float[Array, "*batch blocks n_a n_b"]:
-        """`k_n(a, b)` of each block for every state `a` of the first set and `b` of the second, at one context; the batch axes broadcast"""
+    ) -> Float[Array, "*batch groups n_a n_b"]:
+        """`k_n(a, b)` of each group for every state `a` of the first set and `b` of the second, at one context; the batch axes broadcast"""
 
     @abstractmethod
     def mean(self, context: Float[Array, " n_context"]) -> BeliefField:

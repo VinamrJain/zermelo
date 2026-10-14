@@ -29,10 +29,10 @@ from matplotlib.lines import Line2D  # noqa: E402
 from matplotlib.patches import Ellipse  # noqa: E402
 from matplotlib.projections.polar import PolarAxes  # noqa: E402
 
-from zermelo.experiments.ocean_waypoint.metrics.data import channels, claimed  # noqa: E402
+from zermelo.experiments.ocean_waypoint.metrics.data import belief_groups, channels, claimed  # noqa: E402
 from zermelo.experiments.ocean_waypoint.schema import Resources  # noqa: E402
 from zermelo.problems.ocean import KM_PER_DEGREE, OCEAN_CURRENT, PlaneGrid  # noqa: E402
-from zermelo.problems.ocean import WIND as WIND_CHANNELS  # noqa: E402
+from zermelo.problems.ocean import WIND as WIND_COMPONENTS  # noqa: E402
 from zermelo.problems.ocean.transition import Polar  # noqa: E402
 
 SUBFRAMES = 6
@@ -161,7 +161,7 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
         r, c = int(np.argmin(np.abs(lat - point[0]))), int(np.argmin(np.abs(lon - point[1])))
         return np.nan_to_num(np.array([sheet_u[r, c], sheet_v[r, c]]))
 
-    truth = held["objective_state/truth"][0][:, OCEAN_CURRENT]  # (n_candidates, 2) as (u, v), still over the episode
+    truth = held["objective_state/truth"][0][:, list(OCEAN_CURRENT)]  # (n_candidates, 2) as (u, v), still over the episode
     true_u, true_v = on_grid(truth[:, 0]), on_grid(truth[:, 1])
     true_speed = np.hypot(true_u, true_v)
     track, target = held["state/position"].astype(float), held["state/target"][0].astype(float)  # (T + 1, 2) and (2,) as (lat, lon)
@@ -336,9 +336,9 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     (rose_wind,) = rose.plot([], [], color=WIND, lw=3)
 
     # bottom: what the belief holds so far, its mean on the truth's scale and its spread on the prior's
-    current_block, wind_block = config["belief"]["blocks"]  # the ocean current's Gaussian process, then the wind's
-    prior_spread = float(np.sqrt(2.0)) * float(current_block["amplitude"])  # (var_u + var_v)^(1/2) before any reading
-    wind_prior_spread = float(np.sqrt(2.0)) * float(wind_block["amplitude"])
+    (_, current_amplitude), (_, wind_amplitude) = belief_groups(config)  # the ocean current's Gaussian process, then the wind's
+    prior_spread = float(np.sqrt(2.0)) * current_amplitude  # (var_u + var_v)^(1/2) before any reading
+    wind_prior_spread = float(np.sqrt(2.0)) * wind_amplitude
     blank = on_grid(np.zeros(candidates.size))
     error_mesh = error_ax.pcolormesh(lon, lat, blank, shading="nearest", cmap="YlGnBu_r", vmin=0, vmax=np.nanmax(true_speed))
     learned_mesh = learned_ax.pcolormesh(lon, lat, blank, shading="nearest", cmap="viridis", vmin=0, vmax=prior_spread)
@@ -400,7 +400,7 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
         mean_t, spread_t = claimed(claims[t], OCEAN_CURRENT)
         error_mesh.set_array(on_grid(np.linalg.norm(mean_t, axis=-1)).ravel())
         learned_mesh.set_array(on_grid(spread_t).ravel())
-        wind_mesh.set_array(on_grid(claimed(claims[t], WIND_CHANNELS)[1]).ravel())
+        wind_mesh.set_array(on_grid(claimed(claims[t], WIND_COMPONENTS)[1]).ravel())
         if walks is not None:
             steps = walks[t]
             kept = np.r_[True, steps[1:] != steps[:-1]]  # the walk ends where its index stops changing

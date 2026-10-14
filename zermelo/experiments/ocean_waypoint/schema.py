@@ -101,11 +101,11 @@ class BeliefKernelConfig:
 
 
 @dataclass
-class BeliefBlockConfig:
-    """One Gaussian process over a block of the field's channels"""
+class BeliefGroupConfig:
+    """One Gaussian process over a group of the field's components"""
 
-    width: int = MISSING
-    """How many channels the block holds"""
+    components: list[int] = MISSING
+    """Which components of the field the group models"""
 
     kernel_factors: list[BeliefKernelConfig] = MISSING
     """The factors the kernel is a product of"""
@@ -119,13 +119,13 @@ class BeliefBlockConfig:
 
 @dataclass
 class BeliefConfig:
-    """A method's own model of the field: independent blocks, the ocean current then the wind"""
+    """A method's own model of the field: independent groups of components, the ocean current and the wind"""
 
     oracle: bool = MISSING
     """Whether the method is handed the true field instead of fitting one"""
 
-    blocks: list[BeliefBlockConfig] = MISSING
-    """One Gaussian process per block of channels, in the field's order"""
+    groups: list[BeliefGroupConfig] = MISSING
+    """One Gaussian process per group of components, the groups together covering every component once"""
 
     forecast_as_prior_mean: bool = MISSING
     """Whether the belief learns the field about the forecast, or about zero"""

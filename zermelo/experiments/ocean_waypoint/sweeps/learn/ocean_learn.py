@@ -6,11 +6,11 @@ from zermelo.experiments.ocean_waypoint.registry import (
     CLAIM_EVERY_STEPS,
     GULF_STREAM_2019JUN,
     HORIZON_LENGTH,
-    LEARNED_BLOCKS,
     N_SEEDS,
     PLANNING_BUDGET,
     RECORDED,
     RESOURCES,
+    SCORED_COMPONENTS,
     STILL_FRAMES,
     field_belief,
 )
@@ -57,9 +57,9 @@ for date, frame_hour in STILL_FRAMES.items():
         resources=RESOURCES,
         arms=[
             # E over walks tau of [ sum over c of Var(c | D) - Var(c | D + obs(tau)) ]
-            arm("evi", _method(total_variance(LEARNED_BLOCKS[LEARNED]), n_walks=N_WALKS, penalty_rate=PENALTY_RATE), field_belief()),
+            arm("evi", _method(total_variance(SCORED_COMPONENTS[LEARNED]), n_walks=N_WALKS, penalty_rate=PENALTY_RATE), field_belief()),
             # the posterior spread at the destination alone: the point information gain, since every destination is a candidate
-            arm("max_var", _method(posterior_spread(LEARNED_BLOCKS[LEARNED]), n_walks=0, penalty_rate=0.0), field_belief()),
+            arm("max_var", _method(posterior_spread(SCORED_COMPONENTS[LEARNED]), n_walks=0, penalty_rate=0.0), field_belief()),
             arm("rand_wp", _method(uniform(), n_walks=0, penalty_rate=0.0), field_belief()),
             arm("rand_act", None, field_belief()),  # no rule at all
         ],

@@ -99,32 +99,32 @@ def _built(path: str, **arguments: Any) -> Implementation:
 
 def max_magnitude() -> Implementation:
     """The largest reading magnitude among the cells scored"""
-    return _built("zermelo.methods.waypoint_bo.utility.MaxMagnitude", block=0)
+    return _built("zermelo.methods.waypoint_bo.utility.MaxMagnitude", components=(0, 1))
 
 
 def sum_magnitude() -> Implementation:
     """The reading magnitudes among the cells scored, summed"""
-    return _built("zermelo.methods.waypoint_bo.utility.SumMagnitude", block=0)
+    return _built("zermelo.methods.waypoint_bo.utility.SumMagnitude", components=(0, 1))
 
 
 def total_variance() -> Implementation:
     """Minus the posterior variance summed over every candidate state, given where the dataset was read"""
-    return _built("zermelo.methods.waypoint_bo.utility.TotalVariance", blocks=(0,))
+    return _built("zermelo.methods.waypoint_bo.utility.TotalVariance", components=(0, 1))
 
 
 def posterior_spread() -> Implementation:
     """The posterior standard deviations at the scored cells, summed"""
-    return _built("zermelo.methods.waypoint_bo.utility.PosteriorSpread", blocks=(0,))
+    return _built("zermelo.methods.waypoint_bo.utility.PosteriorSpread", components=(0, 1))
 
 
 def upper_confidence(c: float) -> Implementation:
     """The largest optimistic magnitude `||mean|| + c * spread` at the scored cells"""
-    return _built("zermelo.methods.waypoint_bo.utility.UpperConfidence", c=c, block=0)
+    return _built("zermelo.methods.waypoint_bo.utility.UpperConfidence", c=c, components=(0, 1))
 
 
 def expected_improvement() -> Implementation:
     """`E[(|f| - beta)^+]` at each scored cell in closed form, `beta` the largest magnitude read so far"""
-    return _built("zermelo.methods.waypoint_bo.utility.ExpectedImprovement", block=0)
+    return _built("zermelo.methods.waypoint_bo.utility.ExpectedImprovement", components=(0, 1))
 
 
 def uniform() -> Implementation:
