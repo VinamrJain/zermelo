@@ -2,7 +2,8 @@
 
 import dataclasses
 
-from zermelo.experiments.ocean_waypoint.schema import BeliefConfig, BeliefKernelConfig, ProblemConfig, Resources
+from zermelo.experiments.ocean_waypoint.schema import BeliefBlockConfig, BeliefConfig, BeliefKernelConfig, ProblemConfig, Resources
+from zermelo.problems.ocean import CHANNELS, OCEAN_CURRENT, WIND
 
 GULF_STREAM_2019JUN = ProblemConfig(
     data_path="zermelo/problems/ocean/data/gulf_stream_2019jun.npz",
@@ -18,6 +19,7 @@ GULF_STREAM_2019JUN = ProblemConfig(
     downwind_factor=0.8,
     wind_scale_ms=3.5,  # 7 knots: 0.58 of top speed at 6 knots, 0.94 at 20
     noise_ms=0.1,
+    wind_noise_ms=0.5,  # an anemometer
     error_scale=0.0,
     error_lengthscale_km=100.0,
     error_jitter=1e-4,
@@ -25,46 +27,72 @@ GULF_STREAM_2019JUN = ProblemConfig(
     lat_max=42.0,
     lon_min=-75.0,
     lon_max=-55.0,
-    target_lat_min=36.4,  # the middle three fifths of the box, so no target sits on its rim
+    target_lat_min=36.4,  # the middle three fifths of the box, where the boat starts and every target is drawn
     target_lat_max=40.6,
     target_lon_min=-71.0,
     target_lon_max=-59.0,
-    start_lat=37.0,
-    start_lon=-65.0,
     arrival_km=20.0,
     objective="reach",
+    n_targets=4,
+    learned="both",
 )
 """The Gulf Stream after Cape Hatteras, one frame of June 2019 held still, a sailboat of Saildrone speed"""
 
 
-def _belief(forecast_as_prior_mean: bool, place_km: float, amplitude: float) -> BeliefConfig:
-    """A belief at the correlation length and spread of what it learns, no refitting"""
-    return BeliefConfig(
-        oracle=False,
-        forecast_as_prior_mean=forecast_as_prior_mean,
+def _block(place_km: float, amplitude: float, noise: float) -> BeliefBlockConfig:
+    """One Gaussian process over (u, v) at the correlation length and spread of what it learns"""
+    return BeliefBlockConfig(
+        width=2,
         kernel_factors=[BeliefKernelConfig(kernel="gpjax.kernels.Matern52", parts=["position"], lengthscale=[place_km] * 2)],
         amplitude=amplitude,
-        noise=0.1,
+        noise=noise,
+    )
+
+
+def _belief(forecast_as_prior_mean: bool, ocean_current: BeliefBlockConfig, wind: BeliefBlockConfig) -> BeliefConfig:
+    """A belief over the field as two blocks, no refitting"""
+    return BeliefConfig(
+        oracle=False,
+        blocks=[ocean_current, wind],
+        forecast_as_prior_mean=forecast_as_prior_mean,
         n_features=256,
         refit=False,
         refit_steps=100,  # unread while refitting is off, and stated anyway
     )
 
 
-# Correlation lengths and standard deviations measured over the box on the 2019-06-16 00Z frame
+# Correlation lengths and standard deviations fitted by marginal likelihood over the target box on the 2019-06-16 00Z frame
+WIND_PLACE_KM, WIND_AMPLITUDE = 180.0, 4.5
+"""U about zero: how far it stays correlated, and its root mean square per component (its mean over the box is 4.9 m/s, so the spread covers it)"""
+
+
 def error_belief() -> BeliefConfig:
-    """Learns W - F about the forecast: correlated over 40 km, spread 0.38 m/s"""
-    return _belief(True, place_km=40.0, amplitude=0.38)
+    """Learns field - forecast about the forecast: W - F correlated over 40 km, spread 0.38 m/s"""
+    return _belief(
+        True, _block(40.0, 0.38, GULF_STREAM_2019JUN.noise_ms), _block(WIND_PLACE_KM, WIND_AMPLITUDE, GULF_STREAM_2019JUN.wind_noise_ms)
+    )
 
 
-def ocean_current_belief() -> BeliefConfig:
-    """Learns W about zero: correlated over 55 km, spread 0.48 m/s"""
-    return _belief(False, place_km=55.0, amplitude=0.48)
+def field_belief() -> BeliefConfig:
+    """Learns the field about zero: W correlated over 55 km, spread 0.48 m/s; U over WIND_PLACE_KM, spread WIND_AMPLITUDE"""
+    return _belief(
+        False, _block(55.0, 0.48, GULF_STREAM_2019JUN.noise_ms), _block(WIND_PLACE_KM, WIND_AMPLITUDE, GULF_STREAM_2019JUN.wind_noise_ms)
+    )
 
 
 def oracle_belief() -> BeliefConfig:
-    """The true ocean current itself, the fitted settings stated and unread"""
-    return dataclasses.replace(ocean_current_belief(), oracle=True)
+    """The true field itself, the fitted settings stated and unread"""
+    return dataclasses.replace(field_belief(), oracle=True)
+
+
+OCEAN_CURRENT_BLOCK, WIND_BLOCK = 0, 1
+"""Which block of the belief holds W, and which U"""
+
+LEARNED_BLOCKS = {"ocean_current": (OCEAN_CURRENT_BLOCK,), "wind": (WIND_BLOCK,), "both": (OCEAN_CURRENT_BLOCK, WIND_BLOCK)}
+"""The blocks a learning rule counts, by what the episode is scored on"""
+
+SCORED_CHANNELS = {"ocean_current": OCEAN_CURRENT, "wind": WIND, "both": slice(0, CHANNELS)}
+"""The channels of the field a learning episode is scored on, by what it is scored on"""
 
 
 PLANNING_BUDGET = 25
@@ -73,8 +101,8 @@ PLANNING_BUDGET = 25
 ARRIVAL_RADIUS_KM = 20.0
 """`rho`: how near a waypoint counts as arrived, inside positions about 18 km apart"""
 
-HORIZON_LENGTH = 160
-"""time_steps in an episode: 20 days at 3 hours each"""
+HORIZON_LENGTH = 480
+"""time_steps in an episode: 60 days at 3 hours each"""
 
 CLAIM_EVERY_STEPS = 1
 """Moves between re-readings of the claim off a belief"""
@@ -94,13 +122,16 @@ RECORDED = {
 }
 """What a record stores, and the moves between the snapshots it keeps of each. The forecast is read from `data_path` instead"""
 
-N_SEEDS = 10
-"""Instances every arm is run on, seeded `0` to `N_SEEDS - 1`"""
+STILL_FRAMES = {"jun04": 72.0, "jun16": 360.0, "jun22": 504.0, "jun28": 648.0}
+"""`frame_hour` of the 00Z frames of June 2019 every study runs on, keyed by date"""
+
+N_SEEDS = 1
+"""Instances every arm is run on at each frame, seeded `0` to `N_SEEDS - 1`"""
 
 RESOURCES = Resources(
     cpus=2,
     mem_gb=16,
-    timeout_min=120,
+    timeout_min=240,
     gres="gpu:1",
     partition="default_partition",
     constraint="avx2&(gpu-high|gpu-mid)",
