@@ -63,11 +63,12 @@ def assemble(cfg: RunConfig) -> Episode:
     )
     transition = ocean_transition(grid, wind, polar, cfg.problem.n_headings, cfg.problem.step_hours, states)
     box = grid.inside(cfg.problem.lat_min, cfg.problem.lat_max, cfg.problem.lon_min, cfg.problem.lon_max) & ~data.land
-    start_box = jnp.arange(grid.size()) == grid.flat_index(jnp.array([cfg.problem.start_lat, cfg.problem.start_lon]))
     target_box = box & grid.inside(
         cfg.problem.target_lat_min, cfg.problem.target_lat_max, cfg.problem.target_lon_min, cfg.problem.target_lon_max
     )
-    world = ocean_world(grid, states, predicted, error, transition, cfg.problem.noise_ms, start_box, target_box)
+    world = ocean_world(
+        grid, states, predicted, error, transition, cfg.problem.noise_ms, target_box, target_box
+    )  # the boat starts in the target box too
     objective = (  # under learn and search the region of interest is the target box
         ocean_objective(states, grid, box, cfg.problem.arrival_km)
         if cfg.problem.objective == "reach"

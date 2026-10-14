@@ -56,6 +56,8 @@ def still(run: Path, out: Path) -> None:
     problem = config["problem"]
     candidates = np.flatnonzero(candidate_box(problem, lat, lon, land))
     reaching = "objective_state/arrived" in held  # else the episode is scored on what it learned, and the target is unread
+    where = "" if reaching else "target_"  # the candidate box the waypoints are aimed in
+    box_lat, box_lon = (problem[f"{where}lat_min"], problem[f"{where}lat_max"]), (problem[f"{where}lon_min"], problem[f"{where}lon_max"])
 
     def on_grid(per_candidate: np.ndarray) -> np.ndarray:
         """A value per candidate laid onto the grid, nan elsewhere"""
@@ -76,7 +78,13 @@ def still(run: Path, out: Path) -> None:
     for ax, (words, sheet) in zip(axes, sheets, strict=True):
         drawn = ax.pcolormesh(lon, lat, sheet, shading="nearest", cmap="viridis", vmin=0, vmax=top if "spread" not in words else None)
         fig.colorbar(drawn, ax=ax, label=words)
+        ax.plot(track[:, 1], track[:, 0], "k-", lw=2.5)  # an outline, so the track shows off the candidate box too
         ax.plot(track[:, 1], track[:, 0], "w.-", lw=1, ms=3)
+        ax.add_patch(
+            plt.Rectangle(
+                (box_lon[0], box_lat[0]), box_lon[1] - box_lon[0], box_lat[1] - box_lat[0], fill=False, ec="orange", lw=0.8, ls="--"
+            )
+        )
         ax.plot(track[0, 1], track[0, 0], "wo", ms=6, mfc="none")
         ax.plot(track[-1, 1], track[-1, 0], "r*", ms=9)
         if reaching:
@@ -84,7 +92,7 @@ def still(run: Path, out: Path) -> None:
         ax.set_aspect(1 / np.cos(np.radians(np.mean(lat))))
         ax.set_xlabel("lon")
     if "agent_state/scores.waypoint" in held:  # an arm with a rule: every waypoint it aimed at
-        aimed = np.unique(held["agent_state/scores.waypoint"])
+        aimed = np.unique(held["agent_state/scores.waypoint"][1:])  # move 0 holds no decision yet
         axes[0].plot(lon[aimed % n_lon], lat[aimed // n_lon], "x", color="orange", ms=6, label="waypoints")
         axes[0].legend(loc="lower right", fontsize=8)
     axes[0].set_ylabel("lat")

@@ -85,7 +85,7 @@ def ocean_world(
     start_box: Bool[Array, " pos"],
     target_box: Bool[Array, " pos"],
 ) -> World:
-    """The problem a forecast poses: the boat starts at a grid point `start_box` marks, its target is drawn uniformly from `target_box`, and the ocean current is that forecast plus an error"""
+    """The problem a forecast poses: the boat starts at a grid point drawn uniformly from `start_box`, its target is drawn uniformly from `target_box`, and the ocean current is that forecast plus an error"""
     return World(
         state_domain=ProductDomain(
             {"position": grid.narrow(start_box), "target": grid.narrow(target_box), "field": FunctionDomain(states, BoxDomain((2,)))}
