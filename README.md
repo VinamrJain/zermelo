@@ -25,12 +25,12 @@ Python 3.14 or newer (uses PEP 695 generics)
 
     pixi run sweep  <experiment> <name>       # every cell of one sweep, serially, in this process
     pixi run submit <experiment> <name>       # the same cells as one Slurm array
-    pixi run fig    <script>                  # one paper figure or table into results/figures/, from the newest launches
+    RESULTS=<root> pixi run fig <group>.<script>   # one paper figure or table into results/figures/, from the newest launches under <root>
     pixi run render <experiment> <target>     # one recorded episode as a still
     pixi run film   <experiment> <target>     # the same sheets as video, submitted rather than drawn here
 
 
-    pixi run fig    comparison.fig_comparison
+    RESULTS=results pixi run fig comparison.fig_comparison
     pixi run render balloon_waypoint acquisitions_oracle -- --arm all
 
 `pixi task list` names every task. Put `--` before any override or flag:

@@ -30,11 +30,11 @@ args = ["experiment", "name"]
 cmd = "python -m zermelo.experiments.{{ experiment }} +sweep={{ name }} hydra/launcher=slurm"
 description = "Submit one sweep as a Slurm array, on the partition its own resources block names"
 
-# Put `--` before any argument: `pixi run fig ocean.fig_search -- search`
+# RESULTS names the results tree read. Put `--` before any argument: `RESULTS=results pixi run fig ocean.fig_search -- search`
 [tasks.fig]
 args = ["script"]
 cmd = "python -m figures.{{ script }}"
-description = "Draw one paper figure or table into results/figures/ from the newest launch of its sweeps; figures/redraw.sh draws them all"
+description = "Draw one paper figure or table into results/figures/ from the newest launch of its sweeps under $RESULTS; figures/redraw.sh <results root> draws them all"
 
 # Same target and flags as `render`; `-- --help` lists them
 [tasks.film]

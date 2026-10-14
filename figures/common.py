@@ -5,6 +5,7 @@ Figures land in results/figures/{main,appendix,extra}/.
 """
 
 import importlib
+import os
 from pathlib import Path
 
 import matplotlib
@@ -14,8 +15,8 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
-RESULTS = Path("results")
-BUILD = RESULTS / "figures"
+RESULTS = Path(os.environ["RESULTS"])  # the results tree read; unset, the script refuses to run
+BUILD = Path("results") / "figures"
 WIDTH = 6.75  # inches, the full text width
 ROW_HEIGHT = 1.35  # inches one row of panels is drawn at; every figure's height follows from it
 LEGEND_HEIGHT = 0.35  # inches the legend under the panels takes
@@ -89,8 +90,10 @@ def look(arm: str) -> dict:
 
 
 def launch(experiment: str, sweep: str) -> Path:
-    """The newest launch of one sweep"""
-    return max(found for found in (RESULTS / experiment / sweep).iterdir() if found.is_dir())
+    """The newest launch of one sweep, printed"""
+    newest = max(found for found in (RESULTS / experiment / sweep).iterdir() if found.is_dir())
+    print(f"reading {newest}")
+    return newest
 
 
 def read(experiment: str, sweeps: dict[str, str]) -> tuple[pd.DataFrame, pd.DataFrame]:
