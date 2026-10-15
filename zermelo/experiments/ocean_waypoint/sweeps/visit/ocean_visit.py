@@ -54,9 +54,16 @@ def _expected_targets_reached(penalty_rate: float) -> MethodConfig:
     return _method(goals_reached(ARRIVAL_RADIUS_KM), n_field_samples=N_FIELDS, n_paths_per_field=N_WALKS, penalty_rate=penalty_rate)
 
 
-def _nearest_unvisited() -> MethodConfig:
-    """1 at an unvisited target and 0 at a visited one, less half the spread per full-budget trip: the nearest unvisited target under the mean"""
-    return _method(goals_reached(ARRIVAL_RADIUS_KM), n_field_samples=0, n_paths_per_field=0, penalty_rate=0.5)
+def _nearest_unvisited(penalty_rate: float) -> MethodConfig:
+    """1 at an unvisited target and 0 at a visited one, less `penalty_rate` of the spread per full-budget trip: the nearest unvisited target under the mean"""
+    return _method(goals_reached(ARRIVAL_RADIUS_KM), n_field_samples=0, n_paths_per_field=0, penalty_rate=penalty_rate)
+
+
+PENALTY_RATES = {"l0": 0.0, "l05": 0.5, "l1": 1.0}
+"""`lambda` of each charged arm, keyed by its name's suffix"""
+
+RULES = {"etr": _expected_targets_reached, "nearest": _nearest_unvisited}
+"""Each rule as a function of `lambda`"""
 
 
 for date, frame_hour in STILL_FRAMES.items():
@@ -69,11 +76,12 @@ for date, frame_hour in STILL_FRAMES.items():
         seeds=list(range(N_SEEDS)),
         resources=dataclasses.replace(RESOURCES, constraint="avx2&gpu-high"),  # 48 GB cards and up
         arms=[
-            arm("etr_l0", _expected_targets_reached(0.0), field_belief()),
-            arm("etr_l05", _expected_targets_reached(0.5), field_belief()),
-            arm("etr_l1", _expected_targets_reached(1.0), field_belief()),
-            arm("nearest", _nearest_unvisited(), field_belief()),
-            arm("oracle_etr", _expected_targets_reached(0.5), oracle_belief()),
+            *(
+                arm(f"{prefix}{rule}_{suffix}", build(rate), belief())
+                for prefix, belief in (("", field_belief), ("oracle_", oracle_belief))
+                for rule, build in RULES.items()
+                for suffix, rate in PENALTY_RATES.items()
+            ),
             arm("rand_wp", _method(uniform(), n_field_samples=0, n_paths_per_field=0, penalty_rate=0.0), field_belief()),
         ],
     )
