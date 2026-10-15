@@ -11,9 +11,9 @@ or, searching the region for the fastest current:
     best_observed         = max over positions z_u stood on so far, z_u a candidate, of ||W(z_u)||
     best_possible         = max over candidates of ||W(c)||
     reward                = max(0, ||W(position)|| - best_observed before) where position is a candidate, else 0
-or, visiting every target, the candidates being the targets:
-    visited[i]            = visited[i] before, or ||position - candidate i|| <= arrival_km on the tangent plane
-    reward                = 0 where every target is visited, else -1
+or, visiting every goal g_1 .. g_n, drawn among the candidates:
+    visited[i]            = visited[i] before, or ||position - g_i|| <= arrival_km on the tangent plane
+    reward                = 0 where every goal is visited, else -1
     steps_to_completion   = time_steps rewarded -1 so far
 """
 
@@ -127,50 +127,53 @@ class SearchMagnitude(Objective[dict[str, Float[Array, "..."]]]):
 
 @dataclass(frozen=True)
 class VisitTargets(Objective[dict[str, Float[Array, "..."]]]):
-    """Reward is -1 every time_step until the boat has been within arrival_km of every candidate and 0 from then on, with the truth and the claim recorded beside it"""
+    """Reward is -1 every time_step until the boat has been within arrival_km of every goal and 0 from then on, with the truth and the claim recorded beside it"""
 
     candidates: Subset[dict[str, Any]]
-    """The targets, as the states a waypoint may be aimed at and a claim is scored on, over the state domain a belief is maintained on"""
+    """The states a waypoint may be aimed at and a claim is scored on, over the state domain a belief is maintained on"""
+
+    goals: Float[Array, "n_goals 2"]
+    """(lat, lon) degrees of each goal"""
 
     grid: PlaneGrid
     """What positions are measured on"""
 
     arrival_km: float
-    """How near a target counts as visited"""
+    """How near a goal counts as visited"""
 
     candidate_states: dict[str, Any] = dataclasses.field(init=False, repr=False)
-    """The targets, gathered once"""
+    """The live candidates, gathered once"""
 
     def __post_init__(self) -> None:
-        """Gather the targets as concrete arrays"""
-        live = jnp.flatnonzero(self.candidates.live)  # (n_targets,) indices into the state domain
+        """Gather the live candidates as concrete arrays"""
+        live = jnp.flatnonzero(self.candidates.live)  # (n_candidates,) indices into the state domain
         object.__setattr__(self, "candidate_states", jax.tree.map(lambda a: a[live], self.candidates.elements()))
 
     @property
     def claim_domain(self) -> Domain:
-        """A claim is a function: the mean of the field at any target, then its log-variances"""
+        """A claim is a function: the mean of the field at any candidate, then its log-variances"""
         return FunctionDomain(self.candidates, BoxDomain((2 * COMPONENTS,)))
 
-    def near(self, state: dict[str, Any]) -> Float[Array, " n_targets"]:
-        """1 at each target within arrival_km of `state`"""
-        gap = self.grid.embed(state["position"]) - self.grid.embed(self.candidate_states["position"])  # (n_targets, 2) km
+    def near(self, state: dict[str, Any]) -> Float[Array, " n_goals"]:
+        """1 at each goal within arrival_km of `state`"""
+        gap = self.grid.embed(state["position"]) - self.grid.embed(self.goals)  # (n_goals, 2) km
         return (jnp.linalg.norm(gap, axis=-1) <= self.arrival_km).astype(jnp.float32)
 
     def reset(self, state: dict[str, Any]) -> dict[str, Float[Array, "..."]]:
         """The objective's memory before any time_step, nothing claimed yet"""
-        truth = state["field"](self.candidate_states)  # (n_targets, components)
+        truth = state["field"](self.candidate_states)  # (n_candidates, components)
         return {
-            "targets": self.candidate_states["position"],  # (n_targets, 2) as (lat, lon)
+            "targets": self.goals,  # (n_goals, 2) as (lat, lon)
             "truth": truth,
             "visited": self.near(state),
             "steps_to_completion": jnp.zeros(()),
-            "claim": jnp.zeros((truth.shape[0], 2 * COMPONENTS)),  # (n_targets, 2 components)
+            "claim": jnp.zeros((truth.shape[0], 2 * COMPONENTS)),  # (n_candidates, 2 components)
         }
 
     def score(
         self, objective_state: dict[str, Float[Array, "..."]], state: dict[str, Any], decision: Decision, next_state: dict[str, Any]
     ) -> tuple[dict[str, Float[Array, "..."]], Float[Array, ""]]:
-        """-1 unless every target is visited by the state arrived in, and the claim as it stood"""
+        """-1 unless every goal is visited by the state arrived in, and the claim as it stood"""
         visited = jnp.maximum(objective_state["visited"], self.near(next_state))
         reward = jnp.min(visited) - 1.0
         return {

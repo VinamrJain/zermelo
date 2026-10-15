@@ -58,6 +58,7 @@ def _method(utility: Implementation, n_field_samples: int, replan_length: int, r
         n_field_samples=n_field_samples,
         n_paths_per_field=N_WALKS,
         penalty_rate=0.0,
+        candidates="box",
         n_candidates_scored=None,
         random_opening_steps=0,
     )

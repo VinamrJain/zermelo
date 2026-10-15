@@ -48,6 +48,7 @@ def _method(utility: Implementation, *, n_paths_per_field: int, penalty_rate: fl
         n_field_samples=0,
         n_paths_per_field=n_paths_per_field,
         penalty_rate=penalty_rate,
+        candidates="box",
         n_candidates_scored=None,
         random_opening_steps=0,
     )

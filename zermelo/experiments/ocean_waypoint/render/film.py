@@ -105,11 +105,13 @@ def send(runs: Sequence[Path], into: Path, flags: str) -> str:
     return f"{said.stdout.strip()}, {len(runs)} film{'s' if len(runs) != 1 else ''} from {script}"
 
 
-def candidate_box(problem: dict, lat: np.ndarray, lon: np.ndarray, land: np.ndarray, targets: np.ndarray | None) -> np.ndarray:
-    """(n_lat * n_lon,): the grid points a claim is scored on: the `targets` (n_targets, 2) of a visiting episode as (lat, lon), else the
-    target box"""
+def candidate_box(
+    problem: dict, lat: np.ndarray, lon: np.ndarray, land: np.ndarray, targets: np.ndarray | None, n_claimed: int
+) -> np.ndarray:
+    """(n_lat * n_lon,): the `n_claimed` grid points a claim is scored on: the target box, or the `targets` (n_goals, 2) as (lat, lon) of a
+    visiting episode recorded before its candidates were the box"""
     grid = PlaneGrid(len(lat), len(lon), float(lat[0]), float(lon[0]), float(lat[1] - lat[0]), float(lon[1] - lon[0]))
-    if targets is not None:
+    if targets is not None and len(targets) == n_claimed:
         rows, cols = np.abs(lat[:, None] - targets[:, 0]).argmin(axis=0), np.abs(lon[:, None] - targets[:, 1]).argmin(axis=0)
         return np.isin(np.arange(len(lat) * len(lon)), rows * len(lon) + cols)
     inside = grid.inside(problem["target_lat_min"], problem["target_lat_max"], problem["target_lon_min"], problem["target_lon_max"])
@@ -144,7 +146,7 @@ def scene(run: Path, dpi: int, until: int | None) -> tuple[FigureCanvasAgg, Call
     field = np.asarray(ocean.field(ocean.frame(problem["frame_hour"])), float).reshape(n_lat, n_lon, -1)  # (n_lat, n_lon, components)
     true_u, true_v, wind_u, wind_v = (field[..., i] for i in (*OCEAN_CURRENT, *WIND_COMPONENTS))
     targets_drawn = held["objective_state/targets"][0] if "objective_state/targets" in held else None
-    candidates = np.flatnonzero(candidate_box(problem, lat, lon, land, targets_drawn))
+    candidates = np.flatnonzero(candidate_box(problem, lat, lon, land, targets_drawn, held["objective_state/claim"].shape[1]))
     polar = Polar(
         problem["top_speed_ms"],
         problem["no_go_degrees"],
@@ -168,7 +170,7 @@ def scene(run: Path, dpi: int, until: int | None) -> tuple[FigureCanvasAgg, Call
     true_speed = np.hypot(true_u, true_v)
     track = held["state/position"].astype(float)  # (T + 1, 2) as (lat, lon)
     searching, visiting = "objective_state/best_observed_magnitude" in held, "objective_state/targets" in held
-    visited = held["objective_state/visited"] if visiting else np.zeros((track.shape[0], 0))  # (T + 1, n_targets)
+    visited = held["objective_state/visited"] if visiting else np.zeros((track.shape[0], 0))  # (T + 1, n_goals)
     arrived = visited.all(axis=-1) if visiting else np.zeros(track.shape[0], bool)
     step_hours = float(problem["step_hours"])
     cos_mid = np.cos(np.radians(np.mean(lat)))
@@ -284,7 +286,7 @@ def scene(run: Path, dpi: int, until: int | None) -> tuple[FigureCanvasAgg, Call
             Line2D([], [], color=HEADING, lw=2.5, label="heading (through water)"),
             Line2D([], [], color=NET, lw=2.5, label="net motion"),
             *([Line2D([], [], marker="*", ms=14, color=FASTEST, mec="white", ls="none", label="fastest current in the box")] if searching else []),
-            *([Line2D([], [], marker="*", ms=14, color="none", mec=TARGET, mew=1.6, ls="none", label="target, filled once visited")] if visiting else []),
+            *([Line2D([], [], marker="*", ms=14, color="none", mec=TARGET, mew=1.6, ls="none", label="goal, filled once visited")] if visiting else []),
             Line2D([], [], marker="x", ms=10, color="#ffa726", mew=2, ls="none", label="waypoint aimed at"),
             Line2D([], [], color="#ffa726", lw=1.8, ls="--", label="walk imagined to it"),
         ],
@@ -420,7 +422,7 @@ def scene(run: Path, dpi: int, until: int | None) -> tuple[FigureCanvasAgg, Call
                 if "objective_state/information" in held
                 else f"best {held['objective_state/best_observed_magnitude'][t]:4.2f} of {held['objective_state/best_possible_magnitude'][t]:4.2f} m/s\n"
                 if searching
-                else f"{int(visited[t].sum())} of {visited.shape[1]} targets visited\n"
+                else f"{int(visited[t].sum())} of {visited.shape[1]} goals visited\n"
             )
             + f"wind     {np.linalg.norm(wind[m]):4.1f} m/s\n"
             f"current  {np.linalg.norm(current[m]):4.1f} m/s\n"

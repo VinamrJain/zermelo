@@ -193,17 +193,22 @@ class UpperConfidence(Utility):
 
 @dataclass(frozen=True)
 class GoalsReached(Utility):
-    """U(D) = number of candidates within `radius` of some observation's state, on embedded coordinates"""
+    """U(D) = number of goals within `radius` of some observation's state, on embedded coordinates"""
 
     radius: float
-    """How near a candidate an observation must sit to reach it"""
+    """How near a goal an observation must sit to reach it"""
+
+    goals: tuple[int, ...] | None
+    """The goals, as indices into the states the candidates are drawn from; None until the experiment sets them"""
 
     def __call__(self, key: PRNGKeyArray, belief: Belief, dataset: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
+        if self.goals is None:
+            raise ValueError("GoalsReached counts goals, and none were set")
         with jax.ensure_compile_time_eval():
             coords = coordinates(candidates.base)  # (n_states, k)
-            targets = coords[jnp.flatnonzero(candidates.live)]  # (n_candidates_scored, k)
-        gap = coords[dataset.state_index][..., None, :] - targets  # (*batch, n, n_candidates_scored, k)
-        near = jnp.sum(gap**2, axis=-1) <= self.radius**2  # (*batch, n, n_candidates_scored)
+            goals = coords[jnp.asarray(self.goals)]  # (n_goals, k)
+        gap = coords[dataset.state_index][..., None, :] - goals  # (*batch, n, n_goals, k)
+        near = jnp.sum(gap**2, axis=-1) <= self.radius**2  # (*batch, n, n_goals)
         return jnp.sum(jnp.any(near & dataset.is_observed[..., None], axis=-2), axis=-1).astype(float)
 
 

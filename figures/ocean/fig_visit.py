@@ -1,6 +1,6 @@
-"""The ocean visiting study: the path-aware rule against the nearest-unvisited rule at three travel charges, scored on the moves until every target is visited
+"""The ocean visiting study: the path-aware rule at three travel charges against its endpoint-only twin and two random rules, scored on the moves until every goal is visited
 
-Left, targets visited against hours elapsed, the median over episodes with the quartile band, the learned-field arms only. Right, steps to
+Left, goals visited against hours elapsed, the median over episodes with the quartile band, the learned-field arms only. Right, steps to
 completion per rule, mean +- standard error, each rule's oracle (the true field in place of the belief) as a hatched bar beside it.
 Below, a table of both at the horizon over every arm the launch holds; the best mean of a learned-field arm bold.
 
@@ -12,9 +12,21 @@ import sys
 from figures.common import BUILD, LABELS, OCEAN_FRAMES, band, look, plt, read, save, size
 
 SWEEP = sys.argv[1] if len(sys.argv) > 1 else "visit"
-RULES = ("etr_l0", "etr_l05", "etr_l1", "nearest_l0", "nearest_l05", "nearest_l1", "nearest", "rand_wp")
-ORACLES = {rule: f"oracle_{rule}" for rule in RULES[:6]}
-TABLE = (("steps_to_completion", "steps to completion", 0, "min"), ("targets_visited", "targets visited", 2, "max"))
+RULES = (
+    "etr_l0",
+    "etr_l05",
+    "etr_l1",
+    "etr_endpoint",
+    "nearest_l0",
+    "nearest_l05",
+    "nearest_l1",
+    "nearest",
+    "rand_goal",
+    "rand_box",
+    "rand_wp",
+)
+ORACLES = {rule: f"oracle_{rule}" for rule in RULES if rule.startswith(("etr_l", "nearest_l"))}
+TABLE = (("steps_to_completion", "steps to completion", 0, "min"), ("targets_visited", "goals visited", 2, "max"))
 
 curves, scalars = read("ocean_waypoint", {date: f"{SWEEP}_{date}" for date in OCEAN_FRAMES})
 held = set(scalars["acquisition"])
@@ -26,7 +38,7 @@ fig, (left, right) = plt.subplots(1, 2, figsize=size(1), constrained_layout=True
 left.tick_params(labelsize=7, pad=2)
 for rule in rules:
     band(left, curves, rule, "targets_visited")
-left.set_title("targets visited", fontsize=8, pad=2)
+left.set_title("goals visited", fontsize=8, pad=2)
 left.set_xlabel("hours elapsed", fontsize=8, labelpad=1)
 left.margins(x=0, y=0.04)
 left.set_ylim(bottom=0)

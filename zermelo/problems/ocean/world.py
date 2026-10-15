@@ -107,6 +107,8 @@ def search_objective(states: ProductDomain, box: Bool[Array, " pos"]) -> SearchM
     return SearchMagnitude(states.narrow(box))
 
 
-def visit_objective(states: ProductDomain, grid: PlaneGrid, targets: Bool[Array, " pos"], arrival_km: float) -> VisitTargets:
-    """What the episode is scored on: visiting every grid point `targets` marks, waypoints aimed at those alone"""
-    return VisitTargets(states.narrow(targets), grid, arrival_km)
+def visit_objective(
+    states: ProductDomain, grid: PlaneGrid, box: Bool[Array, " pos"], goals: Float[Array, "n_goals 2"], arrival_km: float
+) -> VisitTargets:
+    """What the episode is scored on: visiting every one of `goals`, (lat, lon) degrees, waypoints aimed and claims scored over the grid points `box` marks"""
+    return VisitTargets(states.narrow(box), goals, grid, arrival_km)

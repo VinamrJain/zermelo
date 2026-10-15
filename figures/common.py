@@ -36,6 +36,7 @@ LABELS = {
     "rand_target": "RandTarget", "rand_act": "RandAct", "oracle_emi": "Oracle-EMI",
     "eti": "ETI", "info": "IG", "direct": "Direct", "rand_wp": "RandTarget", "oracle": "Oracle",
     "etr_l0": r"ETR $\lambda$=0", "etr_l05": r"ETR $\lambda$=0.5", "etr_l1": r"ETR $\lambda$=1", "nearest": "Nearest", "oracle_etr": "Oracle-ETR",
+    "etr_endpoint": "ETR-Endpoint", "rand_goal": "RandGoal", "rand_box": "RandBox",
 }  # fmt: skip
 RATES = ("0.25", "0.5", "1", "2")  # lambda of each IG arm, light to dark
 LABELS.update({f"info_{rate}": rf"IG $\lambda$={rate}" for rate in RATES})
@@ -47,6 +48,7 @@ FAMILY_COLOURS = {
     "EMI": "0173B2", "ESI": "D55E00", "EVI": "029E73", "EII": "0173B2", "EI": "DE8F05", "MC-EI": "56B4E9", "UCB": "7F3C8D", "TS": "CC78BC",
     "MaxVar": "CA9161", "RandTarget": "555555", "RandAct": "A0A0A0", "Oracle-EMI": "000000", "Forecast": "000000", "ETI": "0173B2",
     "IG": "D55E00", "Direct": "7F3C8D", "Oracle": "000000", "ETR": "0173B2", "Nearest": "7F3C8D", "Oracle-ETR": "000000",
+    "ETR-Endpoint": "029E73", "RandGoal": "555555", "RandBox": "CA9161",
 }  # hex colour per acquisition family  # fmt: skip
 IG_LOOK = {"0.25": ("#56B4E9", "s"), "0.5": ("#009E73", "D"), "1": ("#D55E00", "o"), "2": ("#B2182B", "P")}  # (colour, marker) per lambda
 OURS = ("emi", "evi", "eii", "esi", "eti", "etr_l0", "etr_l05", "etr_l1")

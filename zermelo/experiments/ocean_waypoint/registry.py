@@ -27,13 +27,13 @@ GULF_STREAM_2019JUN = ProblemConfig(
     lat_max=42.0,
     lon_min=-75.0,
     lon_max=-55.0,
-    target_lat_min=36.4,  # the middle three fifths of the box, where the boat starts and every target is drawn
+    target_lat_min=36.4,  # the middle three fifths of the box, where the boat starts and every goal is drawn
     target_lat_max=40.6,
     target_lon_min=-71.0,
     target_lon_max=-59.0,
     arrival_km=20.0,
     objective="visit",
-    n_targets=4,
+    n_goals=4,
     learned="both",
 )
 """The Gulf Stream after Cape Hatteras, one frame of June 2019 held still, a sailboat of Saildrone speed"""

@@ -58,7 +58,7 @@ def still(run: Path, out: Path) -> None:
     n_lat, n_lon = len(lat), len(lon)
     problem = config["problem"]
     targets_drawn = held["objective_state/targets"][0] if "objective_state/targets" in held else None
-    candidates = np.flatnonzero(candidate_box(problem, lat, lon, land, targets_drawn))
+    candidates = np.flatnonzero(candidate_box(problem, lat, lon, land, targets_drawn, held["objective_state/claim"].shape[1]))
     searching, visiting = "objective_state/best_observed_magnitude" in held, "objective_state/targets" in held
     box_lat, box_lon = (problem["target_lat_min"], problem["target_lat_max"]), (problem["target_lon_min"], problem["target_lon_max"])
 
@@ -94,7 +94,7 @@ def still(run: Path, out: Path) -> None:
         if searching:  # the fastest current in the box, the point the search is scored against
             fastest = candidates[np.argmax(np.linalg.norm(held["objective_state/truth"][-1], axis=-1))]
             ax.plot(lon[fastest % n_lon], lat[fastest // n_lon], "*", ms=14, color="gold", mec="k", label="fastest current")
-        if visiting:  # every target, filled once visited
+        if visiting:  # every goal, filled once visited
             for (t_lat, t_lon), seen in zip(held["objective_state/targets"][0], held["objective_state/visited"][-1], strict=True):
                 ax.plot(t_lon, t_lat, "*", ms=14, color="m" if seen else "none", mec="m", mew=1.5)
         ax.set_aspect(1 / np.cos(np.radians(np.mean(lat))))
@@ -104,8 +104,8 @@ def still(run: Path, out: Path) -> None:
         aimed = np.unique(held["agent_state/choice.target"][decided])
         axes[0].plot(lon[aimed % n_lon], lat[aimed // n_lon], "x", color="orange", ms=6, label="waypoints")
     if visiting:
-        axes[0].plot([], [], "*", ms=10, color="m", mec="m", label="target, visited")
-        axes[0].plot([], [], "*", ms=10, color="none", mec="m", mew=1.5, label="target, not yet")
+        axes[0].plot([], [], "*", ms=10, color="m", mec="m", label="goal, visited")
+        axes[0].plot([], [], "*", ms=10, color="none", mec="m", mew=1.5, label="goal, not yet")
     axes[0].legend(loc="lower right", fontsize=7)
     axes[0].set_ylabel("lat")
     fig.suptitle(
@@ -115,7 +115,7 @@ def still(run: Path, out: Path) -> None:
             if "objective_state/information" in held
             else f"best {held['objective_state/best_observed_magnitude'][-1]:.2f} of {held['objective_state/best_possible_magnitude'][-1]:.2f} m/s"
             if searching
-            else f"{int(held['objective_state/visited'][-1].sum())} of {held['objective_state/visited'].shape[1]} targets visited"
+            else f"{int(held['objective_state/visited'][-1].sum())} of {held['objective_state/visited'].shape[1]} goals visited"
             + (f", all by step {int(held['objective_state/steps_to_completion'][-1])}" if held["objective_state/visited"][-1].all() else "")
         ),
         fontsize=10,
