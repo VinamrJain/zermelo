@@ -35,8 +35,6 @@ ACQUISITION_FAMILIES = {
 }
 """The paper's name for each acquisition family, keyed by the token an arm's name carries"""
 
-DRAWN_ARMS: tuple[str, ...] | None = None
-"""The arms the figure draws, in legend order; None draws every arm of the launch. Every arm appears in the table"""
 
 CURVES = {
     "simple_regret": ("simple regret", "linear"),
@@ -46,16 +44,6 @@ CURVES = {
 }
 """What an arm achieved, a value per time_step in m/s (the variance in m^2/s^2), as the words naming it and the scale it is drawn on"""
 
-TABLE_COLUMNS = (
-    ("simple_regret", "simple regret", 1, "min"),
-    ("cumulative_regret", "cumulative regret", 0, "min"),
-    ("rmse", "RMSE", 2, "min"),
-    ("posterior_variance", "posterior variance", 2, "min"),
-    ("arrival_share", r"arrival \%", 0, "max"),
-    ("in_box_share", r"in box \%", 0, "max"),
-    ("seconds", "time (s)", 0, "none"),
-)
-"""The table's columns: the scalar, its heading, its digits, and which end is better"""
 
 CURVE_CHANNELS = ("objective_state/best_possible_speed", "objective_state/speed", "objective_state/truth", "objective_state/claim")
 """What the curves are computed from, as the names a record holds them under"""
