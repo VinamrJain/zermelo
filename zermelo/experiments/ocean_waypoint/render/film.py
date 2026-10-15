@@ -4,17 +4,21 @@ Top: ||W|| shaded with its streamlines, the wind as a quiver, land masked, the t
 triangle pointing along its heading, at the boat the wind, the ocean current, the heading through the water and the net motion as
 arrows, the target with its arrival ring, the waypoint aimed at and the walk imagined to it; beside it the numbers of the move.
 Bottom: the belief's mean current speed ||mu_t|| on the truth's scale, its current spread (var_u + var_v)^(1/2) on the prior's, the polar, boat speed
-against heading for the wind at the boat with the heading marked, and the belief's wind spread on its prior's. Moves are interpolated over `SUBFRAMES`
-frames; the film ends a few moves after arrival.
+against heading for the wind at the boat with the heading marked, and the belief's wind spread on its prior's. A move is spread over
+`subframes` frames; the film ends a few moves after arrival.
 
 The heading is not recorded: it is read back as the net motion of the move less the ocean current at the point it left.
 """
 
 import json
+import multiprocessing
 import shutil
 import subprocess
 import sys
-from collections.abc import Sequence
+import tempfile
+from collections.abc import Callable, Sequence
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -22,21 +26,23 @@ import matplotlib
 import numpy as np
 
 matplotlib.use("Agg")  # no display on a compute node
-import matplotlib.pyplot as plt  # noqa: E402
-from matplotlib.animation import FFMpegWriter  # noqa: E402
+from matplotlib.artist import Artist  # noqa: E402
+from matplotlib.axes import Axes  # noqa: E402
+from matplotlib.axis import Axis  # noqa: E402
+from matplotlib.backends.backend_agg import FigureCanvasAgg  # noqa: E402
+from matplotlib.collections import LineCollection  # noqa: E402
+from matplotlib.figure import Figure  # noqa: E402
 from matplotlib.gridspec import GridSpec  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
-from matplotlib.patches import Ellipse  # noqa: E402
+from matplotlib.patches import Ellipse, Polygon  # noqa: E402
 from matplotlib.projections.polar import PolarAxes  # noqa: E402
+from matplotlib.text import Text  # noqa: E402
 
 from zermelo.experiments.ocean_waypoint.metrics.data import belief_groups, channels, claimed  # noqa: E402
 from zermelo.experiments.ocean_waypoint.schema import Resources  # noqa: E402
-from zermelo.problems.ocean import KM_PER_DEGREE, OCEAN_CURRENT, PlaneGrid  # noqa: E402
+from zermelo.problems.ocean import KM_PER_DEGREE, OCEAN_CURRENT, PlaneGrid, load_ocean  # noqa: E402
 from zermelo.problems.ocean import WIND as WIND_COMPONENTS  # noqa: E402
 from zermelo.problems.ocean.transition import Polar  # noqa: E402
-
-SUBFRAMES = 6
-"""Frames one move is spread over"""
 
 AFTER_ARRIVAL = 4
 """Moves shown once arrived"""
@@ -50,7 +56,7 @@ ARROW_KM_PER_MS = 70.0
 WIND, CURRENT, HEADING, NET, TRACK, TARGET, FASTEST = "#ffd54f", "#4fc3f7", "#ffffff", "#ff7043", "#4fc3f7", "#ff5fa2", "#ffd700"
 
 RESOURCES_PER_FILM = Resources(
-    cpus=2, mem_gb=8, timeout_min=90, gres=None, partition="default_partition", constraint="avx2", array_parallelism=8
+    cpus=8, mem_gb=8, timeout_min=90, gres=None, partition="default_partition", constraint="avx2", array_parallelism=8
 )
 """What one film is given"""
 
@@ -111,8 +117,8 @@ def candidate_box(problem: dict, lat: np.ndarray, lon: np.ndarray, land: np.ndar
     return np.asarray(inside) & ~land.reshape(-1)
 
 
-def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None:
-    """The episode recorded at `run` written to `out` as video, or the frame at move `still` as a png beside it"""
+def scene(run: Path, dpi: int, until: int | None) -> tuple[FigureCanvasAgg, Callable[[int, float], None], list[tuple[Axes, Artist]], int]:
+    """The film's canvas, the call posing it at move t plus fraction s of the next, the artists a pose redraws in order, and the last move"""
 
     config = json.loads((run / "config.json").read_text())
     problem = config["problem"]
@@ -136,9 +142,10 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     raw = np.load(Path(problem["data_path"]))
     stride = int(problem["grid_stride"])
     lat, lon, land = raw["latitude"][::stride].astype(float), raw["longitude"][::stride].astype(float), raw["land"][::stride, ::stride]
-    frame = int(np.argmin(np.abs(raw["hours"] - problem["frame_hour"])))
-    wind_u, wind_v = raw["wind_u"][frame][::stride, ::stride].astype(float), raw["wind_v"][frame][::stride, ::stride].astype(float)
     n_lat, n_lon = len(lat), len(lon)
+    ocean = load_ocean(Path(problem["data_path"]), stride)
+    field = np.asarray(ocean.field(ocean.frame(problem["frame_hour"])), float).reshape(n_lat, n_lon, -1)  # (n_lat, n_lon, components)
+    true_u, true_v, wind_u, wind_v = (field[..., i] for i in (*OCEAN_CURRENT, *WIND_COMPONENTS))
     targets_drawn = held["objective_state/targets"][0] if "objective_state/targets" in held else None
     candidates = np.flatnonzero(candidate_box(problem, lat, lon, land, targets_drawn))
     polar = Polar(
@@ -161,8 +168,6 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
         r, c = int(np.argmin(np.abs(lat - point[0]))), int(np.argmin(np.abs(lon - point[1])))
         return np.nan_to_num(np.array([sheet_u[r, c], sheet_v[r, c]]))
 
-    truth = held["objective_state/truth"][0][:, list(OCEAN_CURRENT)]  # (n_candidates, 2) as (u, v), still over the episode
-    true_u, true_v = on_grid(truth[:, 0]), on_grid(truth[:, 1])
     true_speed = np.hypot(true_u, true_v)
     track, target = held["state/position"].astype(float), held["state/target"][0].astype(float)  # (T + 1, 2) and (2,) as (lat, lon)
     reaching = "objective_state/arrived" in held  # else the target the world drew is unread
@@ -174,6 +179,7 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     km_per_degree = np.array([KM_PER_DEGREE, KM_PER_DEGREE * cos_mid])  # per degree of (lat, lon)
     distance = np.linalg.norm((track - target) * km_per_degree, axis=-1)  # (T + 1,) km
     last = min(track.shape[0] - 1, int(np.argmax(arrived)) + AFTER_ARRIVAL) if arrived.any() else track.shape[0] - 1
+    last = last if until is None else min(last, until)
     claims = held["objective_state/claim"]  # (T + 1, n_candidates, 8)
     waypoints = held.get("agent_state/choice.target")
     walks = held.get("agent_state/choice.imagined_path_to_target")  # (T + 1, L) flat indices, the last repeated past the end
@@ -185,11 +191,12 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     through = net - current  # (T, 2): the heading's velocity through the water, read back
     heading = through / np.maximum(np.linalg.norm(through, axis=-1, keepdims=True), 1e-9)  # (T, 2) unit (east, north)
 
-    plt.rcParams.update(
+    matplotlib.rcParams.update(
         {"font.family": "serif", "font.size": 13, "text.color": "#e6e6e6", "axes.labelcolor": "#e6e6e6", "xtick.color": "#bbbbbb",
          "ytick.color": "#bbbbbb", "axes.edgecolor": "#555555", "axes.titlesize": 14}
     )  # fmt: skip
-    fig = plt.figure(figsize=(16, 9.5), facecolor="#0b0f14")
+    fig = Figure(figsize=(16, 9.5), dpi=dpi, facecolor="#0b0f14")
+    canvas = FigureCanvasAgg(fig)
     grid = GridSpec(
         2,
         4,
@@ -259,7 +266,7 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
         )
         main.plot(target[1], target[0], marker="*", ms=20, color=TARGET, mec="white", mew=0.8, zorder=6, ls="none")
     if searching:  # the fastest current in the box, the point the search is scored against
-        fastest = candidates[np.argmax(np.linalg.norm(truth, axis=-1))]
+        fastest = candidates[np.argmax(np.linalg.norm(held["objective_state/truth"][0][:, list(OCEAN_CURRENT)], axis=-1))]
         main.plot(lon[fastest % n_lon], lat[fastest // n_lon], marker="*", ms=22, color=FASTEST, mec="white", mew=0.8, zorder=6, ls="none")
     target_stars = []
     if visiting:
@@ -280,7 +287,10 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     main.plot(track[0, 1], track[0, 0], marker="o", ms=9, mfc="none", mec="white", mew=1.5, zorder=6, ls="none")
     (aim,) = main.plot([], [], marker="x", ms=11, color="#ffa726", mew=2.2, zorder=6, ls="none")
     (route,) = main.plot([], [], color="#ffa726", lw=1.8, ls="--", alpha=0.9, zorder=5.5)  # the walk imagined to the waypoint
-    trail = [main.plot([], [], color=TRACK, lw=2.8, alpha=0.0, zorder=5, solid_capstyle="round")[0] for _ in range(TRAIL)]
+    trail = LineCollection(
+        [], color=TRACK, lw=2.8, zorder=5, capstyle="round", alpha=(0.12 + 0.88 * np.arange(1, TRAIL + 1) / TRAIL).tolist()
+    )
+    main.add_collection(trail, autolim=False)
     (done,) = main.plot([], [], color=TRACK, lw=1.4, alpha=0.45, zorder=4)  # the track older than the trail
     (glow,) = main.plot([], [], marker="o", ms=30, color=TRACK, alpha=0.25, zorder=6.5, ls="none")
     (boat,) = main.plot([], [], marker=(3, 0, 0), ms=18, color=HEADING, mec="#0b0f14", mew=0.8, zorder=8, ls="none")
@@ -331,7 +341,10 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     compass = np.radians(np.arange(0.0, 360.0, 2.0))  # bearings clockwise from north
     unit = np.stack([np.sin(compass), np.cos(compass)], axis=-1)  # (east, north)
     (rose_curve,) = rose.plot([], [], color=HEADING, lw=1.6)
-    rose_fill = [rose.fill_between(compass, 0, 0, color=HEADING, alpha=0.12)]
+    rose_fill = Polygon(np.zeros((1, 2)), color=HEADING, alpha=0.12)
+    rose.add_patch(rose_fill)
+    winds = jnp.asarray(wind, jnp.float32)[:, None].repeat(unit.shape[0], axis=1)  # (T, n_bearings, 2)
+    rose_speeds = np.asarray(polar.speed(jnp.broadcast_to(jnp.asarray(unit, jnp.float32), winds.shape), winds))  # (T, n_bearings)
     (rose_heading,) = rose.plot([], [], marker="o", ms=9, color=NET, mec="white", ls="none", zorder=5)
     (rose_wind,) = rose.plot([], [], color=WIND, lw=3)
 
@@ -339,10 +352,12 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
     (_, current_amplitude), (_, wind_amplitude) = belief_groups(config)  # the ocean current's Gaussian process, then the wind's
     prior_spread = float(np.sqrt(2.0)) * current_amplitude  # (var_u + var_v)^(1/2) before any reading
     wind_prior_spread = float(np.sqrt(2.0)) * wind_amplitude
-    blank = on_grid(np.zeros(candidates.size))
-    error_mesh = error_ax.pcolormesh(lon, lat, blank, shading="nearest", cmap="YlGnBu_r", vmin=0, vmax=np.nanmax(true_speed))
-    learned_mesh = learned_ax.pcolormesh(lon, lat, blank, shading="nearest", cmap="viridis", vmin=0, vmax=prior_spread)
-    wind_mesh = wind_ax.pcolormesh(lon, lat, blank, shading="nearest", cmap="viridis", vmin=0, vmax=wind_prior_spread)
+    blank, half_lon, half_lat = on_grid(np.zeros(candidates.size)), (lon[1] - lon[0]) / 2, (lat[1] - lat[0]) / 2
+    cells = dict(origin="lower", extent=(lon[0] - half_lon, lon[-1] + half_lon, lat[0] - half_lat, lat[-1] + half_lat), aspect=1 / cos_mid,
+                 interpolation="nearest", zorder=3.5)  # above land, which no candidate lies on  # fmt: skip
+    error_mesh = error_ax.imshow(blank, cmap="YlGnBu_r", vmin=0, vmax=np.nanmax(true_speed), **cells)
+    learned_mesh = learned_ax.imshow(blank, cmap="viridis", vmin=0, vmax=prior_spread, **cells)
+    wind_mesh = wind_ax.imshow(blank, cmap="viridis", vmin=0, vmax=wind_prior_spread, **cells)
     for ax, mesh, words, top in (
         (error_ax, error_mesh, "belief's mean current speed  ||mu||  (m/s)", None),
         (learned_ax, learned_mesh, "belief's current spread  (var_u + var_v)^(1/2)  (m/s)", prior_spread),
@@ -374,8 +389,11 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
         arrows[name].xy = (tip[1], tip[0])
         arrows[name].set_position((origin[1], origin[0]))
 
+    posed = -1
+
     def draw(t: int, s: float) -> None:
         """Frame at move `t` plus fraction `s` of the next"""
+        nonlocal posed
         here = track[t] if t >= last else track[t] + s * (track[t + 1] - track[t])
         m = min(t, track.shape[0] - 2)  # the move under way
         bearing = np.degrees(np.arctan2(heading[m, 0], heading[m, 1]))  # clockwise from north
@@ -384,23 +402,19 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
         glow.set_data([here[1]], [here[0]])
         for name, velocity in (("wind", wind[m]), ("current", current[m]), ("heading", through[m]), ("net", net[m])):
             arrow_to(name, here, velocity)
-        for k, seg in enumerate(trail):
-            a = t - TRAIL + k
-            if a < 0:
-                seg.set_data([], [])
-                continue
-            b = np.vstack([track[a : a + 2][:1], here[None]]) if a + 1 > t else track[a : a + 2]
-            seg.set_data(b[:, 1], b[:, 0])
-            seg.set_alpha(0.12 + 0.88 * (k + 1) / TRAIL)
+        ends = np.arange(t - TRAIL, t)[:, None] + [0, 1]  # (TRAIL, 2): each trail segment's two moves, nan before move 0
+        trail.set_segments(list(np.where((ends >= 0)[..., None], track[ends.clip(0)], np.nan)[..., ::-1]))  # (TRAIL, 2, 2) as (lon, lat)
         older = track[: max(t - TRAIL + 1, 0) + 1]
         done.set_data(older[:, 1], older[:, 0])
         if waypoints is not None:
             w = int(waypoints[t])
             aim.set_data([lon[w % n_lon]], [lat[w // n_lon]])
-        mean_t, spread_t = claimed(claims[t], OCEAN_CURRENT)
-        error_mesh.set_array(on_grid(np.linalg.norm(mean_t, axis=-1)).ravel())
-        learned_mesh.set_array(on_grid(spread_t).ravel())
-        wind_mesh.set_array(on_grid(claimed(claims[t], WIND_COMPONENTS)[1]).ravel())
+        if t != posed:
+            posed = t
+            mean_t, spread_t = claimed(claims[t], OCEAN_CURRENT)
+            error_mesh.set_data(on_grid(np.linalg.norm(mean_t, axis=-1)))
+            learned_mesh.set_data(on_grid(spread_t))
+            wind_mesh.set_data(on_grid(claimed(claims[t], WIND_COMPONENTS)[1]))
         if walks is not None:
             steps = walks[t]
             kept = np.r_[True, steps[1:] != steps[:-1]]  # the walk ends where its index stops changing
@@ -412,10 +426,8 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
             line.set_data(np.append(track[: t + 1, 1], here[1]), np.append(track[: t + 1, 0], here[0]))
             dot.set_data([here[1]], [here[0]])
         # the polar at this wind
-        speeds = np.asarray(polar.speed(jnp.asarray(unit, jnp.float32), jnp.broadcast_to(jnp.asarray(wind[m], jnp.float32), unit.shape)))
-        rose_curve.set_data(compass, speeds)
-        rose_fill[0].remove()
-        rose_fill[0] = rose.fill_between(compass, 0, speeds, color=HEADING, alpha=0.12)
+        rose_curve.set_data(compass, rose_speeds[m])
+        rose_fill.set_xy(np.c_[np.r_[compass, compass[::-1]], np.r_[rose_speeds[m], np.zeros(compass.size)]])
         rose_heading.set_data([np.radians(bearing)], [np.linalg.norm(through[m])])
         wind_bearing = np.arctan2(wind[m, 0], wind[m, 1])
         rose_wind.set_data(
@@ -445,16 +457,67 @@ def film(run: Path, out: Path, *, fps: int, dpi: int, still: int | None) -> None
             badge.set_text("all visited" if visiting else "arrived")
             badge.set_alpha(min(1.0, 0.3 * (t - int(np.argmax(arrived)) + 1)))
 
+    moving: list[Artist] = [aim, route, trail, done, glow, boat, *arrows.values(), caption, badge, *target_stars, rose_curve, rose_fill,
+                            rose_heading, rose_wind, error_mesh, learned_mesh, wind_mesh, *small_tracks, *small_boats]  # fmt: skip
+    redrawn = []  # per axes: every artist from the lowest moving one up, except ticks and unchanging text
+    for ax in fig.axes:
+        mine = [a for a in moving if a.axes is ax]
+        low = min((a.get_zorder() for a in mine), default=np.inf)
+        above = [
+            a
+            for a in ax.get_children()
+            if any(a is b for b in mine) or a.get_zorder() >= low and a is not ax.patch and not isinstance(a, Axis | Text)
+        ]
+        redrawn += [(ax, a) for a in sorted(above, key=Artist.get_zorder)]
+    for _, a in redrawn:
+        a.set_animated(True)
+    return canvas, draw, redrawn, last
+
+
+def reel(part: int, out: Path, *, run: Path, parts: int, fps: int, dpi: int, subframes: int, until: int | None) -> int:
+    """Part `part` of `parts` of the film written to `out` as video, the background drawn once; the last move of the whole film"""
+    canvas, pose, redrawn, last = scene(run, dpi, until)
+    frames = [(t, k / subframes) for t in range(last + 1) for k in range(subframes if t < last else 2 * subframes)]
+    width, height = canvas.get_width_height()
+    canvas.draw()
+    background = canvas.copy_from_bbox(canvas.figure.bbox)
+    encode = subprocess.Popen(  # noqa: S603
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", f"{width}x{height}", "-r", str(fps), "-i", "-",
+         "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2", "-c:v", "libx264", "-preset", "veryfast", "-b:v", "6000k", "-pix_fmt", "yuv420p", str(out)],
+        stdin=subprocess.PIPE,
+    )  # fmt: skip
+    if encode.stdin is None:
+        raise RuntimeError("ffmpeg opened without a pipe")
+    for t, s in frames[part * len(frames) // parts : (part + 1) * len(frames) // parts]:
+        pose(t, s)
+        canvas.restore_region(background)
+        for ax, artist in redrawn:
+            ax.draw_artist(artist)
+        encode.stdin.write(canvas.buffer_rgba())
+    encode.stdin.close()
+    if encode.wait():
+        raise RuntimeError(f"ffmpeg failed writing {out}")
+    return last
+
+
+def film(run: Path, out: Path, *, fps: int, dpi: int, subframes: int, workers: int, until: int | None, still: int | None) -> None:
+    """The episode recorded at `run` written to `out` as video over `workers` processes, or the frame at move `still` as a png beside it"""
     if still is not None:
-        draw(still, 0.0)
-        fig.savefig(out.with_suffix(".png"), dpi=dpi, facecolor=fig.get_facecolor())
-        plt.close(fig)
+        canvas, pose, _, _ = scene(run, dpi, until)
+        pose(still, 0.0)
+        canvas.figure.savefig(out.with_suffix(".png"), facecolor=canvas.figure.get_facecolor())
         return print(out.with_suffix(".png"))
-    writer = FFMpegWriter(fps=fps, bitrate=6000, codec="libx264", extra_args=["-pix_fmt", "yuv420p"])
-    with writer.saving(fig, str(out), dpi=dpi):
-        for t in range(last + 1):
-            for k in range(SUBFRAMES if t < last else 2 * SUBFRAMES):
-                draw(t, k / SUBFRAMES)
-                writer.grab_frame(facecolor=fig.get_facecolor())
-    plt.close(fig)
-    print(out, f"{last} moves, {SUBFRAMES} frames each at {fps} fps")
+    shoot = partial(reel, run=run, parts=workers, fps=fps, dpi=dpi, subframes=subframes, until=until)
+    if workers == 1:
+        last = shoot(0, out)
+    else:
+        with tempfile.TemporaryDirectory(dir=out.parent) as scratch:
+            pieces = [Path(scratch) / f"{k}.mp4" for k in range(workers)]
+            with ProcessPoolExecutor(workers, mp_context=multiprocessing.get_context("spawn")) as pool:  # a fork after jax starts hangs
+                last = max(pool.map(shoot, range(workers), pieces))
+            listed = Path(scratch) / "pieces.txt"
+            listed.write_text("".join(f"file '{piece}'\n" for piece in pieces))
+            subprocess.run(  # noqa: S603
+                ["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(listed), "-c", "copy", str(out)], check=True
+            )
+    print(out, f"{last} moves, {subframes} frames each at {fps} fps")

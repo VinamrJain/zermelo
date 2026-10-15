@@ -10,6 +10,7 @@ Three panels, over the candidate box in degrees:
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 import matplotlib
@@ -142,6 +143,9 @@ parse.add_argument("--local", action="store_true", help="draw the film here rath
 parse.add_argument("--fps", type=int, default=12, help="frames a second the film plays at")
 parse.add_argument("--dpi", type=int, default=120, help="how finely a frame is drawn")
 parse.add_argument("--still", type=int, help="film only: one frame at this move as a png, drawn here")
+parse.add_argument("--subframes", type=int, default=1, help="film only: frames each move is spread over")
+parse.add_argument("--workers", type=int, default=min(len(os.sched_getaffinity(0)), 8), help="film only: processes one film is drawn over")
+parse.add_argument("--until", type=int, help="film only: the last move shown")
 given = parse.parse_args()
 where = given.target if given.target.exists() else SWEEPS / given.target
 if not where.is_dir():
@@ -154,11 +158,21 @@ else:
         marker.parent for marker in sorted(launch.glob("*/record.npz")) if int(settings(marker.parent.name).get("seed", 0)) == given.seed
     ]
 if given.film and not (given.local or given.still is not None):
-    print(send(runs, launch / "films", f"--fps {given.fps} --dpi {given.dpi}"))
+    until = "" if given.until is None else f" --until {given.until}"
+    print(send(runs, launch / "films", f"--fps {given.fps} --dpi {given.dpi} --subframes {given.subframes}{until}"))
 elif given.film:
     for run in runs:
         (launch / "films").mkdir(exist_ok=True)
-        film(run, launch / "films" / f"{settings(run.name).get('arm', run.name)}.mp4", fps=given.fps, dpi=given.dpi, still=given.still)
+        film(
+            run,
+            launch / "films" / f"{settings(run.name).get('arm', run.name)}.mp4",
+            fps=given.fps,
+            dpi=given.dpi,
+            subframes=given.subframes,
+            workers=given.workers,
+            until=given.until,
+            still=given.still,
+        )
 else:
     (launch / "stills").mkdir(exist_ok=True)
     for run in runs:
