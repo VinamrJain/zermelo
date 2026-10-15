@@ -139,7 +139,7 @@ def expected_improvement(components: tuple[int, ...]) -> Implementation:
 
 def goals_reached(radius: float) -> Implementation:
     """How many candidates lie within `radius` of some reading's state"""
-    return _built("zermelo.methods.path_eui.utility.GoalsReached", goal_radius=radius)
+    return _built("zermelo.methods.path_eui.utility.GoalsReached", radius=radius)
 
 
 def uniform() -> Implementation:

@@ -121,7 +121,7 @@ def episode_curves(held: dict[str, Any], claim_every: int) -> dict[str, Any]:
 
 
 def opening_moves(config: dict[str, Any], moves: int) -> int:
-    """Time_steps walked at random before any waypoint exists (the whole episode where there is no rule)"""
+    """Time steps moved at random before any target exists (the whole episode where there is no rule)"""
     method = config.get("method")
     if method is None:
         return moves
@@ -129,14 +129,14 @@ def opening_moves(config: dict[str, Any], moves: int) -> int:
 
 
 def episode_legs(held: dict[str, Any], config: dict[str, Any]) -> dict[str, np.ndarray]:
-    """One row per finished waypoint leg: the time_step it ended at, the steps walked, and whether it arrived"""
+    """One row per finished target leg: the time_step it ended at, the steps moved, and whether it arrived"""
     method = config.get("method")
     if method is None:
         return {name: np.zeros(0) for name in ("ended", "walked", "arrived")}
     budget = int(method["planner"].get("replan_length", method["planner"].get("replan_every")))
     since = held["agent_state/steps_since_target"]  # (time_steps + 1,) zero on a replan and up one a time_step
-    ends = np.flatnonzero(np.diff(since) < 0)  # the last snapshot of each waypoint leg, where the sawtooth drops
-    ends = ends[ends > opening_moves(config, since.size - 1)]  # the drop closing the opening ends no waypoint leg
+    ends = np.flatnonzero(np.diff(since) < 0)  # the last snapshot of each target leg, where the sawtooth drops
+    ends = ends[ends > opening_moves(config, since.size - 1)]  # the drop closing the opening ends no target leg
     walked = since[ends].astype(float)
     return {"ended": ends.astype(float), "walked": walked, "arrived": (walked < budget).astype(float)}
 

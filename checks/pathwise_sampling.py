@@ -56,7 +56,7 @@ class Agreement:
 
 
 def dummy_problem() -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-    """The problem both sides solve_shortest_paths: the grid, the cells read, and what was read there."""
+    """The problem both sides solve: the grid, the cells read, and what was read there."""
     coords = (SPACING * jnp.arange(N_CELLS, dtype=jnp.float32))[:, None]  # (n_cells, 1)
     rng = np.random.default_rng(SEED)
     read = np.sort(rng.choice(N_CELLS, N_READ, replace=False))
@@ -74,8 +74,8 @@ def exact_moments(x: jnp.ndarray, y: jnp.ndarray, coords: jnp.ndarray) -> tuple[
         return np.zeros(coords.shape[0]), prior
     gram = np.asarray(kernel.gram(x).to_dense(), np.float64) + NOISE**2 * np.eye(x.shape[0])
     cross = np.asarray(kernel.cross_covariance(coords, x), np.float64)  # (n_cells, n_read)
-    solved = np.linalg.solve_shortest_paths(gram, cross.T)  # (n_read, n_cells)
-    return cross @ np.linalg.solve_shortest_paths(gram, np.asarray(y, np.float64)), prior - cross @ solved
+    solved = np.linalg.solve(gram, cross.T)  # (n_read, n_cells)
+    return cross @ np.linalg.solve(gram, np.asarray(y, np.float64)), prior - cross @ solved
 
 
 def their_paths(x: jnp.ndarray, y: jnp.ndarray, coords: jnp.ndarray, key: jax.Array, n_field_samples: int) -> np.ndarray:

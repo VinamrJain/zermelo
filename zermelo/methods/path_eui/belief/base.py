@@ -86,7 +86,7 @@ class FieldEstimate:
     """`f(state_i, context_i)` at each slot of the belief's dataset, observed or not"""
 
     def __call__(self, x: Any) -> Float[Array, "*batch components"]:
-        """`table` at whatever state this is called on"""
+        """`at_every_state` at whatever state this is called on"""
         return self.at_every_state[indexer(self.positions)(x)]
 
 

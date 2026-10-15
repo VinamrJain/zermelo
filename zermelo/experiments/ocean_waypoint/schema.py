@@ -65,7 +65,7 @@ class ProblemConfig:
     lat_max: float = MISSING
     lon_min: float = MISSING
     lon_max: float = MISSING
-    """The box of grid points, in degrees, a waypoint may be aimed at"""
+    """The box of grid points, in degrees, a target may be aimed at"""
 
     target_lat_min: float = MISSING
     target_lat_max: float = MISSING
@@ -139,13 +139,13 @@ class BeliefConfig:
 
 @dataclass
 class MethodConfig:
-    """One fully specified waypoint rule"""
+    """One fully specified target rule"""
 
     utility: Any = MISSING
     """Which quantity of a belief is maximized, as a dotted path with its own arguments"""
 
     planner: Any = MISSING
-    """Which policy carries the balloon to a waypoint, as a dotted path with its own arguments"""
+    """Which policy carries the balloon to a target, as a dotted path with its own arguments"""
 
     n_field_samples: int = MISSING
     """Field draws averaged over (zero reads the posterior mean alone)"""
@@ -163,7 +163,7 @@ class MethodConfig:
     """Cap on candidates scored per move (None scores every one, 0 the target alone)"""
 
     random_opening_steps: int = MISSING
-    """time_steps of uniform random walking taken before the rule starts"""
+    """time_steps of uniform random moves taken before the rule starts"""
 
 
 @dataclass
@@ -202,7 +202,7 @@ class RunConfig:
     belief: BeliefConfig = MISSING
 
     method: MethodConfig | None = MISSING
-    """The waypoint rule's settings (None is an arm that acts uniformly and chooses no waypoint)"""
+    """The target rule's settings (None is an arm that acts uniformly and chooses no target)"""
 
     horizon: int = MISSING
     """Moves an episode may make"""

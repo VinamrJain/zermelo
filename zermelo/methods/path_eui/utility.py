@@ -82,7 +82,7 @@ class TotalVariance(Utility):
 
     def __call__(self, key: PRNGKeyArray, belief: Belief, dataset: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
         context = context_of_latest_observation(dataset)
-        candidate_states = jnp.flatnonzero(candidates.live)  # (n_candidates_scored,)
+        candidate_states = jnp.flatnonzero(candidates.live)  # (n_candidates,)
         components = jnp.asarray(self.components)
         variance_now = jnp.sum(
             belief.mean_and_variance(candidate_states, context)[1][:, components]
@@ -97,7 +97,7 @@ class TotalVariance(Utility):
                 )
                 - variance_now
             )
-        # one leading batch element at a time: the covariance to the candidates is (n_candidates_scored, n_candidates_scored, n_imagined) per walk
+        # one leading batch element at a time: the covariance to the candidates is (n_candidates, n_candidates, n_imagined) per path
         return (
             jnp.stack(
                 [
@@ -111,7 +111,7 @@ class TotalVariance(Utility):
 
 def variance_explained(
     belief: Belief,
-    candidate_states: Int[Array, " n_candidates_scored"],
+    candidate_states: Int[Array, " n_candidates"],
     imagined_states: Int[Array, "*batch n_imagined"],
     imagined_is_live: Bool[Array, "*batch n_imagined"],
     context: Float[Array, " n_context"],
@@ -120,13 +120,11 @@ def variance_explained(
     both_live = (imagined_is_live[..., :, None] & imagined_is_live[..., None, :])[..., None, :, :]  # (*batch, 1, n_imagined, n_imagined)
     among_imagined = jnp.where(both_live, belief.posterior_covariance(imagined_states, imagined_states, context), 0.0)
     among_imagined = among_imagined + jnp.where(imagined_is_live, 1e-6, 1.0)[..., None, None, :] * jnp.eye(imagined_states.shape[-1])
-    to_candidates = belief.posterior_covariance(
-        candidate_states, imagined_states, context
-    )  # (*batch, groups, n_candidates_scored, n_imagined)
+    to_candidates = belief.posterior_covariance(candidate_states, imagined_states, context)  # (*batch, groups, n_candidates, n_imagined)
     to_candidates = jnp.where(imagined_is_live[..., None, None, :], to_candidates, 0.0)
     whitened = solve_triangular(
         jnp.linalg.cholesky(among_imagined), jnp.swapaxes(to_candidates, -1, -2), lower=True
-    )  # (*batch, groups, n_imagined, n_candidates_scored)
+    )  # (*batch, groups, n_imagined, n_candidates)
     return jnp.sum(whitened**2, axis=(-1, -2))
 
 
@@ -166,12 +164,8 @@ class ExpectedImprovement(Utility):
         # |f| clears beta above or below, disjointly for beta >= 0, so the two tails add. Each is
         # `E[(x - c)^+] = gap * Phi(gap / spread) + spread * phi(gap / spread)` at its own gap
         over, under = (mu - beta) / spread, (-mu - beta) / spread
-        subtract_dataset_utility = (
-            (mu - beta) * norm.cdf(over) + (-mu - beta) * norm.cdf(under) + spread * (norm.pdf(over) + norm.pdf(under))
-        )
-        return jnp.max(
-            jnp.where(observation_is_counted(dataset, candidates), subtract_dataset_utility, 0.0), axis=-1
-        )  # 0.0 floors an improvement
+        improvement = (mu - beta) * norm.cdf(over) + (-mu - beta) * norm.cdf(under) + spread * (norm.pdf(over) + norm.pdf(under))
+        return jnp.max(jnp.where(observation_is_counted(dataset, candidates), improvement, 0.0), axis=-1)  # 0.0 floors an improvement
 
 
 @dataclass(frozen=True)
@@ -201,9 +195,9 @@ class GoalsReached(Utility):
     def __call__(self, key: PRNGKeyArray, belief: Belief, dataset: Dataset, candidates: Subset[Any]) -> Float[Array, " *batch"]:
         with jax.ensure_compile_time_eval():
             coords = coordinates(candidates.base)  # (n_states, k)
-            targets = coords[jnp.flatnonzero(candidates.live)]  # (n_candidates_scored, k)
-        gap = coords[dataset.state_index][..., None, :] - targets  # (*batch, n, n_candidates_scored, k)
-        near = jnp.sum(gap**2, axis=-1) <= self.radius**2  # (*batch, n, n_candidates_scored)
+            targets = coords[jnp.flatnonzero(candidates.live)]  # (n_candidates, k)
+        gap = coords[dataset.state_index][..., None, :] - targets  # (*batch, n, n_candidates, k)
+        near = jnp.sum(gap**2, axis=-1) <= self.radius**2  # (*batch, n, n_candidates)
         return jnp.sum(jnp.any(near & dataset.is_observed[..., None], axis=-2), axis=-1).astype(float)
 
 
@@ -267,14 +261,12 @@ class RegionInformation(Utility):
         imagined_states, imagined_is_live = imagined_observations(belief, dataset)
         if imagined_states.shape[-1] == 0:
             return jnp.zeros(imagined_states.shape[:-1])
-        candidate_states = jnp.flatnonzero(candidates.live)  # (n_candidates_scored,)
-        among_candidates = belief.posterior_covariance(
-            candidate_states, candidate_states, context
-        )  # (groups, n_candidates_scored, n_candidates_scored)
+        candidate_states = jnp.flatnonzero(candidates.live)  # (n_candidates,)
+        among_candidates = belief.posterior_covariance(candidate_states, candidate_states, context)  # (groups, n_candidates, n_candidates)
         chol_candidates = jnp.linalg.cholesky(among_candidates + 1e-6 * jnp.eye(candidate_states.shape[0]))
         inverse_candidates = jnp.vectorize(lambda chol: cho_solve((chol, True), jnp.eye(chol.shape[0])), signature="(n,n)->(n,n)")(
             chol_candidates
-        )  # (groups, n_candidates_scored, n_candidates_scored): [K_n(C, C) + 1e-6 I]^-1
+        )  # (groups, n_candidates, n_candidates): [K_n(C, C) + 1e-6 I]^-1
 
         def one(states: Int[Array, "*batch n_imagined"], is_live: Bool[Array, "*batch n_imagined"]) -> Float[Array, " *batch"]:
             """The bracket summed over the components, one per leading batch element"""
@@ -282,7 +274,7 @@ class RegionInformation(Utility):
             among_imagined = jnp.where(both_live, belief.posterior_covariance(states, states, context), 0.0)
             to_candidates = jnp.where(
                 is_live[..., None, :, None], belief.posterior_covariance(states, candidate_states, context), 0.0
-            )  # (*batch, groups, n_imagined, n_candidates_scored)
+            )  # (*batch, groups, n_imagined, n_candidates)
             explained = jnp.einsum("...bic,bcd,...bjd->...bij", to_candidates, inverse_candidates, to_candidates)
             measurement_noise = belief.measurement_noise
             return belief.over_components(
@@ -292,5 +284,5 @@ class RegionInformation(Utility):
 
         if imagined_states.ndim <= 2:
             return one(imagined_states, imagined_is_live)
-        # one leading batch element at a time: the covariance to the candidates is (n_candidates_scored, n_imagined, n_candidates_scored) per walk
+        # one leading batch element at a time: the covariance to the candidates is (n_candidates, n_imagined, n_candidates) per path
         return jnp.stack([one(states, is_live) for states, is_live in zip(imagined_states, imagined_is_live, strict=True)])

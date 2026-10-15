@@ -51,7 +51,7 @@ class Planner(ABC):
     """`solve_shortest_paths` gives `(pi, S, C)`, `policy_to_targets` gives it `targets_per_solve` targets at a time, `roll_paths` samples paths under `pi`"""
 
     value_iterations: int
-    """`K`: rounds of the recursion per solve_shortest_paths"""
+    """`K`: rounds of the recursion per solve"""
 
     replan_length: int
     """`L`: the replan length, steps per path and moves per target"""
@@ -60,7 +60,7 @@ class Planner(ABC):
     """`rho`: `|z - x| <= rho` is arrival, on embedded coordinates"""
 
     targets_per_solve: int | None
-    """Targets per solve_shortest_paths, `None` all at once"""
+    """Targets per solve, `None` all at once"""
 
     cost_weight: float
     """`mu`"""
