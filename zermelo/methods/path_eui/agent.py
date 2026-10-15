@@ -165,7 +165,14 @@ class PathEUIAgent(Agent[PathEUIState]):
         if bool(replan_is_due):
             goal = None if self.goal_key is None else self.candidates.index_of(obs.reading[self.goal_key])
             budget_left = None if self.budget_column is None else context[self.budget_column]
-            choice = self.acquisition.choose_target(
+            acquisition = (  # K = H - h where the planner's K is the steps left
+                self.acquisition
+                if planner.value_iterations is not None
+                else dataclasses.replace(
+                    self.acquisition, planner=dataclasses.replace(planner, value_iterations=self.horizon - int(agent_state.time_step))
+                )
+            )
+            choice = acquisition.choose_target(
                 k_choice, belief, self.transition, z, self._legal_actions(obs), self.candidates, context, goal, budget_left
             )
             steps_since_target = jnp.zeros((), jnp.int32)

@@ -93,8 +93,14 @@ SCORED_COMPONENTS = {"ocean_current": OCEAN_CURRENT, "wind": WIND, "both": OCEAN
 """The components of the field a learning episode is scored on and a learning rule counts, by what it is scored on"""
 
 
-PLANNING_BUDGET = 25
+PLANNING_BUDGET = 50
 """`L`: a waypoint is chosen anew after this many moves, and an imagined walk is rolled over at most as many"""
+
+VALUE_ITERATIONS = 2 * PLANNING_BUDGET
+"""`K`: rounds of value iteration per plan"""
+
+ONLY_REACHABLE = False
+"""Whether a rule chooses only among targets with `H-hat(z_h, x) < L`"""
 
 ARRIVAL_RADIUS_KM = 20.0
 """`rho`: how near a waypoint counts as arrived, inside positions about 18 km apart"""

@@ -6,10 +6,12 @@ from zermelo.experiments.ocean_waypoint.registry import (
     GULF_STREAM_2019JUN,
     HORIZON_LENGTH,
     N_SEEDS,
+    ONLY_REACHABLE,
     PLANNING_BUDGET,
     RECORDED,
     RESOURCES,
     STILL_FRAMES,
+    VALUE_ITERATIONS,
     field_belief,
 )
 from zermelo.experiments.ocean_waypoint.schema import MethodConfig
@@ -31,8 +33,9 @@ def _method(utility: Implementation, *, subtract_dataset_utility: bool, n_field_
     return MethodConfig(
         utility=utility,
         planner=value_iteration(
-            value_iterations=HORIZON_LENGTH,
+            value_iterations=VALUE_ITERATIONS,
             replan_length=PLANNING_BUDGET,
+            only_reachable=ONLY_REACHABLE,
             radius=ARRIVAL_RADIUS_KM,
             targets_per_solve=None,
             cost_weight=0.0,

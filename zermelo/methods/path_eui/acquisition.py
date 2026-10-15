@@ -178,11 +178,11 @@ class Acquisition:
     ) -> Int[Array, ""]:
         """Index of `x* ~ Uniform( argmax over x in delta_L of alpha(x) )`, or of the nearest `x` by `H-hat` when `delta_L` is empty
 
-        delta_L = { x : 0 < H-hat(z_h, x) < L }: within the goal radius nothing is walked, and at H-hat = L nothing arrives before
+        delta_L = { x : 0 < H-hat(z_h, x) < L }, or { x : 0 < H-hat(z_h, x) } unless the planner is only_reachable: within the goal radius nothing is walked, and at H-hat = L nothing arrives before
         the next decision; where the problem keeps a budget, C-hat(z_h, x) <= the budget left as well.
         """
         is_reachable: Bool[Array, " n_candidates_scored"] = (policy.expected_path_length > 0.0) & (
-            policy.expected_path_length < self.planner.replan_length
+            (policy.expected_path_length < self.planner.replan_length) | (not self.planner.only_reachable)
         )
         if budget_left is not None:
             is_reachable &= policy.expected_cost <= budget_left

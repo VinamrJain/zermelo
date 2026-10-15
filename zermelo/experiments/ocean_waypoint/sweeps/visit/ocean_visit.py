@@ -6,9 +6,12 @@ from zermelo.experiments.ocean_waypoint.registry import (
     GULF_STREAM_2019JUN,
     HORIZON_LENGTH,
     N_SEEDS,
+    ONLY_REACHABLE,
+    PLANNING_BUDGET,
     RECORDED,
     RESOURCES,
     STILL_FRAMES,
+    VALUE_ITERATIONS,
     field_belief,
     oracle_belief,
 )
@@ -17,9 +20,6 @@ from zermelo.experiments.ocean_waypoint.setup import Implementation, arm, goals_
 
 WORLD = dataclasses.replace(GULF_STREAM_2019JUN, objective="visit")
 """The same frame, scored on the moves until every one of the targets drawn from the target box has been visited"""
-
-PLANNING_BUDGET = 100
-"""`L` moves a trip is planned for, and how often the target is reconsidered"""
 
 N_FIELDS = 16
 """`N` fields drawn from the posterior per decision"""
@@ -33,8 +33,9 @@ def _method(utility: Implementation, *, n_field_samples: int, n_paths_per_field:
     return MethodConfig(
         utility=utility,
         planner=value_iteration(
-            value_iterations=HORIZON_LENGTH,
+            value_iterations=VALUE_ITERATIONS,
             replan_length=PLANNING_BUDGET,
+            only_reachable=ONLY_REACHABLE,
             radius=ARRIVAL_RADIUS_KM,
             targets_per_solve=None,
             cost_weight=0.0,
