@@ -24,7 +24,6 @@ from zermelo.problems.ocean import (
     Polar,
     learn_objective,
     load_ocean,
-    ocean_objective,
     ocean_states,
     ocean_transition,
     ocean_world,
@@ -75,9 +74,7 @@ def assemble(cfg: RunConfig) -> Episode:
         cfg.problem.target_lat_min, cfg.problem.target_lat_max, cfg.problem.target_lon_min, cfg.problem.target_lon_max
     )
     noise_ms = jnp.asarray([cfg.problem.noise_ms] * 2 + [cfg.problem.wind_noise_ms] * 2)  # (components,)
-    world = ocean_world(
-        grid, states, predicted, error, transition, noise_ms, target_box, target_box
-    )  # the boat starts in the target box too
+    world = ocean_world(grid, states, predicted, error, transition, noise_ms, target_box)
     # the targets of a visiting episode, drawn uniformly from the target box on a key folded off the world's
     targets = (
         jnp.zeros(grid.size(), bool)
@@ -85,9 +82,7 @@ def assemble(cfg: RunConfig) -> Episode:
         .set(True)
     )
     objective = (  # under learn and search the region of interest is the target box
-        ocean_objective(states, grid, box, cfg.problem.arrival_km)
-        if cfg.problem.objective == "reach"
-        else learn_objective(states, target_box, 2.0 * jnp.log(prior_amplitude(cfg)), SCORED_COMPONENTS[cfg.problem.learned])
+        learn_objective(states, target_box, 2.0 * jnp.log(prior_amplitude(cfg)), SCORED_COMPONENTS[cfg.problem.learned])
         if cfg.problem.objective == "learn"
         else search_objective(states, target_box)
         if cfg.problem.objective == "search"
@@ -148,7 +143,6 @@ def assemble(cfg: RunConfig) -> Episode:
             measurement_key="field_reading",
             context_key="context",
             prior_mean_key="forecast" if cfg.belief.forecast_as_prior_mean else None,
-            goal_key="target",
             budget_column=None,
             horizon=cfg.horizon,
             random_opening_steps=cfg.method.random_opening_steps,

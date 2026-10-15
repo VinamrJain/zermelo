@@ -64,7 +64,7 @@ class Acquisition:
     """`M`; 0 scores tau-hat = (x), the target alone with no path"""
 
     n_candidates_scored: int | None
-    """Which `x` are scored: `None` every candidate, an integer that many drawn uniformly, 0 the goal alone"""
+    """Which `x` are scored: `None` every candidate, an integer that many drawn uniformly"""
 
     subtract_dataset_utility: bool
     """`U(d_h + tau-hat) - U(d_h)` when True, `U(tau-hat)` when False"""
@@ -81,12 +81,11 @@ class Acquisition:
         actions: Int[Array, " n_actions"],
         candidates: Subset[Any],
         context: Float[Array, " n_context"],
-        goal: Int[Array, ""] | None,
         budget_left: Float[Array, ""] | None,
     ) -> TargetChoice:
-        """`(belief, z_h = position, ...) -> TargetChoice` by the module's rule; `goal` is the one `x` at `n_candidates_scored = 0`"""
+        """`(belief, z_h = position, ...) -> TargetChoice` by the module's rule"""
         k_candidates, k_fields, k_paths, k_utility, k_tie = jax.random.split(key, 5)
-        candidates_scored = self._candidates_to_score(k_candidates, candidates, goal)  # x
+        candidates_scored = self._candidates_to_score(k_candidates, candidates)  # x
         # pi[phi-hat] with H-hat and C-hat at z_h, solved once and reused by every imagined path
         policy = self.planner.policy_to_targets(transition.kernel(belief.mean_field(context)), candidates_scored, actions, position)
         utility_improvement, imagined_paths = self._expected_utility_improvement(
@@ -106,14 +105,8 @@ class Acquisition:
             ),
         )
 
-    def _candidates_to_score(
-        self, key: PRNGKeyArray, candidates: Subset[Any], goal: Int[Array, ""] | None
-    ) -> Int[Array, " n_candidates_scored"]:
-        """The `x` scored: every candidate, `n_candidates_scored` of them drawn uniformly, or the goal alone"""
-        if self.n_candidates_scored == 0:
-            if goal is None:
-                raise ValueError("the goal alone is scored, and this decision names none")
-            return jnp.asarray(goal)[None]
+    def _candidates_to_score(self, key: PRNGKeyArray, candidates: Subset[Any]) -> Int[Array, " n_candidates_scored"]:
+        """The `x` scored: every candidate, or `n_candidates_scored` of them drawn uniformly"""
         every = jnp.flatnonzero(candidates.live)
         if self.n_candidates_scored is None:
             return every

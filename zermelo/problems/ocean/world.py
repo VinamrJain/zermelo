@@ -10,7 +10,7 @@ from jaxtyping import Array, Bool, Float
 from zermelo.interface import BoxDomain, FunctionDomain, ProductDomain, ProductPrior, Uniform, World
 from zermelo.problems.ocean.field import COMPONENTS, ForecastError, ForecastPrior, GridField
 from zermelo.problems.ocean.grid import PlaneGrid
-from zermelo.problems.ocean.objective import LearnRegion, ReachTarget, SearchMagnitude, VisitTargets
+from zermelo.problems.ocean.objective import LearnRegion, SearchMagnitude, VisitTargets
 from zermelo.problems.ocean.readout import PointField
 from zermelo.problems.ocean.transition import OceanTransition, Polar
 
@@ -85,26 +85,14 @@ def ocean_world(
     transition: OceanTransition,
     noise_ms: Float[Array, " components"],
     start_box: Bool[Array, " pos"],
-    target_box: Bool[Array, " pos"],
 ) -> World:
-    """The problem a forecast poses: the boat starts at a grid point drawn uniformly from `start_box`, its target is drawn uniformly from `target_box`, and the field is that forecast plus an error"""
+    """The problem a forecast poses: the boat starts at a grid point drawn uniformly from `start_box`, and the field is that forecast plus an error"""
     return World(
-        state_domain=ProductDomain(
-            {
-                "position": grid.narrow(start_box),
-                "target": grid.narrow(target_box),
-                "field": FunctionDomain(states, BoxDomain((COMPONENTS,))),
-            }
-        ),
-        prior=ProductPrior({"position": Uniform(), "target": Uniform(), "field": ForecastPrior(forecast, error, grid)}),
+        state_domain=ProductDomain({"position": grid.narrow(start_box), "field": FunctionDomain(states, BoxDomain((COMPONENTS,)))}),
+        prior=ProductPrior({"position": Uniform(), "field": ForecastPrior(forecast, error, grid)}),
         transition=transition,
         readout=PointField(GridField(forecast, grid), states, noise_ms),
     )
-
-
-def ocean_objective(states: ProductDomain, grid: PlaneGrid, box: Bool[Array, " pos"], arrival_km: float) -> ReachTarget:
-    """What the episode is scored on: reaching the target, with waypoints and claims over the grid points `box` marks"""
-    return ReachTarget(states.narrow(box), grid, arrival_km)
 
 
 def learn_objective(

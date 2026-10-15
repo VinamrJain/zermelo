@@ -1,8 +1,7 @@
 """One time_step of a boat: it sails a heading through the water, the ocean current carries the water, and it lands on a grid point nearby
 
-state = (position, target, field)
+state = (position, field)
     position    (lat, lon) degrees of the grid point the boat is at
-    target      (lat, lon) degrees of the grid point to reach, never written
     field       (W, U) the ocean current and the wind: field(position) = (W_u, W_v, U_u, U_v) in m/s, u eastward and v northward
 action in {0, ..., n_headings}
     k < n_headings     sail at heading 2 pi k / n_headings, counted from east towards north

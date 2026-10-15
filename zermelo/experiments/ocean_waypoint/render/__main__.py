@@ -28,12 +28,9 @@ SWEEPS = Path("results") / __package__.split(".")[-2]
 
 CHANNELS = (
     "state/position",
-    "state/target",
     "objective_state/truth",
     "objective_state/claim",
-    "objective_state/arrived",
     "objective_state/information",
-    "objective_state/steps_to_arrival",
     "objective_state/best_observed_magnitude",
     "objective_state/best_possible_magnitude",
     "objective_state/targets",
@@ -62,10 +59,8 @@ def still(run: Path, out: Path) -> None:
     problem = config["problem"]
     targets_drawn = held["objective_state/targets"][0] if "objective_state/targets" in held else None
     candidates = np.flatnonzero(candidate_box(problem, lat, lon, land, targets_drawn))
-    reaching = "objective_state/arrived" in held  # else the target the world drew is unread
     searching, visiting = "objective_state/best_observed_magnitude" in held, "objective_state/targets" in held
-    where = "" if reaching else "target_"  # the candidate box the waypoints are aimed in
-    box_lat, box_lon = (problem[f"{where}lat_min"], problem[f"{where}lat_max"]), (problem[f"{where}lon_min"], problem[f"{where}lon_max"])
+    box_lat, box_lon = (problem["target_lat_min"], problem["target_lat_max"]), (problem["target_lon_min"], problem["target_lon_max"])
 
     def on_grid(per_candidate: np.ndarray) -> np.ndarray:
         """A value per candidate laid onto the grid, nan elsewhere"""
@@ -96,8 +91,6 @@ def still(run: Path, out: Path) -> None:
         )
         ax.plot(track[0, 1], track[0, 0], "o", ms=7, mfc="none", mec="k", mew=1.5, label="start")
         ax.plot(track[-1, 1], track[-1, 0], "r*", ms=9)
-        if reaching:
-            ax.plot(held["state/target"][0, 1], held["state/target"][0, 0], "m*", ms=12, mec="w", label="target")
         if searching:  # the fastest current in the box, the point the search is scored against
             fastest = candidates[np.argmax(np.linalg.norm(held["objective_state/truth"][-1], axis=-1))]
             ax.plot(lon[fastest % n_lon], lat[fastest // n_lon], "*", ms=14, color="gold", mec="k", label="fastest current")
@@ -116,13 +109,9 @@ def still(run: Path, out: Path) -> None:
     axes[0].legend(loc="lower right", fontsize=7)
     axes[0].set_ylabel("lat")
     fig.suptitle(
-        f"{run.parent.parent.name} / {run.name}: {track.shape[0] - 1} moves of {problem['step_hours']} h, arrived at step {int(held['objective_state/steps_to_arrival'][-1])}"
-        if reaching and held["objective_state/arrived"][-1]
-        else f"{run.parent.parent.name} / {run.name}: {track.shape[0] - 1} moves of {problem['step_hours']} h, "
+        f"{run.parent.parent.name} / {run.name}: {track.shape[0] - 1} moves of {problem['step_hours']} h, "
         + (
-            "never arrived"
-            if reaching
-            else f"{held['objective_state/information'][-1]:.0f} nats learned"
+            f"{held['objective_state/information'][-1]:.0f} nats learned"
             if "objective_state/information" in held
             else f"best {held['objective_state/best_observed_magnitude'][-1]:.2f} of {held['objective_state/best_possible_magnitude'][-1]:.2f} m/s"
             if searching

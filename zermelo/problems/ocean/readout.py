@@ -1,9 +1,8 @@
 """What a boat is handed each time_step
 
-reading = {position, field_reading, target, forecast}
+reading = {position, field_reading, forecast}
     position       (position,): the state the field was measured at
     field_reading  field there plus N(0, diag(noise_ms^2)), (W_u, W_v, U_u, U_v) in m/s
-    target         (position,): the grid point to reach, in the form `position` takes
     forecast       the forecast, callable at any position
 """
 
@@ -19,7 +18,7 @@ from zermelo.problems.ocean.field import COMPONENTS, GridField
 
 @dataclass(frozen=True)
 class PointField(Readout):
-    """The field at the state itself, what a boat reads off its own drift and its anemometer, with the target and the forecast handed over beside it"""
+    """The field at the state itself, what a boat reads off its own drift and its anemometer, with the forecast handed over beside it"""
 
     forecast: GridField
     """The one object handed over at every time_step"""
@@ -42,7 +41,6 @@ class PointField(Readout):
             {
                 "position": self.states,
                 "field_reading": BoxDomain((COMPONENTS,)),
-                "target": self.states,
                 "forecast": FunctionDomain(self.states, BoxDomain((COMPONENTS,))),
             }
         )
@@ -52,7 +50,6 @@ class PointField(Readout):
         return {
             "position": {part: state[part] for part in self.states.parts},
             "field_reading": state["field"]({"position": state["position"]}) + self.noise_ms * jax.random.normal(key, (COMPONENTS,)),
-            "target": {"position": state["target"]},
             "forecast": self.forecast,
         }
 

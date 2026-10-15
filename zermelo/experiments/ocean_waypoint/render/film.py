@@ -1,11 +1,11 @@
-"""One ocean episode as a film: the boat on the true ocean current, what it believes, and how far it still is from the target
+"""One ocean episode as a film: the boat on the true ocean current, what it believes, and how far it still is from its goal
 
 Top: ||W|| shaded with its streamlines, the wind as a quiver, land masked, the track fading behind the boat, the boat as a
 triangle pointing along its heading, at the boat the wind, the ocean current, the heading through the water and the net motion as
-arrows, the target with its arrival ring, the waypoint aimed at and the walk imagined to it; beside it the numbers of the move.
+arrows, the targets with their arrival rings, the waypoint aimed at and the walk imagined to it; beside it the numbers of the move.
 Bottom: the belief's mean current speed ||mu_t|| on the truth's scale, its current spread (var_u + var_v)^(1/2) on the prior's, the polar, boat speed
 against heading for the wind at the boat with the heading marked, and the belief's wind spread on its prior's. A move is spread over
-`subframes` frames; the film ends a few moves after arrival.
+`subframes` frames; the film ends a few moves after the last target is visited.
 
 The heading is not recorded: it is read back as the net motion of the move less the ocean current at the point it left.
 """
@@ -107,13 +107,12 @@ def send(runs: Sequence[Path], into: Path, flags: str) -> str:
 
 def candidate_box(problem: dict, lat: np.ndarray, lon: np.ndarray, land: np.ndarray, targets: np.ndarray | None) -> np.ndarray:
     """(n_lat * n_lon,): the grid points a claim is scored on: the `targets` (n_targets, 2) of a visiting episode as (lat, lon), else the
-    target box when the episode learns or searches the region and the whole box otherwise"""
+    target box"""
     grid = PlaneGrid(len(lat), len(lon), float(lat[0]), float(lon[0]), float(lat[1] - lat[0]), float(lon[1] - lon[0]))
     if targets is not None:
         rows, cols = np.abs(lat[:, None] - targets[:, 0]).argmin(axis=0), np.abs(lon[:, None] - targets[:, 1]).argmin(axis=0)
         return np.isin(np.arange(len(lat) * len(lon)), rows * len(lon) + cols)
-    where = "target_" if problem.get("objective") in ("learn", "search") else ""  # a record from before the field is a reaching one
-    inside = grid.inside(problem[f"{where}lat_min"], problem[f"{where}lat_max"], problem[f"{where}lon_min"], problem[f"{where}lon_max"])
+    inside = grid.inside(problem["target_lat_min"], problem["target_lat_max"], problem["target_lon_min"], problem["target_lon_max"])
     return np.asarray(inside) & ~land.reshape(-1)
 
 
@@ -126,10 +125,8 @@ def scene(run: Path, dpi: int, until: int | None) -> tuple[FigureCanvasAgg, Call
         run,
         (
             "state/position",
-            "state/target",
             "objective_state/truth",
             "objective_state/claim",
-            "objective_state/arrived",
             "objective_state/information",
             "objective_state/best_observed_magnitude",
             "objective_state/best_possible_magnitude",
@@ -169,15 +166,13 @@ def scene(run: Path, dpi: int, until: int | None) -> tuple[FigureCanvasAgg, Call
         return np.nan_to_num(np.array([sheet_u[r, c], sheet_v[r, c]]))
 
     true_speed = np.hypot(true_u, true_v)
-    track, target = held["state/position"].astype(float), held["state/target"][0].astype(float)  # (T + 1, 2) and (2,) as (lat, lon)
-    reaching = "objective_state/arrived" in held  # else the target the world drew is unread
+    track = held["state/position"].astype(float)  # (T + 1, 2) as (lat, lon)
     searching, visiting = "objective_state/best_observed_magnitude" in held, "objective_state/targets" in held
     visited = held["objective_state/visited"] if visiting else np.zeros((track.shape[0], 0))  # (T + 1, n_targets)
-    arrived = held["objective_state/arrived"] if reaching else visited.all(axis=-1) if visiting else np.zeros(track.shape[0], bool)
+    arrived = visited.all(axis=-1) if visiting else np.zeros(track.shape[0], bool)
     step_hours = float(problem["step_hours"])
     cos_mid = np.cos(np.radians(np.mean(lat)))
     km_per_degree = np.array([KM_PER_DEGREE, KM_PER_DEGREE * cos_mid])  # per degree of (lat, lon)
-    distance = np.linalg.norm((track - target) * km_per_degree, axis=-1)  # (T + 1,) km
     last = min(track.shape[0] - 1, int(np.argmax(arrived)) + AFTER_ARRIVAL) if arrived.any() else track.shape[0] - 1
     last = last if until is None else min(last, until)
     claims = held["objective_state/claim"]  # (T + 1, n_candidates, 8)
@@ -251,20 +246,6 @@ def scene(run: Path, dpi: int, until: int | None) -> tuple[FigureCanvasAgg, Call
     cbar.set_label("true ocean current speed (m/s)", fontsize=11)
     cbar.ax.tick_params(labelsize=10, colors="#bbbbbb")
     ring_km = float(problem["arrival_km"])
-    if reaching:
-        main.add_patch(
-            Ellipse(
-                (target[1], target[0]),
-                2 * ring_km / km_per_degree[1],
-                2 * ring_km / km_per_degree[0],
-                fill=False,
-                ec=TARGET,
-                lw=1.6,
-                ls="--",
-                zorder=5,
-            )
-        )
-        main.plot(target[1], target[0], marker="*", ms=20, color=TARGET, mec="white", mew=0.8, zorder=6, ls="none")
     if searching:  # the fastest current in the box, the point the search is scored against
         fastest = candidates[np.argmax(np.linalg.norm(held["objective_state/truth"][0][:, list(OCEAN_CURRENT)], axis=-1))]
         main.plot(lon[fastest % n_lon], lat[fastest // n_lon], marker="*", ms=22, color=FASTEST, mec="white", mew=0.8, zorder=6, ls="none")
@@ -302,7 +283,6 @@ def scene(run: Path, dpi: int, until: int | None) -> tuple[FigureCanvasAgg, Call
             Line2D([], [], color=CURRENT, lw=2.5, label="ocean current"),
             Line2D([], [], color=HEADING, lw=2.5, label="heading (through water)"),
             Line2D([], [], color=NET, lw=2.5, label="net motion"),
-            *([Line2D([], [], marker="*", ms=14, color=TARGET, mec="white", ls="none", label="target, 20 km ring")] if reaching else []),
             *([Line2D([], [], marker="*", ms=14, color=FASTEST, mec="white", ls="none", label="fastest current in the box")] if searching else []),
             *([Line2D([], [], marker="*", ms=14, color="none", mec=TARGET, mew=1.6, ls="none", label="target, filled once visited")] if visiting else []),
             Line2D([], [], marker="x", ms=10, color="#ffa726", mew=2, ls="none", label="waypoint aimed at"),
@@ -365,8 +345,6 @@ def scene(run: Path, dpi: int, until: int | None) -> tuple[FigureCanvasAgg, Call
     ):
         ax.pcolormesh(lon, lat, land_sheet, shading="nearest", cmap=land_cmap, vmin=0, vmax=1, zorder=3)
         ax.set_title(words, fontsize=12, pad=6)
-        if reaching:
-            ax.plot(target[1], target[0], marker="*", ms=12, color=TARGET, mec="white", mew=0.5, zorder=6, ls="none")
         bar = fig.colorbar(mesh, ax=ax, orientation="horizontal", fraction=0.06, pad=0.22, shrink=0.85)
         bar.ax.tick_params(labelsize=9, colors="#bbbbbb")
         if top is not None:  # a spread is drawn on its prior's scale
@@ -438,9 +416,7 @@ def scene(run: Path, dpi: int, until: int | None) -> tuple[FigureCanvasAgg, Call
         caption.set_text(
             f"move {t:3d}   day {int(day)} {int(hour):02d}:00\n"
             + (
-                f"{np.linalg.norm((here - target) * km_per_degree):6.0f} km to target\n"
-                if reaching
-                else f"{held['objective_state/information'][t]:6.0f} nats learned\n"
+                f"{held['objective_state/information'][t]:6.0f} nats learned\n"
                 if "objective_state/information" in held
                 else f"best {held['objective_state/best_observed_magnitude'][t]:4.2f} of {held['objective_state/best_possible_magnitude'][t]:4.2f} m/s\n"
                 if searching
@@ -454,7 +430,7 @@ def scene(run: Path, dpi: int, until: int | None) -> tuple[FigureCanvasAgg, Call
         for star, seen in zip(target_stars, visited[t], strict=True):
             star.set_color(TARGET if seen else "none")
         if arrived[t]:
-            badge.set_text("all visited" if visiting else "arrived")
+            badge.set_text("all visited")
             badge.set_alpha(min(1.0, 0.3 * (t - int(np.argmax(arrived)) + 1)))
 
     moving: list[Artist] = [aim, route, trail, done, glow, boat, *arrows.values(), caption, badge, *target_stars, rose_curve, rose_fill,

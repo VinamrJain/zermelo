@@ -103,7 +103,6 @@ def assemble(cfg: RunConfig) -> Episode:
             measurement_key="wind",
             context_key="context",
             prior_mean_key="forecast" if cfg.belief.forecast_as_prior_mean else None,
-            goal_key=None,
             budget_column=list(context).index("balloon_resource"),
             horizon=cfg.horizon,
             random_opening_steps=cfg.method.random_opening_steps,

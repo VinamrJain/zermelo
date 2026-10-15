@@ -61,7 +61,7 @@ def _method(utility: Implementation, *, n_field_samples: int, n_paths_per_field:
     )
 
 
-# One entry per device the runs can run on; `smoke_gpu` asks for an accelerator and a gpu-high node
+# The visiting objective, two targets, once per device the runs can run on; `smoke_gpu` asks for an accelerator and a gpu-high node
 for name, resources in (
     ("smoke", Resources(cpus=1, mem_gb=8, timeout_min=20, gres=None, partition="dean", constraint="avx2", array_parallelism=10)),
     (
@@ -71,17 +71,28 @@ for name, resources in (
 ):
     sweep(
         name,
-        problem=WORLD,
+        problem=dataclasses.replace(WORLD, objective="visit", n_targets=2),
         horizon=10,
         claim_every=1,
-        recorded={**RECORDED, "objective_state/claim": 1},
+        recorded={
+            **RECORDED,
+            "objective_state/claim": 1,
+            "objective_state/targets": 1,
+            "objective_state/visited": 1,
+            "objective_state/steps_to_completion": 1,
+        },
         seeds=[0],
         resources=resources,
         arms=[
-            arm("direct", _method(uniform(), n_field_samples=0, n_paths_per_field=0, n_candidates_scored=0), _belief(oracle=False)),
-            arm("rand_wp", _method(uniform(), n_field_samples=0, n_paths_per_field=0, n_candidates_scored=8), _belief(oracle=False)),
+            arm(
+                "etr", _method(goals_reached(60.0), n_field_samples=2, n_paths_per_field=2, n_candidates_scored=None), _belief(oracle=False)
+            ),
+            arm(
+                "nearest",
+                _method(goals_reached(60.0), n_field_samples=0, n_paths_per_field=0, n_candidates_scored=None),
+                _belief(oracle=False),
+            ),
             arm("rand_act", None, _belief(oracle=False)),  # no rule at all
-            arm("oracle", _method(uniform(), n_field_samples=0, n_paths_per_field=0, n_candidates_scored=0), _belief(oracle=True)),
         ],
     )
 
@@ -138,30 +149,6 @@ sweep(
             "mc_ei",
             _method(max_magnitude(OCEAN_CURRENT), n_field_samples=2, n_paths_per_field=0, n_candidates_scored=8),
             _belief(oracle=False),
-        ),
-        arm("rand_act", None, _belief(oracle=False)),
-    ],
-)
-
-# The visiting objective on the same coarse grid, two targets, the fields drawn and the walks kept few
-sweep(
-    "smoke_visit",
-    problem=dataclasses.replace(WORLD, objective="visit", n_targets=2),
-    horizon=10,
-    claim_every=1,
-    recorded={
-        **RECORDED,
-        "objective_state/claim": 1,
-        "objective_state/targets": 1,
-        "objective_state/visited": 1,
-        "objective_state/steps_to_completion": 1,
-    },
-    seeds=[0],
-    resources=Resources(cpus=1, mem_gb=8, timeout_min=20, gres=None, partition="dean", constraint="avx2", array_parallelism=10),
-    arms=[
-        arm("etr", _method(goals_reached(60.0), n_field_samples=2, n_paths_per_field=2, n_candidates_scored=None), _belief(oracle=False)),
-        arm(
-            "nearest", _method(goals_reached(60.0), n_field_samples=0, n_paths_per_field=0, n_candidates_scored=None), _belief(oracle=False)
         ),
         arm("rand_act", None, _belief(oracle=False)),
     ],

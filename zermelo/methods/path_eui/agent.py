@@ -73,9 +73,6 @@ class PathEUIAgent(Agent[PathEUIState]):
     prior_mean_key: str | None
     """Which part of `obs.reading` carries the field's prior mean as a function (None learns about zero)"""
 
-    goal_key: str | None
-    """Which part of `obs.reading` carries the goal state a visiting utility steers to, in the form the position part takes (None steers nowhere)"""
-
     budget_column: int | None
     """Which column of the context carries the budget left to spend on steps, None where the problem keeps none"""
 
@@ -123,9 +120,7 @@ class PathEUIAgent(Agent[PathEUIState]):
             raise ValueError("the random opening is longer than the episode horizon")
         n_states = coordinates(self.positions).shape[0]
         n_components = self.belief.dataset.measurement.shape[-1]
-        n_scored = (
-            len(self._candidate_indices()) if self.acquisition.n_candidates_scored is None else max(self.acquisition.n_candidates_scored, 1)
-        )
+        n_scored = len(self._candidate_indices()) if self.acquisition.n_candidates_scored is None else self.acquisition.n_candidates_scored
         path_length = 1 if self.acquisition.n_paths_per_field == 0 else self.acquisition.planner.replan_length
         blank = TargetChoice(
             candidate_indices=jnp.zeros(n_scored, jnp.int32),
@@ -163,7 +158,6 @@ class PathEUIAgent(Agent[PathEUIState]):
             self.positions, agent_state.choice.target[None]
         )[z, 0]
         if bool(replan_is_due):
-            goal = None if self.goal_key is None else self.candidates.index_of(obs.reading[self.goal_key])
             budget_left = None if self.budget_column is None else context[self.budget_column]
             acquisition = (  # K = H - h where the planner's K is the steps left
                 self.acquisition
@@ -173,7 +167,7 @@ class PathEUIAgent(Agent[PathEUIState]):
                 )
             )
             choice = acquisition.choose_target(
-                k_choice, belief, self.transition, z, self._legal_actions(obs), self.candidates, context, goal, budget_left
+                k_choice, belief, self.transition, z, self._legal_actions(obs), self.candidates, context, budget_left
             )
             steps_since_target = jnp.zeros((), jnp.int32)
         else:

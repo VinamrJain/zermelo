@@ -32,7 +32,7 @@ GULF_STREAM_2019JUN = ProblemConfig(
     target_lon_min=-71.0,
     target_lon_max=-59.0,
     arrival_km=20.0,
-    objective="reach",
+    objective="visit",
     n_targets=4,
     learned="both",
 )
@@ -113,9 +113,6 @@ CLAIM_EVERY_STEPS = 1
 
 RECORDED = {
     "state/position": 1,
-    "state/target": 1,
-    "objective_state/arrived": 1,
-    "objective_state/steps_to_arrival": 1,
     "objective_state/truth": 1,
     "objective_state/claim": CLAIM_EVERY_STEPS,
     "agent_state/steps_since_target": 1,
