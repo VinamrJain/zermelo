@@ -162,7 +162,7 @@ class SearchMagnitude(Objective[dict[str, Float[Array, "..."]]]):
     def speed_at(self, state: dict[str, Any]) -> tuple[Float[Array, ""], Bool[Array, ""]]:
         """||W(position)|| where the boat stands, and whether that position is a candidate"""
         position = {"position": state["position"]}
-        return jnp.linalg.norm(state["field"](position)[OCEAN_CURRENT]), self.candidates.live[self.candidates.index_of(position)]
+        return jnp.linalg.norm(state["field"](position)[..., OCEAN_CURRENT]), self.candidates.live[self.candidates.index_of(position)]
 
     def reset(self, state: dict[str, Any]) -> dict[str, Float[Array, "..."]]:
         """The objective's memory before any time_step, nothing claimed yet"""
