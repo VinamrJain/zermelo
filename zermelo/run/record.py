@@ -16,8 +16,9 @@ RENAMED_CHANNELS = {
     "agent_state/scores.candidate_indices": "agent_state/choice.candidate_indices",
     "agent_state/scores.acquisition_value": "agent_state/choice.acquisition_value",
     "agent_state/scores.route.act": "agent_state/choice.policy_to_target.action",
+    "agent_state/policy.act": "agent_state/choice.policy_to_target.action",
 }
-"""Channel names a record written before 2026-10-15 holds, and what they are called now"""
+"""Channel names a record written before 2026-10-15 holds, and what they are called now; `policy.act` is from before 2026-10"""
 
 
 @dataclass(frozen=True)
