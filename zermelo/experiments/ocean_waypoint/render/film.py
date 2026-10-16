@@ -34,7 +34,7 @@ from matplotlib.collections import LineCollection  # noqa: E402
 from matplotlib.figure import Figure  # noqa: E402
 from matplotlib.gridspec import GridSpec  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
-from matplotlib.patches import Ellipse, Polygon  # noqa: E402
+from matplotlib.patches import Ellipse, Polygon, Rectangle  # noqa: E402
 from matplotlib.projections.polar import PolarAxes  # noqa: E402
 from matplotlib.text import Text  # noqa: E402
 
@@ -248,6 +248,9 @@ def scene(run: Path, dpi: int, until: int | None) -> tuple[FigureCanvasAgg, Call
     cbar.set_label("true ocean current speed (m/s)", fontsize=11)
     cbar.ax.tick_params(labelsize=10, colors="#bbbbbb")
     ring_km = float(problem["arrival_km"])
+    box_corner = (problem["target_lon_min"], problem["target_lat_min"])
+    box_size = (problem["target_lon_max"] - problem["target_lon_min"], problem["target_lat_max"] - problem["target_lat_min"])
+    main.add_patch(Rectangle(box_corner, *box_size, fill=False, ec="white", lw=1.4, ls=":", zorder=4.5))  # the candidate box
     if searching:  # the fastest current in the box, the point the search is scored against
         fastest = candidates[np.argmax(np.linalg.norm(held["objective_state/truth"][0][:, list(OCEAN_CURRENT)], axis=-1))]
         main.plot(lon[fastest % n_lon], lat[fastest // n_lon], marker="*", ms=22, color=FASTEST, mec="white", mew=0.8, zorder=6, ls="none")
@@ -287,6 +290,7 @@ def scene(run: Path, dpi: int, until: int | None) -> tuple[FigureCanvasAgg, Call
             Line2D([], [], color=NET, lw=2.5, label="net motion"),
             *([Line2D([], [], marker="*", ms=14, color=FASTEST, mec="white", ls="none", label="fastest current in the box")] if searching else []),
             *([Line2D([], [], marker="*", ms=14, color="none", mec=TARGET, mew=1.6, ls="none", label="goal, filled once visited")] if visiting else []),
+            Line2D([], [], color="white", lw=1.4, ls=":", label="candidate box"),
             Line2D([], [], marker="x", ms=10, color="#ffa726", mew=2, ls="none", label="waypoint aimed at"),
             Line2D([], [], color="#ffa726", lw=1.8, ls="--", label="walk imagined to it"),
         ],

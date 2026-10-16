@@ -66,32 +66,38 @@ PENALTY_RATES = {"l0": 0.0, "l05": 0.5, "l1": 1.0}
 """`lambda` of each ETR arm, keyed by its name's suffix"""
 
 
-for date, frame_hour in STILL_FRAMES.items():
-    sweep(
-        f"visit_{date}",
-        problem=dataclasses.replace(WORLD, frame_hour=frame_hour),
-        horizon=HORIZON_LENGTH,
-        claim_every=CLAIM_EVERY_STEPS,
-        recorded={**RECORDED, "objective_state/targets": 1, "objective_state/visited": 1, "objective_state/steps_to_completion": 1},
-        seeds=list(range(N_SEEDS)),
-        resources=dataclasses.replace(RESOURCES, constraint="avx2&gpu-high"),  # 48 GB cards and up
-        arms=[
-            *(
-                arm(f"{prefix}etr_{suffix}", _expected_targets_reached(rate), belief())
-                for prefix, belief in (("", field_belief), ("oracle_", oracle_belief))
-                for suffix, rate in PENALTY_RATES.items()
-            ),
-            # the goals a cell of the box itself reaches, no walk imagined
-            arm(
-                "etr_endpoint",
-                _method(goals_reached(ARRIVAL_RADIUS_KM), candidates="box", n_field_samples=0, n_paths_per_field=0, penalty_rate=0.0),
-                field_belief(),
-            ),
-            arm(
-                "rand_goal",
-                _method(uniform(), candidates="goals", n_field_samples=0, n_paths_per_field=0, penalty_rate=0.0),
-                field_belief(),
-            ),
-            arm("rand_box", _method(uniform(), candidates="box", n_field_samples=0, n_paths_per_field=0, penalty_rate=0.0), field_belief()),
-        ],
-    )
+# the four-goal study at every `lambda`, and ten goals at `lambda` = 0
+for name, n_goals, rates in (("visit", 4, PENALTY_RATES), ("visit10", 10, {"l0": 0.0})):
+    for date, frame_hour in STILL_FRAMES.items():
+        sweep(
+            f"{name}_{date}",
+            problem=dataclasses.replace(WORLD, frame_hour=frame_hour, n_goals=n_goals),
+            horizon=HORIZON_LENGTH,
+            claim_every=CLAIM_EVERY_STEPS,
+            recorded={**RECORDED, "objective_state/targets": 1, "objective_state/visited": 1, "objective_state/steps_to_completion": 1},
+            seeds=list(range(N_SEEDS)),
+            resources=dataclasses.replace(RESOURCES, constraint="avx2&gpu-high"),  # 48 GB cards and up
+            arms=[
+                *(
+                    arm(f"{prefix}etr_{suffix}", _expected_targets_reached(rate), belief())
+                    for prefix, belief in (("", field_belief), ("oracle_", oracle_belief))
+                    for suffix, rate in rates.items()
+                ),
+                # the goals a cell of the box itself reaches, no walk imagined
+                arm(
+                    "etr_endpoint",
+                    _method(goals_reached(ARRIVAL_RADIUS_KM), candidates="box", n_field_samples=0, n_paths_per_field=0, penalty_rate=0.0),
+                    field_belief(),
+                ),
+                arm(
+                    "rand_goal",
+                    _method(uniform(), candidates="goals", n_field_samples=0, n_paths_per_field=0, penalty_rate=0.0),
+                    field_belief(),
+                ),
+                arm(
+                    "rand_box",
+                    _method(uniform(), candidates="box", n_field_samples=0, n_paths_per_field=0, penalty_rate=0.0),
+                    field_belief(),
+                ),
+            ],
+        )
