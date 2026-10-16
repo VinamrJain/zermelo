@@ -147,7 +147,9 @@ else:
     ]
 if given.film and not (given.local or given.still is not None):
     until = "" if given.until is None else f" --until {given.until}"
-    print(send(runs, launch / "films", f"--fps {given.fps} --dpi {given.dpi} --subframes {given.subframes}{until}"))
+    print(
+        send(runs, launch / "films", f"--fps {given.fps} --dpi {given.dpi} --subframes {given.subframes} --workers {given.workers}{until}")
+    )
 elif given.film:
     for run in runs:
         (launch / "films").mkdir(exist_ok=True)

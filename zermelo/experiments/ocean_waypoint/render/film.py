@@ -71,6 +71,7 @@ SCRIPT = """#!/bin/bash
 #SBATCH --chdir={repository}
 #SBATCH --output={into}/film-%a.log
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+export PATH={bin}:$PATH
 RUN=(
 {lines}
 )
@@ -97,6 +98,7 @@ def send(runs: Sequence[Path], into: Path, flags: str) -> str:
             repository=Path.cwd().resolve(),
             into=into.resolve(),
             python=sys.executable,
+            bin=Path(sys.executable).parent,
             lines="\n".join(f'  "{run.resolve()}"' for run in runs),
             flags=flags,
         )
