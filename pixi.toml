@@ -19,6 +19,10 @@ args = ["name"]
 cmd = "python -m checks.{{ name }}"
 description = "Validate one of our implementations against the library it is checked against: botorch_acquisitions, pathwise_sampling"
 
+[tasks.check-sweeps]
+cmd = "python -m checks.build_sweeps"
+description = "Build the utility and the planner of every arm of every sweep, running no episode"
+
 # Put `--` before any override or flag: `pixi run film acquisitions -- --arm all --dpi medium`
 [tasks.sweep]
 args = ["experiment", "name"]
