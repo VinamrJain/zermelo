@@ -46,7 +46,7 @@ for swept, arms in (
         "paper_fields_paths",
         [
             arm(
-                f"{name}_fields{fields}_sample_component{paths}",
+                f"{name}_fields{fields}_paths{paths}",
                 dataclasses.replace(ours(name), n_field_samples=fields, n_paths_per_field=paths),
                 MATCHED,
             )
