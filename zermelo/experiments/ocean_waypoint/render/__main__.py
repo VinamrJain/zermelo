@@ -10,6 +10,7 @@ Three panels, over the candidate box in degrees:
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 import matplotlib
@@ -27,12 +28,9 @@ SWEEPS = Path("results") / __package__.split(".")[-2]
 
 CHANNELS = (
     "state/position",
-    "state/target",
     "objective_state/truth",
     "objective_state/claim",
-    "objective_state/arrived",
     "objective_state/information",
-    "objective_state/steps_to_arrival",
     "objective_state/best_observed_magnitude",
     "objective_state/best_possible_magnitude",
     "objective_state/targets",
@@ -60,11 +58,9 @@ def still(run: Path, out: Path) -> None:
     n_lat, n_lon = len(lat), len(lon)
     problem = config["problem"]
     targets_drawn = held["objective_state/targets"][0] if "objective_state/targets" in held else None
-    candidates = np.flatnonzero(candidate_box(problem, lat, lon, land, targets_drawn))
-    reaching = "objective_state/arrived" in held  # else the target the world drew is unread
+    candidates = np.flatnonzero(candidate_box(problem, lat, lon, land, targets_drawn, held["objective_state/claim"].shape[1]))
     searching, visiting = "objective_state/best_observed_magnitude" in held, "objective_state/targets" in held
-    where = "" if reaching else "target_"  # the candidate box the waypoints are aimed in
-    box_lat, box_lon = (problem[f"{where}lat_min"], problem[f"{where}lat_max"]), (problem[f"{where}lon_min"], problem[f"{where}lon_max"])
+    box_lat, box_lon = (problem["target_lat_min"], problem["target_lat_max"]), (problem["target_lon_min"], problem["target_lon_max"])
 
     def on_grid(per_candidate: np.ndarray) -> np.ndarray:
         """A value per candidate laid onto the grid, nan elsewhere"""
@@ -95,12 +91,10 @@ def still(run: Path, out: Path) -> None:
         )
         ax.plot(track[0, 1], track[0, 0], "o", ms=7, mfc="none", mec="k", mew=1.5, label="start")
         ax.plot(track[-1, 1], track[-1, 0], "r*", ms=9)
-        if reaching:
-            ax.plot(held["state/target"][0, 1], held["state/target"][0, 0], "m*", ms=12, mec="w", label="target")
         if searching:  # the fastest current in the box, the point the search is scored against
             fastest = candidates[np.argmax(np.linalg.norm(held["objective_state/truth"][-1], axis=-1))]
             ax.plot(lon[fastest % n_lon], lat[fastest // n_lon], "*", ms=14, color="gold", mec="k", label="fastest current")
-        if visiting:  # every target, filled once visited
+        if visiting:  # every goal, filled once visited
             for (t_lat, t_lon), seen in zip(held["objective_state/targets"][0], held["objective_state/visited"][-1], strict=True):
                 ax.plot(t_lon, t_lat, "*", ms=14, color="m" if seen else "none", mec="m", mew=1.5)
         ax.set_aspect(1 / np.cos(np.radians(np.mean(lat))))
@@ -110,22 +104,18 @@ def still(run: Path, out: Path) -> None:
         aimed = np.unique(held["agent_state/choice.target"][decided])
         axes[0].plot(lon[aimed % n_lon], lat[aimed // n_lon], "x", color="orange", ms=6, label="waypoints")
     if visiting:
-        axes[0].plot([], [], "*", ms=10, color="m", mec="m", label="target, visited")
-        axes[0].plot([], [], "*", ms=10, color="none", mec="m", mew=1.5, label="target, not yet")
+        axes[0].plot([], [], "*", ms=10, color="m", mec="m", label="goal, visited")
+        axes[0].plot([], [], "*", ms=10, color="none", mec="m", mew=1.5, label="goal, not yet")
     axes[0].legend(loc="lower right", fontsize=7)
     axes[0].set_ylabel("lat")
     fig.suptitle(
-        f"{run.parent.parent.name} / {run.name}: {track.shape[0] - 1} moves of {problem['step_hours']} h, arrived at step {int(held['objective_state/steps_to_arrival'][-1])}"
-        if reaching and held["objective_state/arrived"][-1]
-        else f"{run.parent.parent.name} / {run.name}: {track.shape[0] - 1} moves of {problem['step_hours']} h, "
+        f"{run.parent.parent.name} / {run.name}: {track.shape[0] - 1} moves of {problem['step_hours']} h, "
         + (
-            "never arrived"
-            if reaching
-            else f"{held['objective_state/information'][-1]:.0f} nats learned"
+            f"{held['objective_state/information'][-1]:.0f} nats learned"
             if "objective_state/information" in held
             else f"best {held['objective_state/best_observed_magnitude'][-1]:.2f} of {held['objective_state/best_possible_magnitude'][-1]:.2f} m/s"
             if searching
-            else f"{int(held['objective_state/visited'][-1].sum())} of {held['objective_state/visited'].shape[1]} targets visited"
+            else f"{int(held['objective_state/visited'][-1].sum())} of {held['objective_state/visited'].shape[1]} goals visited"
             + (f", all by step {int(held['objective_state/steps_to_completion'][-1])}" if held["objective_state/visited"][-1].all() else "")
         ),
         fontsize=10,
@@ -142,6 +132,9 @@ parse.add_argument("--local", action="store_true", help="draw the film here rath
 parse.add_argument("--fps", type=int, default=12, help="frames a second the film plays at")
 parse.add_argument("--dpi", type=int, default=120, help="how finely a frame is drawn")
 parse.add_argument("--still", type=int, help="film only: one frame at this move as a png, drawn here")
+parse.add_argument("--subframes", type=int, default=1, help="film only: frames each move is spread over")
+parse.add_argument("--workers", type=int, default=min(len(os.sched_getaffinity(0)), 8), help="film only: processes one film is drawn over")
+parse.add_argument("--until", type=int, help="film only: the last move shown")
 given = parse.parse_args()
 where = given.target if given.target.exists() else SWEEPS / given.target
 if not where.is_dir():
@@ -154,11 +147,21 @@ else:
         marker.parent for marker in sorted(launch.glob("*/record.npz")) if int(settings(marker.parent.name).get("seed", 0)) == given.seed
     ]
 if given.film and not (given.local or given.still is not None):
-    print(send(runs, launch / "films", f"--fps {given.fps} --dpi {given.dpi}"))
+    until = "" if given.until is None else f" --until {given.until}"
+    print(send(runs, launch / "films", f"--fps {given.fps} --dpi {given.dpi} --subframes {given.subframes}{until}"))
 elif given.film:
     for run in runs:
         (launch / "films").mkdir(exist_ok=True)
-        film(run, launch / "films" / f"{settings(run.name).get('arm', run.name)}.mp4", fps=given.fps, dpi=given.dpi, still=given.still)
+        film(
+            run,
+            launch / "films" / f"{settings(run.name).get('arm', run.name)}.mp4",
+            fps=given.fps,
+            dpi=given.dpi,
+            subframes=given.subframes,
+            workers=given.workers,
+            until=given.until,
+            still=given.still,
+        )
 else:
     (launch / "stills").mkdir(exist_ok=True)
     for run in runs:

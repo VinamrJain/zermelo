@@ -27,13 +27,13 @@ GULF_STREAM_2019JUN = ProblemConfig(
     lat_max=42.0,
     lon_min=-75.0,
     lon_max=-55.0,
-    target_lat_min=36.4,  # the middle three fifths of the box, where the boat starts and every target is drawn
+    target_lat_min=36.4,  # the middle three fifths of the box, where the boat starts and every goal is drawn
     target_lat_max=40.6,
     target_lon_min=-71.0,
     target_lon_max=-59.0,
     arrival_km=20.0,
-    objective="reach",
-    n_targets=4,
+    objective="visit",
+    n_goals=4,
     learned="both",
 )
 """The Gulf Stream after Cape Hatteras, one frame of June 2019 held still, a sailboat of Saildrone speed"""
@@ -93,8 +93,11 @@ SCORED_COMPONENTS = {"ocean_current": OCEAN_CURRENT, "wind": WIND, "both": OCEAN
 """The components of the field a learning episode is scored on and a learning rule counts, by what it is scored on"""
 
 
-PLANNING_BUDGET = 25
+PLANNING_BUDGET = 50
 """`L`: a waypoint is chosen anew after this many moves, and an imagined walk is rolled over at most as many"""
+
+VALUE_ITERATIONS = 2 * PLANNING_BUDGET
+"""`K`: rounds of value iteration per plan"""
 
 ARRIVAL_RADIUS_KM = 20.0
 """`rho`: how near a waypoint counts as arrived, inside positions about 18 km apart"""
@@ -107,9 +110,6 @@ CLAIM_EVERY_STEPS = 1
 
 RECORDED = {
     "state/position": 1,
-    "state/target": 1,
-    "objective_state/arrived": 1,
-    "objective_state/steps_to_arrival": 1,
     "objective_state/truth": 1,
     "objective_state/claim": CLAIM_EVERY_STEPS,
     "agent_state/steps_since_target": 1,

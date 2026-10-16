@@ -1,5 +1,6 @@
 """One resolved configuration into the objects an episode runs on"""
 
+import dataclasses
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,7 @@ from zermelo.interface import Agent
 from zermelo.methods.path_eui.acquisition import Acquisition
 from zermelo.methods.path_eui.agent import PathEUIAgent, posterior_mean_and_log_variance
 from zermelo.methods.path_eui.belief import BeliefKernel, Dataset, GPBelief, GroupedBelief, OracleBelief
+from zermelo.methods.path_eui.utility import GoalsReached
 from zermelo.methods.random_agent import RandomAgent
 from zermelo.problems.ocean import (
     COMPONENTS,
@@ -24,7 +26,6 @@ from zermelo.problems.ocean import (
     Polar,
     learn_objective,
     load_ocean,
-    ocean_objective,
     ocean_states,
     ocean_transition,
     ocean_world,
@@ -75,25 +76,16 @@ def assemble(cfg: RunConfig) -> Episode:
         cfg.problem.target_lat_min, cfg.problem.target_lat_max, cfg.problem.target_lon_min, cfg.problem.target_lon_max
     )
     noise_ms = jnp.asarray([cfg.problem.noise_ms] * 2 + [cfg.problem.wind_noise_ms] * 2)  # (components,)
-    world = ocean_world(
-        grid, states, predicted, error, transition, noise_ms, target_box, target_box
-    )  # the boat starts in the target box too
-    # the targets of a visiting episode, drawn uniformly from the target box on a key folded off the world's
-    targets = (
-        jnp.zeros(grid.size(), bool)
-        .at[jax.random.choice(jax.random.fold_in(k_world, 1), jnp.flatnonzero(target_box), (cfg.problem.n_targets,), replace=False)]
-        .set(True)
-    )
+    world = ocean_world(grid, states, predicted, error, transition, noise_ms, target_box)
+    # (n_goals,) state indices: the goals of a visiting episode, drawn uniformly from the target box on a key folded off the world's
+    goals = jax.random.choice(jax.random.fold_in(k_world, 1), jnp.flatnonzero(target_box), (cfg.problem.n_goals,), replace=False)
     objective = (  # under learn and search the region of interest is the target box
-        ocean_objective(states, grid, box, cfg.problem.arrival_km)
-        if cfg.problem.objective == "reach"
-        else learn_objective(states, target_box, 2.0 * jnp.log(prior_amplitude(cfg)), SCORED_COMPONENTS[cfg.problem.learned])
+        learn_objective(states, target_box, 2.0 * jnp.log(prior_amplitude(cfg)), SCORED_COMPONENTS[cfg.problem.learned])
         if cfg.problem.objective == "learn"
         else search_objective(states, target_box)
         if cfg.problem.objective == "search"
-        else visit_objective(states, grid, targets, cfg.problem.arrival_km)
+        else visit_objective(states, grid, target_box, grid.from_index(goals), cfg.problem.arrival_km)
     )
-    candidates = objective.candidates
     context = world.readout.context
     if sorted(j for group in cfg.belief.groups for j in group.components) != list(range(COMPONENTS)):
         raise ValueError(
@@ -131,12 +123,21 @@ def assemble(cfg: RunConfig) -> Episode:
         # no rule and no update: it claims the prior every step
         agent = RandomAgent(claim=posterior_mean_and_log_variance(belief, jnp.zeros(sum(context.values()))))
     else:
+        if cfg.problem.objective != "visit" and cfg.method.candidates == "goals":
+            raise ValueError(f"a {cfg.problem.objective} episode draws no goals to aim at")
+        utility = instantiate(cfg.method.utility, _target_whitelist_=WHITELIST)
+        if isinstance(utility, GoalsReached):  # it counts this episode's goals
+            if cfg.problem.objective != "visit":
+                raise ValueError(f"a {cfg.problem.objective} episode draws no goals to count")
+            utility = dataclasses.replace(utility, goals=tuple(int(g) for g in goals))
         agent = PathEUIAgent(
-            candidates=candidates,
+            candidates=objective.candidates
+            if cfg.method.candidates == "box"
+            else states.narrow(jnp.zeros(grid.size(), bool).at[goals].set(True)),
             transition=transition,
             belief=belief,
             acquisition=Acquisition(
-                utility=instantiate(cfg.method.utility, _target_whitelist_=WHITELIST),
+                utility=utility,
                 planner=instantiate(cfg.method.planner, _target_whitelist_=WHITELIST),
                 n_field_samples=cfg.method.n_field_samples,
                 n_paths_per_field=cfg.method.n_paths_per_field,
@@ -148,7 +149,6 @@ def assemble(cfg: RunConfig) -> Episode:
             measurement_key="field_reading",
             context_key="context",
             prior_mean_key="forecast" if cfg.belief.forecast_as_prior_mean else None,
-            goal_key="target",
             budget_column=None,
             horizon=cfg.horizon,
             random_opening_steps=cfg.method.random_opening_steps,

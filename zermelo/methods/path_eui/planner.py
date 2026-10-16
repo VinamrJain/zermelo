@@ -50,8 +50,8 @@ type PolicyTables = tuple[Int[Array, "n_states n_targets"], Float[Array, "n_stat
 class Planner(ABC):
     """`solve_shortest_paths` gives `(pi, S, C)`, `policy_to_targets` gives it `targets_per_solve` targets at a time, `roll_paths` samples paths under `pi`"""
 
-    value_iterations: int
-    """`K`: rounds of the recursion per solve"""
+    value_iterations: int | None
+    """`K`: rounds of the recursion per solve_shortest_paths; `None` is the steps left in the episode, set by the agent"""
 
     replan_length: int
     """`L`: the replan length, steps per path and moves per target"""
@@ -64,6 +64,13 @@ class Planner(ABC):
 
     cost_weight: float
     """`mu`"""
+
+    @property
+    def rounds(self) -> int:
+        """`K`, raising while it is still the steps left"""
+        if self.value_iterations is None:
+            raise ValueError("value_iterations is None: the agent sets it to the steps left before planning")
+        return self.value_iterations
 
     @property
     def cost_budget(self) -> float:
@@ -146,7 +153,7 @@ class Planner(ABC):
         action_rows = index_in_actions(actions, action_table)  # (n_states, n_targets): the action's position on the backup's action axis
         return lax.fori_loop(
             0,
-            self.value_iterations,
+            self.rounds,
             lambda _, accumulated: jnp.where(
                 in_goal_set, 0.0, self._one_step_lookahead(kernel, accumulated, actions, per_step)[action_rows, state_rows, target_columns]
             ),
@@ -228,7 +235,7 @@ class ValueIteration(Planner):
             )
 
         zeros = jnp.zeros(in_goal_set.shape)
-        value, expected_path_length, expected_cost = lax.fori_loop(0, self.value_iterations, backup, (zeros, zeros, zeros))
+        value, expected_path_length, expected_cost = lax.fori_loop(0, self.rounds, backup, (zeros, zeros, zeros))
         action_table = actions[jnp.argmin(self._one_step_lookahead(kernel, value, actions, planned_cost), axis=0)]
         return action_table, expected_path_length, expected_cost
 

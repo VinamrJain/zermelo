@@ -138,8 +138,8 @@ def expected_improvement(components: tuple[int, ...]) -> Implementation:
 
 
 def goals_reached(radius: float) -> Implementation:
-    """How many candidates lie within `radius` of some reading's state"""
-    return _built("zermelo.methods.path_eui.utility.GoalsReached", radius=radius)
+    """How many goals lie within `radius` of some reading's state; the goals are set when the episode is built"""
+    return _built("zermelo.methods.path_eui.utility.GoalsReached", radius=radius, goals=None)
 
 
 def uniform() -> Implementation:
@@ -151,9 +151,9 @@ def uniform() -> Implementation:
 
 
 def value_iteration(
-    value_iterations: int, replan_length: int, radius: float, targets_per_solve: int | None, cost_weight: float
+    value_iterations: int | None, replan_length: int, radius: float, targets_per_solve: int | None, cost_weight: float
 ) -> Implementation:
-    """`v_0 = 0`, `v_{k+1}(s) = 0 on arrival, else min over a of c(s, a) + sum over s' of P(s' | s, a) v_k(s')`, `value_iterations` rounds"""
+    """`v_0 = 0`, `v_{k+1}(s) = 0 on arrival, else min over a of c(s, a) + sum over s' of P(s' | s, a) v_k(s')`, `value_iterations` rounds, `None` the steps left"""
     return _built(
         "zermelo.methods.path_eui.planner.ValueIteration",
         value_iterations=value_iterations,

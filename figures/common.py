@@ -16,6 +16,7 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 RESULTS = Path(os.environ["RESULTS"])  # the results tree read; unset, the script refuses to run
+LAUNCH_AT = os.environ.get("LAUNCH_AT")  # a launch's timestamp, e.g. 2026-10-14_23-59-59: read the newest launch at or before it
 BUILD = Path("results") / "figures"
 WIDTH = 6.75  # inches, the full text width
 ROW_HEIGHT = 1.35  # inches one row of panels is drawn at; every figure's height follows from it
@@ -35,13 +36,19 @@ LABELS = {
     "rand_target": "RandTarget", "rand_act": "RandAct", "oracle_emi": "Oracle-EMI",
     "eti": "ETI", "info": "IG", "direct": "Direct", "rand_wp": "RandTarget", "oracle": "Oracle",
     "etr_l0": r"ETR $\lambda$=0", "etr_l05": r"ETR $\lambda$=0.5", "etr_l1": r"ETR $\lambda$=1", "nearest": "Nearest", "oracle_etr": "Oracle-ETR",
+    "etr_endpoint": "ETR-Endpoint", "rand_goal": "RandGoal", "rand_box": "RandBox",
 }  # fmt: skip
 RATES = ("0.25", "0.5", "1", "2")  # lambda of each IG arm, light to dark
 LABELS.update({f"info_{rate}": rf"IG $\lambda$={rate}" for rate in RATES})
+LABELS.update({f"nearest_{suffix}": rf"Nearest $\lambda$={rate}" for suffix, rate in (("l0", "0"), ("l05", "0.5"), ("l1", "1"))})
+LABELS.update(
+    {f"oracle_{rule}_{suffix}": "Oracle-" + LABELS[f"{rule}_{suffix}"] for rule in ("etr", "nearest") for suffix in ("l0", "l05", "l1")}
+)
 FAMILY_COLOURS = {
     "EMI": "0173B2", "ESI": "D55E00", "EVI": "029E73", "EII": "0173B2", "EI": "DE8F05", "MC-EI": "56B4E9", "UCB": "7F3C8D", "TS": "CC78BC",
     "MaxVar": "CA9161", "RandTarget": "555555", "RandAct": "A0A0A0", "Oracle-EMI": "000000", "Forecast": "000000", "ETI": "0173B2",
     "IG": "D55E00", "Direct": "7F3C8D", "Oracle": "000000", "ETR": "0173B2", "Nearest": "7F3C8D", "Oracle-ETR": "000000",
+    "ETR-Endpoint": "029E73", "RandGoal": "555555", "RandBox": "CA9161",
 }  # hex colour per acquisition family  # fmt: skip
 IG_LOOK = {"0.25": ("#56B4E9", "s"), "0.5": ("#009E73", "D"), "1": ("#D55E00", "o"), "2": ("#B2182B", "P")}  # (colour, marker) per lambda
 OURS = ("emi", "evi", "eii", "esi", "eti", "etr_l0", "etr_l05", "etr_l1")
@@ -80,9 +87,11 @@ def look(arm: str) -> dict:
         return dict(color="black", ls=(0, (5, 2)), lw=1.0)
     if arm == "rand_act":
         return dict(color=colour, ls=":", lw=1.2)
-    if arm.startswith("etr_l"):  # one colour and marker per lambda, as the IG arms
-        colour, marker = IG_LOOK[{"0": "0.25", "05": "0.5", "1": "1"}[arm.removeprefix("etr_l")]]
-        return dict(color=colour, ls="-", marker=marker, ms=3.5, markevery=0.2)
+    if arm.startswith(("oracle_etr_l", "oracle_nearest_l")):  # its rule's look, dotted
+        return {**look(arm.removeprefix("oracle_")), "ls": ":"}
+    if arm.startswith(("etr_l", "nearest_l")):  # one colour and marker per lambda, as the IG arms; ETR solid, Nearest dashed
+        colour, marker = IG_LOOK[{"0": "0.25", "05": "0.5", "1": "1"}[arm.split("_l")[-1]]]
+        return dict(color=colour, ls="-" if arm.startswith("etr") else "--", marker=marker, ms=3.5, markevery=0.2)
     if arm.startswith("info_"):  # one colour and marker per lambda
         colour, marker = IG_LOOK[arm.removeprefix("info_")]
         return dict(color=colour, ls="-", marker=marker, ms=3.5, markevery=0.2)
@@ -90,8 +99,10 @@ def look(arm: str) -> dict:
 
 
 def launch(experiment: str, sweep: str) -> Path:
-    """The newest launch of one sweep, printed"""
-    newest = max(found for found in (RESULTS / experiment / sweep).iterdir() if found.is_dir())
+    """The newest launch of one sweep, at or before LAUNCH_AT where it is set, printed"""
+    newest = max(
+        found for found in (RESULTS / experiment / sweep).iterdir() if found.is_dir() and (LAUNCH_AT is None or found.name <= LAUNCH_AT)
+    )
     print(f"reading {newest}")
     return newest
 

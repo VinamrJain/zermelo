@@ -65,22 +65,22 @@ class ProblemConfig:
     lat_max: float = MISSING
     lon_min: float = MISSING
     lon_max: float = MISSING
-    """The box of grid points, in degrees, a target may be aimed at"""
+    """The box of grid points, in degrees, the target box lies in and a film shows"""
 
     target_lat_min: float = MISSING
     target_lat_max: float = MISSING
     target_lon_min: float = MISSING
     target_lon_max: float = MISSING
-    """The box of grid points, in degrees, a target is drawn from"""
+    """The box of grid points, in degrees, the boat starts in and the region learned, searched or visited lies in"""
 
     arrival_km: float = MISSING
-    """How near the target counts as arrived"""
+    """How near a target or a waypoint counts as reached"""
 
-    objective: Literal["reach", "learn", "search", "visit"] = MISSING
-    """What the episode is scored on: reaching a target drawn from the target box, learning the ocean current over that box, finding where it runs fastest in it, or visiting n_targets points drawn from it"""
+    objective: Literal["learn", "search", "visit"] = MISSING
+    """What the episode is scored on: learning the ocean current over the target box, finding where it runs fastest in it, or visiting n_goals points drawn from it"""
 
-    n_targets: int = MISSING
-    """How many targets a visiting episode draws, unread under the other objectives"""
+    n_goals: int = MISSING
+    """How many goals a visiting episode draws from the target box, unread under the other objectives"""
 
     learned: Literal["ocean_current", "wind", "both"] = MISSING
     """Which part of the field a learning episode is scored on, unread under the other objectives"""
@@ -159,8 +159,11 @@ class MethodConfig:
     penalty_rate: float = MISSING
     """`lambda`: a full-budget trip is charged this share of the spread of the candidate values (zero charges nothing)"""
 
+    candidates: Literal["box", "goals"] = MISSING
+    """Which states a waypoint may be: every candidate the objective publishes, or the goals alone of a visiting episode"""
+
     n_candidates_scored: int | None = MISSING
-    """Cap on candidates scored per move (None scores every one, 0 the target alone)"""
+    """Cap on candidates scored per move (None scores every one)"""
 
     random_opening_steps: int = MISSING
     """time_steps of uniform random moves taken before the rule starts"""

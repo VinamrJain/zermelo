@@ -12,6 +12,7 @@ from zermelo.experiments.ocean_waypoint.registry import (
     RESOURCES,
     SCORED_COMPONENTS,
     STILL_FRAMES,
+    VALUE_ITERATIONS,
     field_belief,
 )
 from zermelo.experiments.ocean_waypoint.schema import MethodConfig
@@ -35,7 +36,7 @@ def _method(utility: Implementation, *, n_paths_per_field: int, penalty_rate: fl
     return MethodConfig(
         utility=utility,
         planner=value_iteration(
-            value_iterations=HORIZON_LENGTH,
+            value_iterations=VALUE_ITERATIONS,
             replan_length=PLANNING_BUDGET,
             radius=ARRIVAL_RADIUS_KM,
             targets_per_solve=None,
@@ -45,6 +46,7 @@ def _method(utility: Implementation, *, n_paths_per_field: int, penalty_rate: fl
         n_field_samples=0,
         n_paths_per_field=n_paths_per_field,
         penalty_rate=penalty_rate,
+        candidates="box",
         n_candidates_scored=None,
         random_opening_steps=0,
     )

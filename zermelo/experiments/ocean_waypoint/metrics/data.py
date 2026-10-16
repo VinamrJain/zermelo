@@ -1,6 +1,5 @@
 """Every number one launch is reported by, read off its records
 
-arrived_t    1 once the boat is within arrival_km of the target, 0 before
 g, b_t       max over candidates of ||W||, and the largest ||W|| stood on at a candidate by time_step t
 field(c)     (W_u, W_v, U_u, U_v) at every candidate c, the truth: the ocean current W and the wind U
 mu_t, v_t    the means and the log-variances claimed per component at every candidate after time_step t
@@ -14,7 +13,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from zermelo.problems.ocean import KM_PER_DEGREE, OCEAN_CURRENT, WIND
+from zermelo.problems.ocean import OCEAN_CURRENT, WIND
 from zermelo.run.record import RENAMED_CHANNELS
 
 LOG_VARIANCE_FLOOR = -12.0
@@ -47,8 +46,6 @@ ACQUISITION_FAMILIES = {
 
 
 CURVES = {
-    "distance_to_target": ("distance to target (km)", "linear"),
-    "arrived": ("arrived", "linear"),
     "rmse": ("RMSE", "linear"),
     "posterior_variance": ("posterior variance", "linear"),
     "wind_rmse": ("wind RMSE", "linear"),
@@ -63,8 +60,6 @@ CURVES = {
 
 
 CURVE_CHANNELS = (
-    "objective_state/arrived",
-    "objective_state/steps_to_arrival",
     "objective_state/truth",
     "objective_state/claim",
     "objective_state/best_observed_magnitude",
@@ -74,7 +69,7 @@ CURVE_CHANNELS = (
 )
 """What the curves are computed from, as the names a record holds them under"""
 
-TABLE_CHANNELS = CURVE_CHANNELS + ("state/position", "state/target", "agent_state/steps_since_target", "reward", "time_per_episode")
+TABLE_CHANNELS = CURVE_CHANNELS + ("state/position", "agent_state/steps_since_target", "reward", "time_per_episode")
 
 
 def channels(run: Path, wanted: Sequence[str]) -> dict[str, Any]:
@@ -127,8 +122,6 @@ def at_each_snapshot(claim: Any, snapshots: int, claim_every: int) -> Any:
 def episode_curves(held: dict[str, Any], claim_every: int, prior_log_variance: np.ndarray) -> dict[str, Any]:
     """What one episode achieved, a value per time_step
 
-    distance_to_target       ||position - target|| on the plane tangent at the box's middle latitude, km
-    arrived                  1 once within arrival_km of the target
     rmse                     sqrt(mean over candidates and components of (W - mu_t)^2)
     posterior_variance       mean over candidates of exp(v_t,u) + exp(v_t,v) over W's components
     wind_rmse, wind_posterior_variance    the same over U
@@ -139,11 +132,8 @@ def episode_curves(held: dict[str, Any], claim_every: int, prior_log_variance: n
     targets_visited     how many targets the boat has been within arrival_km of, nan unless the episode visits targets
     """
     truth = held["objective_state/truth"][1:]  # (time_steps, candidates, components)
-    arrived = held.get("objective_state/arrived", np.zeros(truth.shape[0] + 1))[1:]  # (time_steps,): never, when learning the region
-    position, target = held["state/position"][1:], held["state/target"][1:]  # (time_steps, 2) as (lat, lon) degrees
-    km_per_degree = KM_PER_DEGREE * np.array([1.0, np.cos(np.radians(np.mean(target[:, 0])))])
-    distance = np.linalg.norm((position - target) * km_per_degree, axis=-1)
-    claim = at_each_snapshot(held["objective_state/claim"], arrived.size + 1, claim_every)[1:]
+    steps = truth.shape[0]
+    claim = at_each_snapshot(held["objective_state/claim"], steps + 1, claim_every)[1:]
     mean, spread = claimed(claim, OCEAN_CURRENT)  # (time_steps, candidates, 2) and (time_steps, candidates)
     wind_mean, wind_spread = claimed(claim, WIND)
     stored = held["objective_state/claim"]
@@ -152,22 +142,20 @@ def episode_curves(held: dict[str, Any], claim_every: int, prior_log_variance: n
     regret = (
         (held["objective_state/best_possible_magnitude"] - held["objective_state/best_observed_magnitude"])[1:]
         if "objective_state/best_possible_magnitude" in held
-        else np.full(arrived.size, np.nan)
+        else np.full(steps, np.nan)
     )  # (time_steps,)
     return {
-        "distance_to_target": distance,
-        "arrived": arrived,
         "rmse": np.sqrt(np.mean((mean - truth[..., list(OCEAN_CURRENT)]) ** 2, axis=(-2, -1))),
         "posterior_variance": np.mean(spread**2, axis=-1),
         "wind_rmse": np.sqrt(np.mean((wind_mean - truth[..., list(WIND)]) ** 2, axis=(-2, -1))),
         "wind_posterior_variance": np.mean(wind_spread**2, axis=-1),
-        "information": at_each_snapshot(np.sum(shed[..., list(OCEAN_CURRENT)], axis=(-2, -1)), arrived.size + 1, claim_every)[1:],
-        "wind_information": at_each_snapshot(np.sum(shed[..., list(WIND)], axis=(-2, -1)), arrived.size + 1, claim_every)[1:],
+        "information": at_each_snapshot(np.sum(shed[..., list(OCEAN_CURRENT)], axis=(-2, -1)), steps + 1, claim_every)[1:],
+        "wind_information": at_each_snapshot(np.sum(shed[..., list(WIND)], axis=(-2, -1)), steps + 1, claim_every)[1:],
         "simple_regret": regret,
         "cumulative_regret": np.cumsum(regret),
         "targets_visited": np.sum(held["objective_state/visited"][1:], axis=-1)
         if "objective_state/visited" in held
-        else np.full(arrived.size, np.nan),
+        else np.full(steps, np.nan),
     }
 
 
@@ -246,7 +234,6 @@ def tables(runs: list[tuple[str, int, Path, dict[str, Any]]]) -> tuple[pd.DataFr
                 "acquisition": arm,
                 "seed": seed,
                 **{name: float(values[-1]) for name, values in achieved.items()},
-                "steps_to_arrival": float(held.get("objective_state/steps_to_arrival", [float("nan")])[-1]),
                 "steps_to_completion": float(held.get("objective_state/steps_to_completion", [float("nan")])[-1]),
                 **{
                     name: float("nan") if config.get("method") is None else float(achieved[name][-1])
