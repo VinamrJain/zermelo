@@ -105,15 +105,9 @@ def send(runs: Sequence[Path], into: Path, flags: str) -> str:
     return f"{said.stdout.strip()}, {len(runs)} film{'s' if len(runs) != 1 else ''} from {script}"
 
 
-def candidate_box(
-    problem: dict, lat: np.ndarray, lon: np.ndarray, land: np.ndarray, targets: np.ndarray | None, n_claimed: int
-) -> np.ndarray:
-    """(n_lat * n_lon,): the `n_claimed` grid points a claim is scored on: the target box, or the `targets` (n_goals, 2) as (lat, lon) of a
-    visiting episode recorded before its candidates were the box"""
+def candidate_box(problem: dict, lat: np.ndarray, lon: np.ndarray, land: np.ndarray) -> np.ndarray:
+    """(n_lat * n_lon,): the grid points a claim is scored on, the target box less land"""
     grid = PlaneGrid(len(lat), len(lon), float(lat[0]), float(lon[0]), float(lat[1] - lat[0]), float(lon[1] - lon[0]))
-    if targets is not None and len(targets) == n_claimed:
-        rows, cols = np.abs(lat[:, None] - targets[:, 0]).argmin(axis=0), np.abs(lon[:, None] - targets[:, 1]).argmin(axis=0)
-        return np.isin(np.arange(len(lat) * len(lon)), rows * len(lon) + cols)
     inside = grid.inside(problem["target_lat_min"], problem["target_lat_max"], problem["target_lon_min"], problem["target_lon_max"])
     return np.asarray(inside) & ~land.reshape(-1)
 
@@ -145,8 +139,7 @@ def scene(run: Path, dpi: int, until: int | None) -> tuple[FigureCanvasAgg, Call
     ocean = load_ocean(Path(problem["data_path"]), stride)
     field = np.asarray(ocean.field(ocean.frame(problem["frame_hour"])), float).reshape(n_lat, n_lon, -1)  # (n_lat, n_lon, components)
     true_u, true_v, wind_u, wind_v = (field[..., i] for i in (*OCEAN_CURRENT, *WIND_COMPONENTS))
-    targets_drawn = held["objective_state/targets"][0] if "objective_state/targets" in held else None
-    candidates = np.flatnonzero(candidate_box(problem, lat, lon, land, targets_drawn, held["objective_state/claim"].shape[1]))
+    candidates = np.flatnonzero(candidate_box(problem, lat, lon, land))
     polar = Polar(
         problem["top_speed_ms"],
         problem["no_go_degrees"],

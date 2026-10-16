@@ -57,8 +57,7 @@ def still(run: Path, out: Path) -> None:
     lat, lon, land = grid_of(config)
     n_lat, n_lon = len(lat), len(lon)
     problem = config["problem"]
-    targets_drawn = held["objective_state/targets"][0] if "objective_state/targets" in held else None
-    candidates = np.flatnonzero(candidate_box(problem, lat, lon, land, targets_drawn, held["objective_state/claim"].shape[1]))
+    candidates = np.flatnonzero(candidate_box(problem, lat, lon, land))
     searching, visiting = "objective_state/best_observed_magnitude" in held, "objective_state/targets" in held
     box_lat, box_lon = (problem["target_lat_min"], problem["target_lat_max"]), (problem["target_lon_min"], problem["target_lon_max"])
 
