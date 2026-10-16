@@ -39,7 +39,6 @@ ACQUISITION_FAMILIES = {
     "eii": "EII",
     "esi": "ESI",
     "etr": "ETR",
-    "nearest": "Nearest",
     "oracle_etr": "Oracle-ETR",
 }
 """The paper's name for each acquisition family, keyed by the token an arm's name carries"""
