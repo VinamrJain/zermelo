@@ -41,15 +41,10 @@ TASKS = {
 """Per task: the rule's name, its utility over the ocean current, `S` fields drawn, the world, the channels it adds"""
 
 
-def _method(utility: Implementation, n_field_samples: int, replan_length: int, rounds: int | None, only_reachable: bool) -> MethodConfig:
+def _method(utility: Implementation, n_field_samples: int, replan_length: int, rounds: int | None) -> MethodConfig:
     """One rule on a value-iteration planner at `L = replan_length`, `K = rounds`, travel not priced"""
     planner = value_iteration(
-        value_iterations=rounds,
-        replan_length=replan_length,
-        only_reachable=only_reachable,
-        radius=ARRIVAL_RADIUS_KM,
-        targets_per_solve=None,
-        cost_weight=0.0,
+        value_iterations=rounds, replan_length=replan_length, radius=ARRIVAL_RADIUS_KM, targets_per_solve=None, cost_weight=0.0
     )
     return MethodConfig(
         utility=utility,
@@ -76,12 +71,11 @@ for task, (rule, utility, n_field_samples, world, recorded) in TASKS.items():
             resources=dataclasses.replace(RESOURCES, timeout_min=480, constraint="avx2&gpu-high"),  # 48 GB cards and up
             arms=[
                 arm(
-                    f"{rule}_L{length}_{k}_filter_{'on' if only else 'off'}",
-                    _method(utility, n_field_samples, length, None if times is None else times * length, only),
+                    f"{rule}_L{length}_{k}_filter_off",
+                    _method(utility, n_field_samples, length, None if times is None else times * length),
                     field_belief(),
                 )
                 for length in REPLAN_LENGTHS
                 for k, times in ROUNDS.items()
-                for only in (True, False)
             ],
         )

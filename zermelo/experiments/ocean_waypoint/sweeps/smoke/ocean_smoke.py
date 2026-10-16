@@ -46,12 +46,10 @@ def _belief(oracle: bool) -> BeliefConfig:
 
 
 def _method(utility: Implementation, *, n_field_samples: int, n_paths_per_field: int, n_candidates_scored: int | None) -> MethodConfig:
-    """One rule on a value-iteration planner, only the candidates within reach scored, at the settings the arms differ in"""
+    """One rule on a value-iteration planner, at the settings the arms differ in"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(
-            value_iterations=10, replan_length=3, only_reachable=True, radius=60.0, targets_per_solve=None, cost_weight=0.0
-        ),
+        planner=value_iteration(value_iterations=10, replan_length=3, radius=60.0, targets_per_solve=None, cost_weight=0.0),
         subtract_dataset_utility=True,
         n_field_samples=n_field_samples,
         n_paths_per_field=n_paths_per_field,

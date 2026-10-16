@@ -99,9 +99,6 @@ PLANNING_BUDGET = 50
 VALUE_ITERATIONS = 2 * PLANNING_BUDGET
 """`K`: rounds of value iteration per plan"""
 
-ONLY_REACHABLE = False
-"""Whether a rule chooses only among targets with `H-hat(z_h, x) < L`"""
-
 ARRIVAL_RADIUS_KM = 20.0
 """`rho`: how near a waypoint counts as arrived, inside positions about 18 km apart"""
 

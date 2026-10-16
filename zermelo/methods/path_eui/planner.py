@@ -56,9 +56,6 @@ class Planner(ABC):
     replan_length: int
     """`L`: the replan length, steps per path and moves per target"""
 
-    only_reachable: bool
-    """Choose only among `x` with `H-hat(z_h, x) < L` when True"""
-
     goal_radius: float
     """`rho`: `|z - x| <= rho` is arrival, on embedded coordinates"""
 

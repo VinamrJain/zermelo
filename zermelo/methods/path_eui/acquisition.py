@@ -6,7 +6,7 @@ H-hat(z_h, x) its expected path length to x and C-hat(z_h, x) its expected cost:
     u(x)     = (1 / S M) sum over s, m of [ U(d_h + tau-hat^(s,m)(x)) - U(d_h) ],   tau-hat^(s,m)(x) a path under pi(., x) and phi^(s) ~ P(phi | d_h)
     lambda'  = lambda (max u - min u) / (L (1 + kappa))
     alpha(x) = u(x) - lambda' (H-hat(z_h, x) + kappa C-hat(z_h, x))
-    x*       ~ Uniform( argmax over x in delta_L of alpha(x) ),   delta_L = { x : 0 < H-hat(z_h, x) < L, and C-hat(z_h, x) <= the budget left }
+    x*       ~ Uniform( argmax over x in delta_L of alpha(x) ),   delta_L = { x : 0 < H-hat(z_h, x), and C-hat(z_h, x) <= the budget left }
                the nearest x by H-hat when delta_L is empty
 
 A candidate is a state the rule may score, a target one the planner steers to, and x* the target chosen.
@@ -171,12 +171,10 @@ class Acquisition:
     ) -> Int[Array, ""]:
         """Index of `x* ~ Uniform( argmax over x in delta_L of alpha(x) )`, or of the nearest `x` by `H-hat` when `delta_L` is empty
 
-        delta_L = { x : 0 < H-hat(z_h, x) < L }, or { x : 0 < H-hat(z_h, x) } unless the planner is only_reachable: within the goal radius nothing is walked, and at H-hat = L nothing arrives before
-        the next decision; where the problem keeps a budget, C-hat(z_h, x) <= the budget left as well.
+        delta_L = { x : 0 < H-hat(z_h, x) }: within the goal radius nothing is walked; where the problem keeps a budget, C-hat(z_h, x) <= the
+        budget left as well.
         """
-        is_reachable: Bool[Array, " n_candidates_scored"] = (policy.expected_path_length > 0.0) & (
-            (policy.expected_path_length < self.planner.replan_length) | (not self.planner.only_reachable)
-        )
+        is_reachable: Bool[Array, " n_candidates_scored"] = policy.expected_path_length > 0.0
         if budget_left is not None:
             is_reachable &= policy.expected_cost <= budget_left
         among_reachable = jnp.where(is_reachable, acquisition_value, -jnp.inf)

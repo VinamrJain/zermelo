@@ -6,7 +6,6 @@ from zermelo.experiments.ocean_waypoint.registry import (
     CLAIM_EVERY_STEPS,
     GULF_STREAM_2019JUN,
     HORIZON_LENGTH,
-    ONLY_REACHABLE,
     PLANNING_BUDGET,
     RECORDED,
     RESOURCES,
@@ -40,7 +39,6 @@ def _method(
         planner=value_iteration(
             value_iterations=VALUE_ITERATIONS,
             replan_length=PLANNING_BUDGET,
-            only_reachable=ONLY_REACHABLE,
             radius=ARRIVAL_RADIUS_KM,
             targets_per_solve=None,
             cost_weight=0.0,
