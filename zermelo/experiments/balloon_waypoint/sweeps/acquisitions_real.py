@@ -79,13 +79,13 @@ sweep(
         # the rule this study proposes: a step costs 1 + 0.25 * the resource it spends
         arm(
             "eui_fields16_walks16_rate0p5",
-            _method(max_magnitude(), subtract_dataset_utility=True, n_field_samples=16, n_paths_per_field=16, lambda_=0.5),
+            _method(max_magnitude(), subtract_dataset_utility=True, n_field_samples=16, n_paths_per_field=16, lambda_=1 / 3),
             BELIEF,
         ),
         # the same rule charging the step alone, isolating what the resource term buys
         arm(
             "eui_fields16_walks16_rate0p5_no_resource",
-            _method(max_magnitude(), subtract_dataset_utility=True, n_field_samples=16, n_paths_per_field=16, lambda_=0.5),
+            _method(max_magnitude(), subtract_dataset_utility=True, n_field_samples=16, n_paths_per_field=16, lambda_=1 / 3),
             BELIEF,
         ),
     ],

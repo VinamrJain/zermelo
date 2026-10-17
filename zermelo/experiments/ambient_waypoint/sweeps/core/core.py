@@ -62,7 +62,7 @@ def _baseline(utility: Implementation, n_field_samples: int) -> MethodConfig:
     )
 
 
-def _ours(utility: Implementation, *, lambda_: float = 0.5, replan_length: int = PLANNING_BUDGET) -> MethodConfig:
+def _ours(utility: Implementation, *, lambda_: float = 1 / 3, replan_length: int = PLANNING_BUDGET) -> MethodConfig:
     """Expected improvement of `utility` over 16 imagined walks under 16 drawn fields, its walk's cost weighed at `lambda_`"""
     return _method(
         utility, subtract_dataset_utility=True, n_field_samples=16, n_paths_per_field=16, lambda_=lambda_, replan_length=replan_length
@@ -86,9 +86,9 @@ sweep(
         arm("ts", _baseline(max_magnitude(), 1), BELIEF),
         arm("emi_L25", _ours(max_magnitude()), BELIEF),
         arm("emi_L50", _ours(max_magnitude(), replan_length=50), BELIEF),
-        arm("emi_c1", _ours(max_magnitude(), lambda_=1.0), BELIEF),
+        arm("emi_c0p5", _ours(max_magnitude(), lambda_=0.5), BELIEF),
         arm("evi_L25", _ours(posterior_spread()), BELIEF),
         arm("evi_L50", _ours(posterior_spread(), replan_length=50), BELIEF),
-        arm("evi_c1", _ours(posterior_spread(), lambda_=1.0), BELIEF),
+        arm("evi_c0p5", _ours(posterior_spread(), lambda_=0.5), BELIEF),
     ],
 )

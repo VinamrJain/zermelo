@@ -54,7 +54,7 @@ def _method(
     )
 
 
-LAMBDA = 1.0
+LAMBDA = 0.5
 """`lambda` the walk's altitude changes are weighed at"""
 
 

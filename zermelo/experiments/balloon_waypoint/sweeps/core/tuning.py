@@ -64,7 +64,7 @@ sweep(
             BELIEFS["wind"],
         )
         for replan_length in (10, 25, 50)
-        for lambda_ in (0.0, 0.5, 1.0, 2.0)
+        for lambda_ in (0.0, 0.25, 0.5, 0.75)
     ],
 )
 """Expected sum-of-speed improvement under the wind belief, over the leg length and the price of an altitude change"""

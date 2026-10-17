@@ -18,7 +18,7 @@ def _method(utility: Implementation) -> MethodConfig:
         subtract_dataset_utility=True,
         n_field_samples=2,
         n_paths_per_field=2,
-        lambda_=1.0,
+        lambda_=0.5,
         n_candidates_scored=16,
         random_opening_steps=0,
     )

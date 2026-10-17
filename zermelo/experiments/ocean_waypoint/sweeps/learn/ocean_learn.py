@@ -27,7 +27,7 @@ WORLD = dataclasses.replace(GULF_STREAM_2019JUN, objective="learn", learned=LEAR
 N_WALKS = 16
 """`M` walks the path-aware rules imagine per candidate, under the posterior mean"""
 
-LAMBDA = 1.0
+LAMBDA = 0.5
 """`lambda` the path-aware rules weigh their walk's cost at"""
 
 

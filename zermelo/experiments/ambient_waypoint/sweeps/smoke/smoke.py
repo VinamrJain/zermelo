@@ -97,7 +97,7 @@ for name, resources in (
             ),
             arm(
                 "evi",
-                _method(total_variance(), subtract_dataset_utility=True, n_field_samples=2, n_paths_per_field=2, lambda_=0.5),
+                _method(total_variance(), subtract_dataset_utility=True, n_field_samples=2, n_paths_per_field=2, lambda_=1 / 3),
                 _belief(oracle=False),
             ),
             arm("random", None, _belief(oracle=False)),  # no rule at all

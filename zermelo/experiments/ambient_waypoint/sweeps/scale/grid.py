@@ -68,7 +68,7 @@ for name, problem, chunk, resources in (
                     subtract_dataset_utility=True,
                     n_field_samples=16,
                     n_paths_per_field=16,
-                    lambda_=0.5,
+                    lambda_=1 / 3,
                     targets_per_solve=chunk,
                 ),
                 matched_belief(problem),

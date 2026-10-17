@@ -13,7 +13,7 @@ PLANNING_BUDGET = 100
 LAMBDA = 0.0
 """`lambda` each of our rules charges the altitude changes of its walk"""
 
-BUDGETED_LAMBDA = 1.0
+BUDGETED_LAMBDA = 0.5
 """`lambda` each of our rules charges the altitude changes of its walk where the altitude budget binds"""
 
 N_SEEDS = 5

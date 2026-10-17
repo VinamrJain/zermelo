@@ -37,7 +37,7 @@ METHOD = MethodConfig(
     subtract_dataset_utility=True,
     n_field_samples=16,
     n_paths_per_field=16,
-    lambda_=0.5,
+    lambda_=1 / 3,
     n_candidates_scored=None,
     random_opening_steps=OPENING_STEPS,
 )

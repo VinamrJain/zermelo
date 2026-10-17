@@ -21,7 +21,7 @@ RATE_ARMS = {
         arm(f"{name}_L{budget}_c{rate_name(rate)}", ours(name, lambda_=rate, replan_length=budget), BELIEF)
         for name in names
         for budget in (25, 50, 100)
-        for rate in (0.0, 0.5, 1.0, 2.0)
+        for rate in (0.0, 0.25, 0.5, 0.75)
     ]
     for swept, names in (("paper_tuning", ("emi", "evi")), ("paper_tuning_esi", ("esi",)))
 }
@@ -30,7 +30,7 @@ RATE_ARMS = {
 WEIGHT_ARMS = [
     arm(f"{name}_c{rate_name(rate)}", ours(name, lambda_=rate), BELIEF)
     for name in ("emi", "evi", "esi")
-    for rate in (0.0, 0.5, 1.0, 2.0, 4.0)
+    for rate in (0.0, 0.2, 0.4, 0.6, 0.8)
 ]
 """Every price of an altitude change"""
 

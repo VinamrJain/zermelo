@@ -40,6 +40,6 @@ sweep(
     arms=[
         arm(f"{scored}_rate{name}", _method(subtract_dataset_utility=scored == "increment", lambda_=rate), BELIEF)
         for scored in ("level", "increment")
-        for name, rate in (("0", 0.0), ("0p5", 0.5))
+        for name, rate in (("0", 0.0), ("0p33", 1 / 3))
     ],
 )

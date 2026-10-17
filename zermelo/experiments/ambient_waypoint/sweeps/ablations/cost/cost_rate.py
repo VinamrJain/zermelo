@@ -39,5 +39,5 @@ sweep(
     recorded=RECORDED,
     seeds=range(N_SEEDS),
     resources=dataclasses.replace(RESOURCES, timeout_min=120),
-    arms=[arm(f"rate{name}", _method(rate), BELIEF) for name, rate in (("0", 0.0), ("0p5", 0.5), ("1", 1.0), ("2", 2.0))],
+    arms=[arm(f"rate{name}", _method(rate), BELIEF) for name, rate in (("0", 0.0), ("0p25", 0.25), ("0p5", 0.5), ("0p75", 0.75))],
 )

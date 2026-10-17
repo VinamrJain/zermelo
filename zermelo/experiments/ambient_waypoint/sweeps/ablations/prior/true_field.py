@@ -50,7 +50,7 @@ RULES = {
     "ei": _method(expected_improvement(), subtract_dataset_utility=False, n_field_samples=0, n_paths_per_field=0, lambda_=0.0),
     "thompson": _method(max_magnitude(), subtract_dataset_utility=False, n_field_samples=1, n_paths_per_field=0, lambda_=0.0),
     "eui_fields16_walks16_rate0p5": _method(
-        max_magnitude(), subtract_dataset_utility=True, n_field_samples=16, n_paths_per_field=16, lambda_=0.5
+        max_magnitude(), subtract_dataset_utility=True, n_field_samples=16, n_paths_per_field=16, lambda_=1 / 3
     ),
 }
 """The rules of the headline sweep"""

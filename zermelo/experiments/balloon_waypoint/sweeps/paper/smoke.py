@@ -31,7 +31,7 @@ sweep(
     resources=Resources(cpus=1, mem_gb=8, timeout_min=20, gres=None, partition="dean", constraint="avx2", array_parallelism=10),
     arms=[
         arm("mc_ei", _small(mc_ei()), BELIEF),
-        arm("emi", _small(ours("emi", lambda_=1.0)), BELIEF),
+        arm("emi", _small(ours("emi", lambda_=0.5)), BELIEF),
         arm("oracle_emi", _small(ours("emi")), dataclasses.replace(BELIEF, oracle=True)),
     ],
 )

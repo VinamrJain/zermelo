@@ -45,7 +45,7 @@ def _method(
 
 def _sampled(utility: Implementation, *, subtract_dataset_utility: bool) -> MethodConfig:
     """`utility` at this sweep's draw counts and charge"""
-    return _method(utility, subtract_dataset_utility=subtract_dataset_utility, n_field_samples=16, n_paths_per_field=16, lambda_=0.5)
+    return _method(utility, subtract_dataset_utility=subtract_dataset_utility, n_field_samples=16, n_paths_per_field=16, lambda_=1 / 3)
 
 
 sweep(
