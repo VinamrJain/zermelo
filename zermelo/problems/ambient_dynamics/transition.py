@@ -12,7 +12,7 @@ from jax.tree_util import register_dataclass
 from jaxtyping import Array, Bool, Float, Int, PRNGKeyArray
 
 from zermelo.interface import DiscreteDomain, Domain, Function, Transition, TransitionKernel
-from zermelo.problems.ambient_dynamics.ambient_grid import PaddedGridDomain, ambient_positions
+from zermelo.problems.ambient_dynamics.grid import PaddedGridDomain, ambient_positions
 
 type Act = Int[Array, ""]
 """One flat index in [0, choices_per_axis ** controllable_axes): one choice per controllable axis"""

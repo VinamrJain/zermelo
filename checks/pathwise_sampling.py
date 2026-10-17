@@ -92,7 +92,7 @@ def their_paths(x: jnp.ndarray, y: jnp.ndarray, coords: jnp.ndarray, key: jax.Ar
 def our_paths(x: jnp.ndarray, y: jnp.ndarray, coords: jnp.ndarray, key: jax.Array, n_field_samples: int) -> np.ndarray:
     """Our pathwise draw at the same cells, as (n_field_samples, n_cells)."""
     from zermelo.methods.path_eui.belief import GPBelief
-    from zermelo.problems.ambient_dynamics.ambient_grid import PaddedGridDomain
+    from zermelo.problems.ambient_dynamics.grid import PaddedGridDomain
 
     positions = PaddedGridDomain(n_axes=1, n_cells=N_CELLS, cell_spacing=SPACING, pad=0)
     belief = GPBelief.empty(

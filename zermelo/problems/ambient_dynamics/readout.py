@@ -7,7 +7,7 @@ import jax
 from jaxtyping import PRNGKeyArray
 
 from zermelo.interface import BoxDomain, Domain, ProductDomain, Readout
-from zermelo.problems.ambient_dynamics.ambient_grid import GridDomain, ambient_positions
+from zermelo.problems.ambient_dynamics.grid import GridDomain, ambient_positions
 
 
 @dataclass(frozen=True)

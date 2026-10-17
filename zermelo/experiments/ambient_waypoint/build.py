@@ -22,7 +22,7 @@ from zermelo.problems.ambient_dynamics import (
     ambient_positions,
     ambient_world,
 )
-from zermelo.problems.ambient_dynamics.ambient_transition import AmbientTransition
+from zermelo.problems.ambient_dynamics.transition import AmbientTransition
 from zermelo.run.episode import Episode
 
 WHITELIST = ("zermelo.*", "gpjax.*")

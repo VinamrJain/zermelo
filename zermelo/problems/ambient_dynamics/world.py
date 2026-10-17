@@ -7,10 +7,10 @@ import jax
 from jaxtyping import PRNGKeyArray
 
 from zermelo.interface import BoxDomain, Domain, FunctionDomain, Prior, ProductDomain, Subset, Uniform, World
-from zermelo.problems.ambient_dynamics.ambient_field import GP
-from zermelo.problems.ambient_dynamics.ambient_grid import GridDomain, PaddedGridDomain, ambient_positions
-from zermelo.problems.ambient_dynamics.ambient_readout import LocalReading
-from zermelo.problems.ambient_dynamics.ambient_transition import AmbientTransition
+from zermelo.problems.ambient_dynamics.field import GP
+from zermelo.problems.ambient_dynamics.grid import GridDomain, PaddedGridDomain, ambient_positions
+from zermelo.problems.ambient_dynamics.readout import LocalReading
+from zermelo.problems.ambient_dynamics.transition import AmbientTransition
 
 
 @dataclass(frozen=True)
