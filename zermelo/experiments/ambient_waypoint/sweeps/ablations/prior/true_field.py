@@ -29,7 +29,7 @@ ORACLE = dataclasses.replace(MATCHED, oracle=True)
 
 
 def _method(
-    utility: Implementation, *, subtract_dataset_utility: bool, n_field_samples: int, n_paths_per_field: int, penalty_rate: float
+    utility: Implementation, *, subtract_dataset_utility: bool, n_field_samples: int, n_paths_per_field: int, lambda_: float
 ) -> MethodConfig:
     """This sweep's held values"""
     return MethodConfig(
@@ -38,7 +38,7 @@ def _method(
         subtract_dataset_utility=subtract_dataset_utility,
         n_field_samples=n_field_samples,
         n_paths_per_field=n_paths_per_field,
-        penalty_rate=penalty_rate,
+        lambda_=lambda_,
         n_candidates_scored=None,
         random_opening_steps=OPENING_STEPS,
     )
@@ -46,11 +46,11 @@ def _method(
 
 RULES = {
     # a charge would bias a uniform draw, which spans [0, 1] whatever the field
-    "random_search": _method(uniform(), subtract_dataset_utility=False, n_field_samples=0, n_paths_per_field=0, penalty_rate=0.0),
-    "ei": _method(expected_improvement(), subtract_dataset_utility=False, n_field_samples=0, n_paths_per_field=0, penalty_rate=0.0),
-    "thompson": _method(max_magnitude(), subtract_dataset_utility=False, n_field_samples=1, n_paths_per_field=0, penalty_rate=0.0),
+    "random_search": _method(uniform(), subtract_dataset_utility=False, n_field_samples=0, n_paths_per_field=0, lambda_=0.0),
+    "ei": _method(expected_improvement(), subtract_dataset_utility=False, n_field_samples=0, n_paths_per_field=0, lambda_=0.0),
+    "thompson": _method(max_magnitude(), subtract_dataset_utility=False, n_field_samples=1, n_paths_per_field=0, lambda_=0.0),
     "eui_fields16_walks16_rate0p5": _method(
-        max_magnitude(), subtract_dataset_utility=True, n_field_samples=16, n_paths_per_field=16, penalty_rate=0.5
+        max_magnitude(), subtract_dataset_utility=True, n_field_samples=16, n_paths_per_field=16, lambda_=0.5
     ),
 }
 """The rules of the headline sweep"""

@@ -147,24 +147,21 @@ def uniform() -> Implementation:
     return _built("zermelo.methods.path_eui.utility.Uniform")
 
 
-# --- planners: how the actor is carried to a target, and how that walk is priced ----------------------------------
+# --- planners: how the actor is carried to a target ----------------------------------
 
 
-def value_iteration(
-    value_iterations: int | None, replan_length: int, radius: float, targets_per_solve: int | None, cost_weight: float
-) -> Implementation:
-    """`v_0 = 0`, `v_{k+1}(s) = 0 on arrival, else min over a of c(s, a) + sum over s' of P(s' | s, a) v_k(s')`, `value_iterations` rounds, `None` the steps left"""
+def value_iteration(value_iterations: int | None, replan_length: int, radius: float, targets_per_solve: int | None) -> Implementation:
+    """`v_0 = 0`, `v_{k+1}(s) = 0 on arrival, else min over a of 1 + sum over s' of P(s' | s, a) v_k(s')`, `value_iterations` rounds, `None` the steps left"""
     return _built(
         "zermelo.methods.path_eui.planner.ValueIteration",
         value_iterations=value_iterations,
         replan_length=replan_length,
         goal_radius=radius,
         targets_per_solve=targets_per_solve,
-        cost_weight=cost_weight,
     )
 
 
-def greedy(value_iterations: int, replan_length: int, radius: float, targets_per_solve: int | None, cost_weight: float) -> Implementation:
+def greedy(value_iterations: int, replan_length: int, radius: float, targets_per_solve: int | None) -> Implementation:
     """One backup on the distance to the target: the act whose next cell is nearest it in expectation"""
     return _built(
         "zermelo.methods.path_eui.planner.Greedy",
@@ -172,5 +169,4 @@ def greedy(value_iterations: int, replan_length: int, radius: float, targets_per
         replan_length=replan_length,
         goal_radius=radius,
         targets_per_solve=targets_per_solve,
-        cost_weight=cost_weight,
     )

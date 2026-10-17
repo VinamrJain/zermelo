@@ -32,16 +32,12 @@ def _method(utility: Implementation, *, subtract_dataset_utility: bool, n_field_
     return MethodConfig(
         utility=utility,
         planner=value_iteration(
-            value_iterations=VALUE_ITERATIONS,
-            replan_length=PLANNING_BUDGET,
-            radius=ARRIVAL_RADIUS_KM,
-            targets_per_solve=None,
-            cost_weight=0.0,
+            value_iterations=VALUE_ITERATIONS, replan_length=PLANNING_BUDGET, radius=ARRIVAL_RADIUS_KM, targets_per_solve=None
         ),
         subtract_dataset_utility=subtract_dataset_utility,
         n_field_samples=n_field_samples,
         n_paths_per_field=n_paths_per_field,
-        penalty_rate=0.0,
+        lambda_=0.0,
         candidates="box",
         n_candidates_scored=None,
         random_opening_steps=0,

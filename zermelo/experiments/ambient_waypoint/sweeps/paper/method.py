@@ -10,8 +10,8 @@ UTILITIES = {"emi": max_magnitude, "evi": posterior_spread, "esi": sum_magnitude
 PLANNING_BUDGET = 25
 """`L` every rule replans at"""
 
-PENALTY_RATE = 0.0
-"""`c` each of our rules charges a full-budget trip"""
+LAMBDA = 0.0
+"""`lambda` each of our rules weighs its walk's cost at"""
 
 TUNING_SEEDS = range(100, 105)
 """Instances the settings above are picked on, disjoint from the ones reported"""
@@ -23,7 +23,7 @@ def method(
     subtract_dataset_utility: bool,
     n_field_samples: int,
     n_paths_per_field: int,
-    penalty_rate: float,
+    lambda_: float,
     replan_length: int,
 ) -> MethodConfig:
     """One acquisition on a value-iteration planner, at the settings the acquisitions differ in"""
@@ -33,7 +33,7 @@ def method(
         subtract_dataset_utility=subtract_dataset_utility,
         n_field_samples=n_field_samples,
         n_paths_per_field=n_paths_per_field,
-        penalty_rate=penalty_rate,
+        lambda_=lambda_,
         n_candidates_scored=None,
         random_opening_steps=OPENING_STEPS,
     )
@@ -46,7 +46,7 @@ def baseline(utility: Implementation, n_field_samples: int) -> MethodConfig:
         subtract_dataset_utility=False,
         n_field_samples=n_field_samples,
         n_paths_per_field=0,
-        penalty_rate=0.0,
+        lambda_=0.0,
         replan_length=PLANNING_BUDGET,
     )
 
@@ -54,23 +54,18 @@ def baseline(utility: Implementation, n_field_samples: int) -> MethodConfig:
 def mc_ei() -> MethodConfig:
     """Expected improvement of the largest magnitude at the target alone, over 16 drawn fields and no walk"""
     return method(
-        max_magnitude(),
-        subtract_dataset_utility=True,
-        n_field_samples=16,
-        n_paths_per_field=0,
-        penalty_rate=0.0,
-        replan_length=PLANNING_BUDGET,
+        max_magnitude(), subtract_dataset_utility=True, n_field_samples=16, n_paths_per_field=0, lambda_=0.0, replan_length=PLANNING_BUDGET
     )
 
 
-def ours(name: str, *, penalty_rate: float | None = None, replan_length: int | None = None) -> MethodConfig:
-    """Expected improvement of `name`'s utility over 16 imagined walks under 16 drawn fields, at `PENALTY_RATE` and `PLANNING_BUDGET` unless given"""
+def ours(name: str, *, lambda_: float | None = None, replan_length: int | None = None) -> MethodConfig:
+    """Expected improvement of `name`'s utility over 16 imagined walks under 16 drawn fields, at `LAMBDA` and `PLANNING_BUDGET` unless given"""
     return method(
         UTILITIES[name](),
         subtract_dataset_utility=True,
         n_field_samples=16,
         n_paths_per_field=16,
-        penalty_rate=PENALTY_RATE if penalty_rate is None else penalty_rate,
+        lambda_=LAMBDA if lambda_ is None else lambda_,
         replan_length=PLANNING_BUDGET if replan_length is None else replan_length,
     )
 

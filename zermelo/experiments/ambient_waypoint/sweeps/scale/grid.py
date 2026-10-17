@@ -27,7 +27,7 @@ def _method(
     subtract_dataset_utility: bool,
     n_field_samples: int,
     n_paths_per_field: int,
-    penalty_rate: float,
+    lambda_: float,
     targets_per_solve: int | None,
 ) -> MethodConfig:
     """This sweep's held values"""
@@ -37,7 +37,7 @@ def _method(
         subtract_dataset_utility=subtract_dataset_utility,
         n_field_samples=n_field_samples,
         n_paths_per_field=n_paths_per_field,
-        penalty_rate=penalty_rate,
+        lambda_=lambda_,
         n_candidates_scored=None,
         random_opening_steps=OPENING_STEPS,
     )
@@ -68,7 +68,7 @@ for name, problem, chunk, resources in (
                     subtract_dataset_utility=True,
                     n_field_samples=16,
                     n_paths_per_field=16,
-                    penalty_rate=0.5,
+                    lambda_=0.5,
                     targets_per_solve=chunk,
                 ),
                 matched_belief(problem),
@@ -77,12 +77,7 @@ for name, problem, chunk, resources in (
             arm(
                 "random_search",
                 _method(
-                    uniform(),
-                    subtract_dataset_utility=False,
-                    n_field_samples=0,
-                    n_paths_per_field=0,
-                    penalty_rate=0.0,
-                    targets_per_solve=chunk,
+                    uniform(), subtract_dataset_utility=False, n_field_samples=0, n_paths_per_field=0, lambda_=0.0, targets_per_solve=chunk
                 ),
                 matched_belief(problem),
             ),

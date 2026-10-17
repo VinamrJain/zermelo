@@ -49,11 +49,11 @@ def _method(utility: Implementation, *, n_field_samples: int, n_paths_per_field:
     """One rule on a value-iteration planner, at the settings the arms differ in"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(value_iterations=10, replan_length=3, radius=60.0, targets_per_solve=None, cost_weight=0.0),
+        planner=value_iteration(value_iterations=10, replan_length=3, radius=60.0, targets_per_solve=None),
         subtract_dataset_utility=True,
         n_field_samples=n_field_samples,
         n_paths_per_field=n_paths_per_field,
-        penalty_rate=0.0,
+        lambda_=0.0,
         candidates="box",
         n_candidates_scored=n_candidates_scored,
         random_opening_steps=2,  # two uniform moves, leaving eight the rule decides

@@ -30,22 +30,16 @@ BELIEF = oracle_belief()
 
 
 def _method(
-    utility: Implementation,
-    *,
-    subtract_dataset_utility: bool,
-    n_field_samples: int,
-    n_paths_per_field: int,
-    penalty_rate: float,
-    cost_weight: float,
+    utility: Implementation, *, subtract_dataset_utility: bool, n_field_samples: int, n_paths_per_field: int, lambda_: float
 ) -> MethodConfig:
     """This sweep's held values"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(replan_length=PLANNING_BUDGET, radius=ARRIVAL_RADIUS_KM, targets_per_solve=None, cost_weight=cost_weight),
+        planner=value_iteration(replan_length=PLANNING_BUDGET, radius=ARRIVAL_RADIUS_KM, targets_per_solve=None),
         subtract_dataset_utility=subtract_dataset_utility,
         n_field_samples=n_field_samples,
         n_paths_per_field=n_paths_per_field,
-        penalty_rate=penalty_rate,
+        lambda_=lambda_,
         n_candidates_scored=N_CANDIDATES,
         random_opening_steps=OPENING_STEPS,
     )
@@ -53,14 +47,7 @@ def _method(
 
 def _sampled(utility: Implementation, *, subtract_dataset_utility: bool) -> MethodConfig:
     """`utility` at this sweep's draw counts and charge"""
-    return _method(
-        utility,
-        subtract_dataset_utility=subtract_dataset_utility,
-        n_field_samples=16,
-        n_paths_per_field=16,
-        penalty_rate=0.5,
-        cost_weight=0.25,
-    )
+    return _method(utility, subtract_dataset_utility=subtract_dataset_utility, n_field_samples=16, n_paths_per_field=16, lambda_=0.5)
 
 
 sweep(
@@ -78,9 +65,7 @@ sweep(
         arm("ucb2", _sampled(upper_confidence(2.0), subtract_dataset_utility=False), BELIEF),
         # a charge would bias a uniform draw, which spans [0, 1] whatever the field
         arm(
-            "random_search",
-            _method(uniform(), subtract_dataset_utility=False, n_field_samples=0, n_paths_per_field=0, penalty_rate=0.0, cost_weight=0.0),
-            BELIEF,
+            "random_search", _method(uniform(), subtract_dataset_utility=False, n_field_samples=0, n_paths_per_field=0, lambda_=0.0), BELIEF
         ),
     ],
 )

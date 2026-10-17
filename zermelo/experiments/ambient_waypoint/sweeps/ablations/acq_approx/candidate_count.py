@@ -23,7 +23,7 @@ def _method(n_candidates_scored: int | None) -> MethodConfig:
         subtract_dataset_utility=True,
         n_field_samples=16,
         n_paths_per_field=16,
-        penalty_rate=0.5,
+        lambda_=0.5,
         n_candidates_scored=n_candidates_scored,
         random_opening_steps=OPENING_STEPS,
     )

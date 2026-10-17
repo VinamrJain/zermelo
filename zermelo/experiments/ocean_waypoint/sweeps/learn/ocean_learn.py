@@ -27,25 +27,21 @@ WORLD = dataclasses.replace(GULF_STREAM_2019JUN, objective="learn", learned=LEAR
 N_WALKS = 16
 """`M` walks the path-aware rules imagine per candidate, under the posterior mean"""
 
-PENALTY_RATE = 1.0
-"""`lambda`: a full-budget trip costs the path-aware rules this many spreads of the candidate values"""
+LAMBDA = 1.0
+"""`lambda` the path-aware rules weigh their walk's cost at"""
 
 
-def _method(utility: Implementation, *, n_paths_per_field: int, penalty_rate: float) -> MethodConfig:
-    """One rule on a value-iteration planner, a full-budget trip charged `penalty_rate` of the spread of the candidate values"""
+def _method(utility: Implementation, *, n_paths_per_field: int, lambda_: float) -> MethodConfig:
+    """One rule on a value-iteration planner, its walk's cost weighed at `lambda_`"""
     return MethodConfig(
         utility=utility,
         planner=value_iteration(
-            value_iterations=VALUE_ITERATIONS,
-            replan_length=PLANNING_BUDGET,
-            radius=ARRIVAL_RADIUS_KM,
-            targets_per_solve=None,
-            cost_weight=0.0,
+            value_iterations=VALUE_ITERATIONS, replan_length=PLANNING_BUDGET, radius=ARRIVAL_RADIUS_KM, targets_per_solve=None
         ),
         subtract_dataset_utility=True,
         n_field_samples=0,
         n_paths_per_field=n_paths_per_field,
-        penalty_rate=penalty_rate,
+        lambda_=lambda_,
         candidates="box",
         n_candidates_scored=None,
         random_opening_steps=0,
@@ -63,14 +59,10 @@ for date, frame_hour in STILL_FRAMES.items():
         resources=RESOURCES,
         arms=[
             # E over walks tau of [ sum over c of Var(c | D) - Var(c | D + obs(tau)) ]
-            arm(
-                "evi",
-                _method(total_variance(SCORED_COMPONENTS[LEARNED]), n_paths_per_field=N_WALKS, penalty_rate=PENALTY_RATE),
-                field_belief(),
-            ),
+            arm("evi", _method(total_variance(SCORED_COMPONENTS[LEARNED]), n_paths_per_field=N_WALKS, lambda_=LAMBDA), field_belief()),
             # the posterior spread at the destination alone: the point information gain, since every destination is a candidate
-            arm("max_var", _method(posterior_spread(SCORED_COMPONENTS[LEARNED]), n_paths_per_field=0, penalty_rate=0.0), field_belief()),
-            arm("rand_wp", _method(uniform(), n_paths_per_field=0, penalty_rate=0.0), field_belief()),
+            arm("max_var", _method(posterior_spread(SCORED_COMPONENTS[LEARNED]), n_paths_per_field=0, lambda_=0.0), field_belief()),
+            arm("rand_wp", _method(uniform(), n_paths_per_field=0, lambda_=0.0), field_belief()),
             arm("rand_act", None, field_belief()),  # no rule at all
         ],
     )

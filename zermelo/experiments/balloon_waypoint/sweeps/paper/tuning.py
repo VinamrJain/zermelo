@@ -1,4 +1,4 @@
-"""Our rules on the held-out frame: every planning budget and step rate, then every price of an altitude change under each budget"""
+"""Our rules on the held-out frame: every planning budget and cost weight, then every price of an altitude change under each budget"""
 
 import dataclasses
 
@@ -18,22 +18,21 @@ BELIEF = static_error_belief()
 
 RATE_ARMS = {
     swept: [
-        arm(f"{name}_L{budget}_c{rate_name(rate)}", ours(name, penalty_rate=rate, replan_length=budget), BELIEF)
+        arm(f"{name}_L{budget}_c{rate_name(rate)}", ours(name, lambda_=rate, replan_length=budget), BELIEF)
         for name in names
         for budget in (25, 50, 100)
         for rate in (0.0, 0.5, 1.0, 2.0)
     ]
     for swept, names in (("paper_tuning", ("emi", "evi")), ("paper_tuning_esi", ("esi",)))
 }
-"""Every planning budget and step rate, the altitude budget never binding"""
+"""Every planning budget and cost weight, the altitude budget never binding"""
 
 WEIGHT_ARMS = [
-    arm(f"{name}_c{rate_name(rate)}_w{rate_name(weight)}", ours(name, penalty_rate=rate, cost_weight=weight), BELIEF)
+    arm(f"{name}_c{rate_name(rate)}", ours(name, lambda_=rate), BELIEF)
     for name in ("emi", "evi", "esi")
-    for rate in (0.0, 1.0)
-    for weight in (0.0, 0.5, 1.0, 2.0, 4.0)
+    for rate in (0.0, 0.5, 1.0, 2.0, 4.0)
 ]
-"""Every price of an altitude change, the score charging no travel and charging it at step rate 1"""
+"""Every price of an altitude change"""
 
 for swept, resource_units, arms in (
     *((swept, STILL_HORIZON, arms) for swept, arms in RATE_ARMS.items()),

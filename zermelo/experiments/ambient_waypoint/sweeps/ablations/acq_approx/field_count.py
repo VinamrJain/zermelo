@@ -25,7 +25,7 @@ def _method(n_field_samples: int) -> MethodConfig:
         subtract_dataset_utility=True,
         n_field_samples=n_field_samples,
         n_paths_per_field=16,
-        penalty_rate=0.5,
+        lambda_=0.5,
         n_candidates_scored=None,
         random_opening_steps=OPENING_STEPS,
     )

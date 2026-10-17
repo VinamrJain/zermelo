@@ -30,22 +30,16 @@ BELIEF = error_belief()
 
 
 def _method(
-    utility: Implementation,
-    *,
-    subtract_dataset_utility: bool,
-    n_field_samples: int,
-    n_paths_per_field: int,
-    penalty_rate: float,
-    cost_weight: float,
+    utility: Implementation, *, subtract_dataset_utility: bool, n_field_samples: int, n_paths_per_field: int, lambda_: float
 ) -> MethodConfig:
     """This sweep's held values"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(replan_length=PLANNING_BUDGET, radius=ARRIVAL_RADIUS_KM, targets_per_solve=None, cost_weight=cost_weight),
+        planner=value_iteration(replan_length=PLANNING_BUDGET, radius=ARRIVAL_RADIUS_KM, targets_per_solve=None),
         subtract_dataset_utility=subtract_dataset_utility,
         n_field_samples=n_field_samples,
         n_paths_per_field=n_paths_per_field,
-        penalty_rate=penalty_rate,
+        lambda_=lambda_,
         n_candidates_scored=N_CANDIDATES,
         random_opening_steps=OPENING_STEPS,
     )
@@ -62,62 +56,36 @@ sweep(
     arms=[
         arm("random_act", None, BELIEF),  # no rule at all: acts uniformly and claims the prior
         arm(
-            "random_search",
-            _method(uniform(), subtract_dataset_utility=False, n_field_samples=0, n_paths_per_field=0, penalty_rate=0.0, cost_weight=0.25),
-            BELIEF,
+            "random_search", _method(uniform(), subtract_dataset_utility=False, n_field_samples=0, n_paths_per_field=0, lambda_=0.0), BELIEF
         ),
         arm(
             "max_variance",
-            _method(
-                posterior_spread(),
-                subtract_dataset_utility=False,
-                n_field_samples=0,
-                n_paths_per_field=0,
-                penalty_rate=0.0,
-                cost_weight=0.25,
-            ),
+            _method(posterior_spread(), subtract_dataset_utility=False, n_field_samples=0, n_paths_per_field=0, lambda_=0.0),
             BELIEF,
         ),
         arm(
             "ucb2",
-            _method(
-                upper_confidence(2.0),
-                subtract_dataset_utility=False,
-                n_field_samples=0,
-                n_paths_per_field=0,
-                penalty_rate=0.0,
-                cost_weight=0.25,
-            ),
+            _method(upper_confidence(2.0), subtract_dataset_utility=False, n_field_samples=0, n_paths_per_field=0, lambda_=0.0),
             BELIEF,
         ),
         arm(
-            "mc_ei16",
-            _method(
-                max_magnitude(), subtract_dataset_utility=True, n_field_samples=16, n_paths_per_field=0, penalty_rate=0.0, cost_weight=0.25
-            ),
-            BELIEF,
+            "mc_ei16", _method(max_magnitude(), subtract_dataset_utility=True, n_field_samples=16, n_paths_per_field=0, lambda_=0.0), BELIEF
         ),
         arm(
             "thompson",
-            _method(
-                max_magnitude(), subtract_dataset_utility=False, n_field_samples=1, n_paths_per_field=0, penalty_rate=0.0, cost_weight=0.25
-            ),
+            _method(max_magnitude(), subtract_dataset_utility=False, n_field_samples=1, n_paths_per_field=0, lambda_=0.0),
             BELIEF,
         ),
         # the rule this study proposes: a step costs 1 + 0.25 * the resource it spends
         arm(
             "eui_fields16_walks16_rate0p5",
-            _method(
-                max_magnitude(), subtract_dataset_utility=True, n_field_samples=16, n_paths_per_field=16, penalty_rate=0.5, cost_weight=0.25
-            ),
+            _method(max_magnitude(), subtract_dataset_utility=True, n_field_samples=16, n_paths_per_field=16, lambda_=0.5),
             BELIEF,
         ),
         # the same rule charging the step alone, isolating what the resource term buys
         arm(
             "eui_fields16_walks16_rate0p5_no_resource",
-            _method(
-                max_magnitude(), subtract_dataset_utility=True, n_field_samples=16, n_paths_per_field=16, penalty_rate=0.5, cost_weight=0.0
-            ),
+            _method(max_magnitude(), subtract_dataset_utility=True, n_field_samples=16, n_paths_per_field=16, lambda_=0.5),
             BELIEF,
         ),
     ],

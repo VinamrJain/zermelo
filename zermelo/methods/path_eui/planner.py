@@ -1,14 +1,13 @@
-"""pi[f](z, x): the action at state z steering to target x under a field f, and what following it takes from z
+"""pi[f](z, x): the action at state z steering to target x under a field f, and the expected steps following it takes from z
 
-P(z' | z, a) the transition under f, c(z, a) >= 0 a step's own cost, mu its weight, rho the goal radius, K the value iterations, L the replan length:
+P(z' | z, a) the transition under f, rho the goal radius, K the value iterations, L the replan length:
 
-    v_0 = 0,   v_{k+1}(z, x) = 0 if |z - x| <= rho else min over a of [ 1 + mu c(z, a) + sum over z' of P(z' | z, a) v_k(z', x) ]
-    pi(z, x)  = argmin over a of [ 1 + mu c(z, a) + sum over z' of P(z' | z, a) v_K(z', x) ]
-    S(z, x)   = expected steps from z to x, C(z, x) = expected cost spent, both under pi and truncated at K, so v_K = S + mu C
+    S_0 = 0,   S_{k+1}(z, x) = 0 if |z - x| <= rho else min over a of [ 1 + sum over z' of P(z' | z, a) S_k(z', x) ]
+    pi(z, x)  = argmin over a of [ 1 + sum over z' of P(z' | z, a) S_K(z', x) ]
+    S(z, x)   = S_K(z, x), the expected steps from z to x under pi, truncated at K
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 
@@ -30,7 +29,7 @@ def index_in_actions(actions: Int[Array, " n_actions"], action: Int[Array, "*bat
 @register_dataclass
 @dataclass(frozen=True)
 class Policy:
-    """`pi(., x)` for every target `x`, with `S(z, x)` and `C(z, x)` at the one state `z` planned at"""
+    """`pi(., x)` for every target `x`, with `S(z, x)` at the one state `z` planned at"""
 
     action: Int[Array, "n_states n_targets"]
     """`pi(z, x)`, the action's value"""
@@ -38,17 +37,14 @@ class Policy:
     expected_path_length: Float[Array, " n_targets"]
     """`S(z, x)`: 0 within `rho` of `x`, `K` where `pi` never arrives"""
 
-    expected_cost: Float[Array, " n_targets"]
-    """`C(z, x)`: 0 where the transition charges none"""
 
-
-type PolicyTables = tuple[Int[Array, "n_states n_targets"], Float[Array, "n_states n_targets"], Float[Array, "n_states n_targets"]]
-"""`(pi, S, C)` over every state"""
+type PolicyTables = tuple[Int[Array, "n_states n_targets"], Float[Array, "n_states n_targets"]]
+"""`(pi, S)` over every state"""
 
 
 @dataclass(frozen=True)
 class Planner(ABC):
-    """`solve_shortest_paths` gives `(pi, S, C)`, `policy_to_targets` gives it `targets_per_solve` targets at a time, `roll_paths` samples paths under `pi`"""
+    """`solve_shortest_paths` gives `(pi, S)`, `policy_to_targets` gives it `targets_per_solve` targets at a time, `roll_paths` samples paths under `pi`"""
 
     value_iterations: int | None
     """`K`: rounds of the recursion per solve_shortest_paths; `None` is the steps left in the episode, set by the agent"""
@@ -62,9 +58,6 @@ class Planner(ABC):
     targets_per_solve: int | None
     """Targets per solve, `None` all at once"""
 
-    cost_weight: float
-    """`mu`"""
-
     @property
     def rounds(self) -> int:
         """`K`, raising while it is still the steps left"""
@@ -72,21 +65,11 @@ class Planner(ABC):
             raise ValueError("value_iterations is None: the agent sets it to the steps left before planning")
         return self.value_iterations
 
-    @property
-    def cost_budget(self) -> float:
-        """`B = L (1 + mu)`, the largest `S + mu C`"""
-        return self.replan_length * (1.0 + self.cost_weight)
-
-    def step_cost(self, kernel: TransitionKernel[Int[Array, ""]], action: Int[Array, ""]) -> Float[Array, " n_states"] | float:
-        """`c(., a)` over every state, 0 where the kernel charges none"""
-        charged = kernel.step_cost(action)
-        return 0.0 if charged is None else charged
-
     @abstractmethod
     def solve_shortest_paths(
         self, kernel: TransitionKernel[Int[Array, ""]], targets: Int[Array, " n_targets"], actions: Int[Array, " n_actions"]
     ) -> PolicyTables:
-        """`(kernel, targets, actions) -> (pi, S, C)` over every state"""
+        """`(kernel, targets, actions) -> (pi, S)` over every state"""
 
     def in_goal_set(self, domain: Domain, targets: Int[Array, " n_targets"]) -> Bool[Array, "n_states n_targets"]:
         """`|z - x| <= rho` for every state `z` against every target `x`"""
@@ -99,16 +82,11 @@ class Planner(ABC):
         return jnp.maximum(squared_norm[:, None] + squared_norm[targets][None, :] - 2 * state_coords @ state_coords[targets].T, 0.0)
 
     def _one_step_lookahead(
-        self,
-        kernel: TransitionKernel[Int[Array, ""]],
-        values: Float[Array, "n_states n_targets"],
-        actions: Int[Array, " n_actions"],
-        per_step: Callable[[Int[Array, ""]], Float[Array, " n_states"] | float],
+        self, kernel: TransitionKernel[Int[Array, ""]], values: Float[Array, "n_states n_targets"], actions: Int[Array, " n_actions"]
     ) -> Float[Array, "n_actions n_states n_targets"]:
-        """out[a, z, x] = per_step(a)[z] + sum over z' of P(z' | z, a) values[z', x]"""
+        """out[a, z, x] = 1 + sum over z' of P(z' | z, a) values[z', x]"""
         expected_next = jax.vmap(kernel.expectation, in_axes=(1, None), out_axes=1)
-        # (n_states, 1), or a scalar left as one, onto (n_states, n_targets)
-        return jnp.stack([jnp.reshape(per_step(jnp.asarray(a)), (-1, 1)) + expected_next(values, jnp.asarray(a)) for a in actions])
+        return jnp.stack([1.0 + expected_next(values, jnp.asarray(a)) for a in actions])
 
     def policy_to_targets(
         self,
@@ -117,7 +95,7 @@ class Planner(ABC):
         actions: Int[Array, " n_actions"],
         planned_at: Int[Array, ""],
     ) -> Policy:
-        """`solve_shortest_paths` over `targets_per_solve` targets at a time, `S` and `C` kept at `planned_at` only"""
+        """`solve_shortest_paths` over `targets_per_solve` targets at a time, `S` kept at `planned_at` only"""
         chunk = targets.shape[0] if self.targets_per_solve is None else self.targets_per_solve
         if targets.shape[0] <= chunk:
             return self._solve_jitted(kernel, targets, actions, planned_at)
@@ -135,19 +113,18 @@ class Planner(ABC):
         actions: Int[Array, " n_actions"],
         planned_at: Int[Array, ""],
     ) -> Policy:
-        """`solve_shortest_paths`, jitted: `pi` as int8, `S` and `C` at `planned_at`"""
-        action_table, expected_path_length, expected_cost = self.solve_shortest_paths(kernel, targets, actions)
-        return Policy(action_table.astype(jnp.int8), expected_path_length[planned_at], expected_cost[planned_at])
+        """`solve_shortest_paths`, jitted: `pi` as int8, `S` at `planned_at`"""
+        action_table, expected_path_length = self.solve_shortest_paths(kernel, targets, actions)
+        return Policy(action_table.astype(jnp.int8), expected_path_length[planned_at])
 
-    def expected_cost_of_policy(
+    def expected_steps_of_policy(
         self,
         kernel: TransitionKernel[Int[Array, ""]],
         action_table: Int[Array, "n_states n_targets"],
         targets: Int[Array, " n_targets"],
         actions: Int[Array, " n_actions"],
-        per_step: Callable[[Int[Array, ""]], Float[Array, " n_states"] | float],
     ) -> Float[Array, "n_states n_targets"]:
-        """h_K for h_0 = 0, h_{k+1}(z, x) = 0 if |z - x| <= rho else per_step(pi(z, x))[z] + sum over z' of P(z' | z, pi(z, x)) h_k(z', x)"""
+        """h_K for h_0 = 0, h_{k+1}(z, x) = 0 if |z - x| <= rho else 1 + sum over z' of P(z' | z, pi(z, x)) h_k(z', x)"""
         in_goal_set = self.in_goal_set(kernel.domain, targets)
         state_rows, target_columns = jnp.arange(in_goal_set.shape[0])[:, None], jnp.arange(in_goal_set.shape[1])[None, :]
         action_rows = index_in_actions(actions, action_table)  # (n_states, n_targets): the action's position on the backup's action axis
@@ -155,7 +132,7 @@ class Planner(ABC):
             0,
             self.rounds,
             lambda _, accumulated: jnp.where(
-                in_goal_set, 0.0, self._one_step_lookahead(kernel, accumulated, actions, per_step)[action_rows, state_rows, target_columns]
+                in_goal_set, 0.0, self._one_step_lookahead(kernel, accumulated, actions)[action_rows, state_rows, target_columns]
             ),
             jnp.zeros(in_goal_set.shape),
         )
@@ -169,7 +146,7 @@ class Planner(ABC):
         targets: Int[Array, " n_targets"],
         start: Int[Array, ""],
     ) -> tuple[Int[Array, "n_paths_per_field n_targets replan_length"], Bool[Array, "n_paths_per_field n_targets replan_length"]]:
-        """z_0 = start, z_{t+1} ~ P(. | z_t, pi(z_t, x)) while |z_t - x| > rho, L steps, one path per key per target: the states, and which steps were before arrival"""
+        """z_0 = start, z_{t+1} ~ P(. | z_t, pi(z_t, x)) while |z_t - x| > rho, L steps, one path per key per target: the states, and which steps were taken"""
         state_coords = coordinates(kernel.domain)  # (n_states, k)
         squared_norm, target_coords = jnp.sum(state_coords**2, axis=-1), state_coords[targets]  # (n_states,), (n_targets, k)
         target_columns = jnp.arange(policy.action.shape[1])  # (n_targets,): which column of the action table each path reads
@@ -184,71 +161,46 @@ class Planner(ABC):
         def one_path(key: PRNGKeyArray) -> tuple[Int[Array, "n_targets replan_length"], Bool[Array, "n_targets replan_length"]]:
             """One path to every target"""
             states_on_path = jnp.full(target_columns.shape, start)  # (n_targets,): z_0 = start
-            travelling = jnp.ones(target_columns.shape, bool)  # (n_targets,): not in_goal_set(z_t)
-            states, before_arrival = [], []
+            travelling_mask = jnp.ones(target_columns.shape, bool)  # (n_targets,): not in_goal_set(z_t)
+            states, step_taken_mask = [], []
             for step_key in jax.random.split(key, self.replan_length):
-                # z_{t+1} = P-draw where travelling, else z_t
+                # z_{t+1} = P-draw where still travelling, else z_t
                 states_on_path = jnp.where(
-                    travelling, sample_next(step_key, states_on_path, policy.action[states_on_path, target_columns]), states_on_path
+                    travelling_mask, sample_next(step_key, states_on_path, policy.action[states_on_path, target_columns]), states_on_path
                 )
                 states.append(states_on_path)
-                before_arrival.append(travelling)
-                travelling = travelling & ~in_goal_set(states_on_path)  # travelling and not in_goal_set(z_{t+1})
-            return jnp.stack(states, axis=-1), jnp.stack(before_arrival, axis=-1)  # both (n_targets, replan_length)
+                step_taken_mask.append(travelling_mask)
+                travelling_mask = travelling_mask & ~in_goal_set(states_on_path)  # still travelling and not in_goal_set(z_{t+1})
+            return jnp.stack(states, axis=-1), jnp.stack(step_taken_mask, axis=-1)  # both (n_targets, replan_length)
 
         return jax.vmap(one_path)(path_keys)  # both (n_paths_per_field, n_targets, replan_length)
 
 
 @dataclass(frozen=True)
 class ValueIteration(Planner):
-    """The module's recursion, K rounds, with a_k(z, x) the round's minimiser:
-
-    S_{k+1}(z, x) = 1 + sum over z' of P(z' | z, a_k) S_k(z', x),   C_{k+1}(z, x) = c(z, a_k) + sum over z' of P(z' | z, a_k) C_k(z', x)
-    """
+    """The module's recursion, K rounds"""
 
     def solve_shortest_paths(
         self, kernel: TransitionKernel[Int[Array, ""]], targets: Int[Array, " n_targets"], actions: Int[Array, " n_actions"]
     ) -> PolicyTables:
         in_goal_set = self.in_goal_set(kernel.domain, targets)
-        state_rows, target_columns = jnp.arange(in_goal_set.shape[0])[:, None], jnp.arange(in_goal_set.shape[1])[None, :]
-        charged = partial(self.step_cost, kernel)  # step_cost(s, a)
-        planned_cost = lambda a: 1.0 + self.cost_weight * charged(a)  # noqa: E731
-
-        def backup(
-            _: Int[Array, ""], tables: tuple[Float[Array, "n_states n_targets"], ...]
-        ) -> tuple[Float[Array, "n_states n_targets"], ...]:
-            value, expected_path_length, expected_cost = tables
-            backed_up = self._one_step_lookahead(kernel, value, actions, planned_cost)  # (n_actions, n_states, n_targets)
-            minimising = jnp.argmin(backed_up, axis=0)  # (n_states, n_targets): the position of this round's minimising action
-            return (
-                jnp.where(in_goal_set, 0.0, backed_up[minimising, state_rows, target_columns]),
-                jnp.where(
-                    in_goal_set,
-                    0.0,
-                    self._one_step_lookahead(kernel, expected_path_length, actions, lambda a: 1.0)[minimising, state_rows, target_columns],
-                ),
-                jnp.where(
-                    in_goal_set,
-                    0.0,
-                    self._one_step_lookahead(kernel, expected_cost, actions, charged)[minimising, state_rows, target_columns],
-                ),
-            )
-
-        zeros = jnp.zeros(in_goal_set.shape)
-        value, expected_path_length, expected_cost = lax.fori_loop(0, self.rounds, backup, (zeros, zeros, zeros))
-        action_table = actions[jnp.argmin(self._one_step_lookahead(kernel, value, actions, planned_cost), axis=0)]
-        return action_table, expected_path_length, expected_cost
+        expected_path_length = lax.fori_loop(
+            0,
+            self.rounds,
+            lambda _, steps: jnp.where(in_goal_set, 0.0, jnp.min(self._one_step_lookahead(kernel, steps, actions), axis=0)),
+            jnp.zeros(in_goal_set.shape),
+        )
+        action_table = actions[jnp.argmin(self._one_step_lookahead(kernel, expected_path_length, actions), axis=0)]
+        return action_table, expected_path_length
 
 
 @dataclass(frozen=True)
 class Greedy(Planner):
-    """pi(z, x) = argmin over a of [ 1 + sum over z' of P(z' | z, a) |z' - x| ], then S and C by `evaluate`"""
+    """pi(z, x) = argmin over a of [ 1 + sum over z' of P(z' | z, a) |z' - x| ], then S by `expected_steps_of_policy`"""
 
     def solve_shortest_paths(
         self, kernel: TransitionKernel[Int[Array, ""]], targets: Int[Array, " n_targets"], actions: Int[Array, " n_actions"]
     ) -> PolicyTables:
         distance = jnp.sqrt(self._squared_distance(kernel.domain, targets))
-        action_table = actions[jnp.argmin(self._one_step_lookahead(kernel, distance, actions, lambda a: 1.0), axis=0)]
-        expected_path_length = self.expected_cost_of_policy(kernel, action_table, targets, actions, lambda a: 1.0)
-        expected_cost = self.expected_cost_of_policy(kernel, action_table, targets, actions, partial(self.step_cost, kernel))
-        return action_table, expected_path_length, expected_cost
+        action_table = actions[jnp.argmin(self._one_step_lookahead(kernel, distance, actions), axis=0)]
+        return action_table, self.expected_steps_of_policy(kernel, action_table, targets, actions)

@@ -38,30 +38,24 @@ def _method(
     subtract_dataset_utility: bool,
     n_field_samples: int,
     n_paths_per_field: int,
-    penalty_rate: float,
+    lambda_: float,
     replan_length: int,
-    cost_weight: float,
 ) -> MethodConfig:
     """One acquisition on a value-iteration planner, at the settings the acquisitions differ in"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(
-            replan_length=replan_length, radius=ARRIVAL_RADIUS_KM, targets_per_solve=TARGET_CHUNK, cost_weight=cost_weight
-        ),
+        planner=value_iteration(replan_length=replan_length, radius=ARRIVAL_RADIUS_KM, targets_per_solve=TARGET_CHUNK),
         subtract_dataset_utility=subtract_dataset_utility,
         n_field_samples=n_field_samples,
         n_paths_per_field=n_paths_per_field,
-        penalty_rate=penalty_rate,
+        lambda_=lambda_,
         n_candidates_scored=N_CANDIDATES,
         random_opening_steps=OPENING_STEPS,
     )
 
 
-COST_WEIGHT = 0.0
-"""Price of one altitude change in time_steps: none, the `tuning` sweep steering only at zero"""
-
-PENALTY_RATE = 1.0
-"""Share of the spread of worth a full-budget trip costs, the `tuning` sweep's best"""
+LAMBDA = 1.0
+"""`lambda` the walk's altitude changes are weighed at"""
 
 
 def _baseline(utility: Implementation, n_field_samples: int) -> MethodConfig:
@@ -71,22 +65,15 @@ def _baseline(utility: Implementation, n_field_samples: int) -> MethodConfig:
         subtract_dataset_utility=False,
         n_field_samples=n_field_samples,
         n_paths_per_field=0,
-        penalty_rate=0.0,
+        lambda_=0.0,
         replan_length=PLANNING_BUDGET,
-        cost_weight=COST_WEIGHT,
     )
 
 
-def _ours(utility: Implementation, *, penalty_rate: float = PENALTY_RATE, replan_length: int = PLANNING_BUDGET) -> MethodConfig:
+def _ours(utility: Implementation, *, lambda_: float = LAMBDA, replan_length: int = PLANNING_BUDGET) -> MethodConfig:
     """Expected improvement of `utility` over 16 imagined walks under 16 drawn fields"""
     return _method(
-        utility,
-        subtract_dataset_utility=True,
-        n_field_samples=16,
-        n_paths_per_field=16,
-        penalty_rate=penalty_rate,
-        replan_length=replan_length,
-        cost_weight=COST_WEIGHT,
+        utility, subtract_dataset_utility=True, n_field_samples=16, n_paths_per_field=16, lambda_=lambda_, replan_length=replan_length
     )
 
 
@@ -113,9 +100,8 @@ sweep(
                 subtract_dataset_utility=False,
                 n_field_samples=0,
                 n_paths_per_field=16,
-                penalty_rate=PENALTY_RATE,
+                lambda_=LAMBDA,
                 replan_length=PLANNING_BUDGET,
-                cost_weight=COST_WEIGHT,
             ),
             dataclasses.replace(BELIEFS["error"], amplitude=1e-3),
         ),

@@ -17,7 +17,7 @@ HORIZON = 500
 
 
 def _method(
-    utility: Implementation, *, subtract_dataset_utility: bool, n_field_samples: int, n_paths_per_field: int, penalty_rate: float
+    utility: Implementation, *, subtract_dataset_utility: bool, n_field_samples: int, n_paths_per_field: int, lambda_: float
 ) -> MethodConfig:
     """This sweep's held values"""
     return MethodConfig(
@@ -26,7 +26,7 @@ def _method(
         subtract_dataset_utility=subtract_dataset_utility,
         n_field_samples=n_field_samples,
         n_paths_per_field=n_paths_per_field,
-        penalty_rate=penalty_rate,
+        lambda_=lambda_,
         n_candidates_scored=None,
         random_opening_steps=OPENING_STEPS,
     )
@@ -47,13 +47,13 @@ for name, resources in (
         arms=[
             arm(
                 "eui_fields16_walks16_rate0p5",  # the pathwise sampler runs on this arm
-                _method(max_magnitude(), subtract_dataset_utility=True, n_field_samples=16, n_paths_per_field=16, penalty_rate=0.5),
+                _method(max_magnitude(), subtract_dataset_utility=True, n_field_samples=16, n_paths_per_field=16, lambda_=0.5),
                 matched_belief(AMBIENT1_CONTROL1),
             ),
             # no draws and no walks: this arm times the planner alone
             arm(
                 "random_search",
-                _method(uniform(), subtract_dataset_utility=False, n_field_samples=0, n_paths_per_field=0, penalty_rate=0.0),
+                _method(uniform(), subtract_dataset_utility=False, n_field_samples=0, n_paths_per_field=0, lambda_=0.0),
                 matched_belief(AMBIENT1_CONTROL1),
             ),
         ],

@@ -112,8 +112,8 @@ class MethodConfig:
     subtract_dataset_utility: bool = MISSING
     """Whether a candidate is scored by the increment it would add rather than its level"""
 
-    penalty_rate: float = MISSING
-    """`lambda`: a full-budget trip is charged this share of the spread of the candidate values (zero charges nothing)"""
+    lambda_: float = MISSING
+    """`lambda` in [0, 1): the weight of a walk's cost against the spread of the candidate values (zero charges nothing)"""
 
     n_candidates_scored: int | None = MISSING
     """Cap on candidates scored per move (None scores every one)"""

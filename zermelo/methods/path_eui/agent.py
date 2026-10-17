@@ -73,9 +73,6 @@ class PathEUIAgent(Agent[PathEUIState]):
     prior_mean_key: str | None
     """Which part of `obs.reading` carries the field's prior mean as a function (None learns about zero)"""
 
-    budget_column: int | None
-    """Which column of the context carries the budget left to spend on steps, None where the problem keeps none"""
-
     horizon: int
     """`H`: the episode's time steps, one observation per time step filling one slot of the dataset"""
 
@@ -127,7 +124,7 @@ class PathEUIAgent(Agent[PathEUIState]):
             acquisition_value=jnp.zeros(n_scored),
             target=jnp.zeros((), jnp.int32),
             imagined_path_to_target=jnp.zeros(path_length, jnp.int32),
-            policy_to_target=Policy(jnp.zeros((n_states, 1), jnp.int8), jnp.zeros((1,)), jnp.zeros((1,))),
+            policy_to_target=Policy(jnp.zeros((n_states, 1), jnp.int8), jnp.zeros((1,))),
         )
         context = self._context_of(obs)
         prior_mean = obs.reading[self.prior_mean_key] if self.prior_mean_key is not None and self.prior_mean_key in obs.reading else None
@@ -158,7 +155,6 @@ class PathEUIAgent(Agent[PathEUIState]):
             self.positions, agent_state.choice.target[None]
         )[z, 0]
         if bool(replan_is_due):
-            budget_left = None if self.budget_column is None else context[self.budget_column]
             acquisition = (  # K = H - h where the planner's K is the steps left
                 self.acquisition
                 if planner.value_iterations is not None
@@ -166,9 +162,7 @@ class PathEUIAgent(Agent[PathEUIState]):
                     self.acquisition, planner=dataclasses.replace(planner, value_iterations=self.horizon - int(agent_state.time_step))
                 )
             )
-            choice = acquisition.choose_target(
-                k_choice, belief, self.transition, z, self._legal_actions(obs), self.candidates, context, budget_left
-            )
+            choice = acquisition.choose_target(k_choice, belief, self.transition, z, self._legal_actions(obs), self.candidates, context)
             steps_since_target = jnp.zeros((), jnp.int32)
         else:
             choice, steps_since_target = agent_state.choice, agent_state.steps_since_target + 1

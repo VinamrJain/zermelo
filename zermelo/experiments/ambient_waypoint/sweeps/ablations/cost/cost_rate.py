@@ -17,7 +17,7 @@ from zermelo.experiments.ambient_waypoint.setup import arm, max_magnitude, sweep
 BELIEF = matched_belief(AMBIENT1_CONTROL1)
 
 
-def _method(penalty_rate: float) -> MethodConfig:
+def _method(lambda_: float) -> MethodConfig:
     """This sweep's held values"""
     return MethodConfig(
         utility=max_magnitude(),
@@ -25,7 +25,7 @@ def _method(penalty_rate: float) -> MethodConfig:
         subtract_dataset_utility=True,
         n_field_samples=16,
         n_paths_per_field=16,
-        penalty_rate=penalty_rate,
+        lambda_=lambda_,
         n_candidates_scored=None,
         random_opening_steps=OPENING_STEPS,
     )

@@ -26,20 +26,17 @@ def _method(
     subtract_dataset_utility: bool,
     n_field_samples: int,
     n_paths_per_field: int,
-    penalty_rate: float,
+    lambda_: float,
     replan_length: int,
-    cost_weight: float,
 ) -> MethodConfig:
     """One acquisition on a value-iteration planner, at the settings the acquisitions differ in"""
     return MethodConfig(
         utility=utility,
-        planner=value_iteration(
-            replan_length=replan_length, radius=ARRIVAL_RADIUS_KM, targets_per_solve=TARGET_CHUNK, cost_weight=cost_weight
-        ),
+        planner=value_iteration(replan_length=replan_length, radius=ARRIVAL_RADIUS_KM, targets_per_solve=TARGET_CHUNK),
         subtract_dataset_utility=subtract_dataset_utility,
         n_field_samples=n_field_samples,
         n_paths_per_field=n_paths_per_field,
-        penalty_rate=penalty_rate,
+        lambda_=lambda_,
         n_candidates_scored=N_CANDIDATES,
         random_opening_steps=OPENING_STEPS,
     )
@@ -55,21 +52,19 @@ sweep(
     resources=dataclasses.replace(RESOURCES, partition="default_partition"),
     arms=[
         arm(
-            f"esi_L{replan_length}_wind_cw{str(cost_weight).replace('.', 'p')}_sr{str(penalty_rate).replace('.', 'p')}",
+            f"esi_L{replan_length}_wind_sr{str(lambda_).replace('.', 'p')}",
             _method(
                 sum_magnitude(),
                 subtract_dataset_utility=True,
                 n_field_samples=16,
                 n_paths_per_field=16,
-                penalty_rate=penalty_rate,
+                lambda_=lambda_,
                 replan_length=replan_length,
-                cost_weight=cost_weight,
             ),
             BELIEFS["wind"],
         )
         for replan_length in (10, 25, 50)
-        for cost_weight in (0.0, 0.5, 1.0, 2.0)
-        for penalty_rate in (0.0, 0.5, 1.0, 2.0)
+        for lambda_ in (0.0, 0.5, 1.0, 2.0)
     ],
 )
-"""Expected sum-of-speed improvement under the wind belief, over the leg length, the price of an altitude change and the price of travel"""
+"""Expected sum-of-speed improvement under the wind belief, over the leg length and the price of an altitude change"""

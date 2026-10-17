@@ -145,22 +145,21 @@ def column_peak_speed(n_alt: int) -> Implementation:
     return _built("zermelo.problems.balloon.objective.ColumnPeakSpeed", n_alt=n_alt)
 
 
-# --- planners: how the actor is carried to a target, and how that walk is priced ----------------------------------
+# --- planners: how the actor is carried to a target ----------------------------------
 
 
-def value_iteration(replan_length: int, radius: float, targets_per_solve: int | None, cost_weight: float) -> Implementation:
-    """`v_0 = 0`, `v_{k+1}(s) = 0 on arrival, else min over a of c(s, a) + sum over s' of P(s' | s, a) v_k(s')`, `replan_length` rounds, the budget"""
+def value_iteration(replan_length: int, radius: float, targets_per_solve: int | None) -> Implementation:
+    """`v_0 = 0`, `v_{k+1}(s) = 0 on arrival, else min over a of 1 + sum over s' of P(s' | s, a) v_k(s')`, `replan_length` rounds, the budget"""
     return _built(
         "zermelo.methods.path_eui.planner.ValueIteration",
         value_iterations=replan_length,
         replan_length=replan_length,
         goal_radius=radius,
         targets_per_solve=targets_per_solve,
-        cost_weight=cost_weight,
     )
 
 
-def greedy(replan_length: int, radius: float, targets_per_solve: int | None, cost_weight: float) -> Implementation:
+def greedy(replan_length: int, radius: float, targets_per_solve: int | None) -> Implementation:
     """One backup on the distance to the target: the act whose next cell is nearest it in expectation"""
     return _built(
         "zermelo.methods.path_eui.planner.Greedy",
@@ -168,5 +167,4 @@ def greedy(replan_length: int, radius: float, targets_per_solve: int | None, cos
         replan_length=replan_length,
         goal_radius=radius,
         targets_per_solve=targets_per_solve,
-        cost_weight=cost_weight,
     )

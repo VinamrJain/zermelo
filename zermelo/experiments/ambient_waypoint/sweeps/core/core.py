@@ -34,7 +34,7 @@ def _method(
     subtract_dataset_utility: bool,
     n_field_samples: int,
     n_paths_per_field: int,
-    penalty_rate: float,
+    lambda_: float,
     replan_length: int,
 ) -> MethodConfig:
     """One acquisition on a value-iteration planner, at the settings the acquisitions differ in"""
@@ -44,7 +44,7 @@ def _method(
         subtract_dataset_utility=subtract_dataset_utility,
         n_field_samples=n_field_samples,
         n_paths_per_field=n_paths_per_field,
-        penalty_rate=penalty_rate,
+        lambda_=lambda_,
         n_candidates_scored=None,
         random_opening_steps=OPENING_STEPS,
     )
@@ -57,20 +57,15 @@ def _baseline(utility: Implementation, n_field_samples: int) -> MethodConfig:
         subtract_dataset_utility=False,
         n_field_samples=n_field_samples,
         n_paths_per_field=0,
-        penalty_rate=0.0,
+        lambda_=0.0,
         replan_length=PLANNING_BUDGET,
     )
 
 
-def _ours(utility: Implementation, *, penalty_rate: float = 0.5, replan_length: int = PLANNING_BUDGET) -> MethodConfig:
-    """Expected improvement of `utility` over 16 imagined walks under 16 drawn fields, a full-budget trip charged `penalty_rate` of the spread"""
+def _ours(utility: Implementation, *, lambda_: float = 0.5, replan_length: int = PLANNING_BUDGET) -> MethodConfig:
+    """Expected improvement of `utility` over 16 imagined walks under 16 drawn fields, its walk's cost weighed at `lambda_`"""
     return _method(
-        utility,
-        subtract_dataset_utility=True,
-        n_field_samples=16,
-        n_paths_per_field=16,
-        penalty_rate=penalty_rate,
-        replan_length=replan_length,
+        utility, subtract_dataset_utility=True, n_field_samples=16, n_paths_per_field=16, lambda_=lambda_, replan_length=replan_length
     )
 
 
@@ -91,9 +86,9 @@ sweep(
         arm("ts", _baseline(max_magnitude(), 1), BELIEF),
         arm("emi_L25", _ours(max_magnitude()), BELIEF),
         arm("emi_L50", _ours(max_magnitude(), replan_length=50), BELIEF),
-        arm("emi_c1", _ours(max_magnitude(), penalty_rate=1.0), BELIEF),
+        arm("emi_c1", _ours(max_magnitude(), lambda_=1.0), BELIEF),
         arm("evi_L25", _ours(posterior_spread()), BELIEF),
         arm("evi_L50", _ours(posterior_spread(), replan_length=50), BELIEF),
-        arm("evi_c1", _ours(posterior_spread(), penalty_rate=1.0), BELIEF),
+        arm("evi_c1", _ours(posterior_spread(), lambda_=1.0), BELIEF),
     ],
 )

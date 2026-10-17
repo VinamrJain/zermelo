@@ -12,7 +12,7 @@ from zermelo.experiments.balloon_waypoint.registry import (
     still,
 )
 from zermelo.experiments.balloon_waypoint.setup import arm, max_magnitude, posterior_spread, sweep, uniform, upper_confidence
-from zermelo.experiments.balloon_waypoint.sweeps.paper.method import BUDGETED_PENALTY_RATE, COST_WEIGHT, N_SEEDS, baseline, mc_ei, ours
+from zermelo.experiments.balloon_waypoint.sweeps.paper.method import BUDGETED_LAMBDA, N_SEEDS, baseline, mc_ei, ours
 
 BELIEF = static_error_belief()
 
@@ -35,9 +35,9 @@ for budget in BUDGETS:
                 arm("ucb", baseline(upper_confidence(2.0), 0), BELIEF),
                 arm("mc_ei", mc_ei(), BELIEF),
                 arm("emi_w0", ours("emi"), BELIEF),
-                arm("emi", ours("emi", penalty_rate=BUDGETED_PENALTY_RATE, cost_weight=COST_WEIGHT), BELIEF),
+                arm("emi", ours("emi", lambda_=BUDGETED_LAMBDA), BELIEF),
                 arm("evi_w0", ours("evi"), BELIEF),
-                arm("evi", ours("evi", penalty_rate=BUDGETED_PENALTY_RATE, cost_weight=COST_WEIGHT), BELIEF),
+                arm("evi", ours("evi", lambda_=BUDGETED_LAMBDA), BELIEF),
             ],
         )
         sweep(

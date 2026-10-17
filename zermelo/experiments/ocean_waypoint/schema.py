@@ -156,8 +156,8 @@ class MethodConfig:
     subtract_dataset_utility: bool = MISSING
     """Whether a candidate is scored by the increment it would add rather than its level"""
 
-    penalty_rate: float = MISSING
-    """`lambda`: a full-budget trip is charged this share of the spread of the candidate values (zero charges nothing)"""
+    lambda_: float = MISSING
+    """`lambda` in [0, 1): the weight of a walk's cost against the spread of the candidate values (zero charges nothing)"""
 
     candidates: Literal["box", "goals"] = MISSING
     """Which states a waypoint may be: every candidate the objective publishes, or the goals alone of a visiting episode"""
