@@ -10,7 +10,7 @@ __pycache__
 *.gif
 *.mp4
 
-results/
+/results
 multirun/
 outputs/
 
