@@ -244,7 +244,6 @@ def world(
             linewidths=1.0,
             zorder=5,
         )
-    opening = replay.plan.opening_moves if replay.plan is not None else 0
     walked = replay.path[: move + 1]  # (move+1, 2) the whole walk so far, the old of it faded rather than cut
     if walked.shape[0] > 1:
         segments = np.stack([walked[:-1], walked[1:]], 1)  # (move, 2, 2) one segment per move walked
@@ -252,10 +251,9 @@ def world(
         age = np.minimum(1.0, back / max(1.0, style.trail_span * replay.n_moves))  # 1 once a segment is a whole span old
         alpha = (1.0 - age) ** style.trail_gamma * (1.0 - style.trail_floor) + style.trail_floor
         taper = style.trail_width * (style.trail_taper + (1.0 - style.trail_taper) * (1.0 - age))
-        shade = np.where(np.arange(segments.shape[0]) + 1 <= opening, style.opening_colour, style.trail_colour)
         laid = list(segments)
         ax.add_collection(LineCollection(laid, colors=style.trail_halo, alpha=alpha * style.halo_alpha, linewidths=taper + 2.0, zorder=4))
-        ax.add_collection(LineCollection(laid, colors=shade, alpha=alpha, linewidths=taper, zorder=4.1))
+        ax.add_collection(LineCollection(laid, colors=style.trail_colour, alpha=alpha, linewidths=taper, zorder=4.1))
     here = replay.path[move]
     steered = replay.control[min(move, replay.n_moves - 1)]
     steps = (
@@ -298,15 +296,13 @@ def keys(style: Style, *, plan: bool, show_belief: bool = False) -> list[Line2D 
         _arrow(style.control_colour, "control step", style),
         _walked(style.trail_colour, "trajectory $z_{0:t}$", style),
     ]
-    if plan:  # an arm running no rule has no opening, no waypoint and no route
+    if plan:  # an arm running no rule has no waypoint and no route
         marks += [
-            _walked(style.opening_colour, "initial random rollout", style),
             Line2D([], [], color=style.imagined_colour, lw=2.6, ls="--", label="planned route to target"),
             Line2D(
                 [], [], color=style.waypoint_colour, marker="X", ls="", mec=style.trail_halo, mew=1.0, ms=13, label=r"target $z^{\star}_t$"
             ),
             _arrow(style.plan_colour, r"policy $\pi_t$, per cell", style, alpha=0.8),
-            Line2D([], [], color=style.faint, lw=1.2, ls=":", label="end of the shared opening"),
         ]
     marks.append(Patch(facecolor=style.pad_wash, alpha=style.pad_alpha, edgecolor=style.faint, lw=0.8, label="pad, no candidate scored"))
     return marks
@@ -381,8 +377,6 @@ def progress(ax: Axes, replay: Replay, name: str, move: int, style: Style) -> No
     if CURVES[name][1] == "log":
         plain_numbers(ax)
     ax.set_xlim(0, curve.size)
-    if replay.plan is not None:  # the opening, walked alike by every arm
-        ax.axvline(replay.plan.opening_moves, ls=":", lw=1.2, color=style.faint, alpha=0.8, zorder=1)
     ax.set_xlabel("move $t$", fontsize=style.panel_title_size, color=style.ink, labelpad=style.axis_name_pad)
     ax.set_ylabel(CURVES[name][0], fontsize=style.panel_title_size, color=style.ink, labelpad=style.axis_name_pad)
     ax.tick_params(labelsize=style.tick_size, colors=style.faint, labelcolor=style.ink)

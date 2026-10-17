@@ -52,7 +52,6 @@ def _method(utility: Implementation, *, subtract_dataset_utility: bool, n_field_
         n_paths_per_field=n_paths_per_field,
         lambda_=1 / 3,
         n_candidates_scored=16,
-        random_opening_steps=3,  # three uniform moves, leaving three the rule decides
     )
 
 

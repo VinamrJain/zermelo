@@ -5,7 +5,6 @@ from zermelo.experiments.ambient_waypoint.registry import (
     CLAIM_EVERY_STEPS,
     HORIZON_LENGTH,
     N_SEEDS,
-    OPENING_STEPS,
     RECORDED,
     RESOURCES,
     matched_belief,
@@ -26,7 +25,6 @@ def _method(replan_length: int) -> MethodConfig:
         n_paths_per_field=16,
         lambda_=1 / 3,
         n_candidates_scored=None,
-        random_opening_steps=OPENING_STEPS,
     )
 
 

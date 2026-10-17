@@ -20,7 +20,6 @@ def _method(utility: Implementation) -> MethodConfig:
         n_paths_per_field=2,
         lambda_=0.5,
         n_candidates_scored=16,
-        random_opening_steps=0,
     )
 
 

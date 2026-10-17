@@ -1,7 +1,6 @@
 """Path-EUI: every L moves, or on reaching the goal set of x*, x* <- choose_target(belief, z_h); the move is pi[phi-hat](z_h, x*)
 
-z_h the state observed at move h, d_h = d_{h-1} + (z_h, w_h, context_h), phi-hat = E[phi | d_h]; a uniform legal action for
-h < random_opening_steps.
+z_h the state observed at move h, d_h = d_{h-1} + (z_h, w_h, context_h), phi-hat = E[phi | d_h].
 """
 
 import dataclasses
@@ -76,9 +75,6 @@ class PathEUIAgent(Agent[PathEUIState]):
     horizon: int
     """`H`: the episode's time steps, one observation per time step filling one slot of the dataset"""
 
-    random_opening_steps: int
-    """Time steps moved uniformly at random before the rule starts"""
-
     claim_every: int
     """Time steps between re-readings of the claim off the belief"""
 
@@ -113,8 +109,6 @@ class PathEUIAgent(Agent[PathEUIState]):
         """`d_0` empty, a blank `TargetChoice` at its shape, `ell = L` so the first move chooses a target"""
         if self.belief.positions != self.positions:
             raise ValueError("the belief and the candidate set were built over different position domains")
-        if self.random_opening_steps >= self.horizon:
-            raise ValueError("the random opening is longer than the episode horizon")
         n_states = coordinates(self.positions).shape[0]
         n_components = self.belief.dataset.measurement.shape[-1]
         n_scored = len(self._candidate_indices()) if self.acquisition.n_candidates_scored is None else self.acquisition.n_candidates_scored
@@ -139,17 +133,12 @@ class PathEUIAgent(Agent[PathEUIState]):
 
     def decide(self, key: PRNGKeyArray, agent_state: PathEUIState, obs: Observation) -> tuple[PathEUIState, Decision]:
         """`(state, obs) -> (state', a)` by the module's rule"""
-        k_opening, k_choice = jax.random.split(key)
         planner = self.acquisition.planner
         z, belief = self._belief_with_observation(agent_state, obs)
         context = self._context_of(obs)  # the field is read, planned and scored at the context this observation carries
         claim = (
             posterior_mean_and_log_variance(belief, context) if int(agent_state.time_step) % self.claim_every == 0 else agent_state.claim
         )
-        if int(agent_state.time_step) < self.random_opening_steps:  # h < random_opening_steps: a uniform action, no target
-            return PathEUIState(belief, agent_state.choice, agent_state.steps_since_target, agent_state.time_step + 1, claim), Decision(
-                jax.random.choice(k_opening, self._legal_actions(obs)), claim
-            )
         # ell >= L, or z_h in G(x*)
         replan_is_due = (agent_state.steps_since_target >= planner.replan_length) | planner.in_goal_set(
             self.positions, agent_state.choice.target[None]
@@ -162,7 +151,7 @@ class PathEUIAgent(Agent[PathEUIState]):
                     self.acquisition, planner=dataclasses.replace(planner, value_iterations=self.horizon - int(agent_state.time_step))
                 )
             )
-            choice = acquisition.choose_target(k_choice, belief, self.transition, z, self._legal_actions(obs), self.candidates, context)
+            choice = acquisition.choose_target(key, belief, self.transition, z, self._legal_actions(obs), self.candidates, context)
             steps_since_target = jnp.zeros((), jnp.int32)
         else:
             choice, steps_since_target = agent_state.choice, agent_state.steps_since_target + 1

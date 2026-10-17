@@ -59,7 +59,6 @@ def _method(
         n_paths_per_field=n_paths_per_field,
         lambda_=lambda_,
         n_candidates_scored=None,
-        random_opening_steps=4,  # four uniform moves, leaving two the rule decides
     )
 
 

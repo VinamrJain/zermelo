@@ -92,9 +92,6 @@ TARGET_CHUNK = 100
 ARRIVAL_RADIUS_KM = 60.0
 """`rho`: how near a waypoint counts as arrived, inside positions about 100 km apart"""
 
-OPENING_STEPS = 0
-"""time_steps of uniform random walking taken before the rule starts: none, the forecast being the prior"""
-
 HORIZON_LENGTH = 238
 """time_steps in an episode: 714 hours at 3 hours each, from the data's first frame to its last"""
 

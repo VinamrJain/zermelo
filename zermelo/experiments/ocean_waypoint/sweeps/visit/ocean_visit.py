@@ -46,7 +46,6 @@ def _method(utility: Implementation, *, candidates: Literal["box", "goals"], n_f
         lambda_=0.0,
         candidates=candidates,
         n_candidates_scored=None,
-        random_opening_steps=0,
     )
 
 

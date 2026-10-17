@@ -14,7 +14,7 @@ import pandas as pd
 from figures.common import FRAMES, LABELS, OURS, launch, look, plt, save, size
 
 ARMS = ("emi", "evi", "mc_ei", "ucb", "ts", "max_var", "rand_target", "rand_act")
-SKIPPED = 0.04  # opening share of the episode left out, where an average over a few steps is noise
+SKIPPED = 0.04  # share of the episode left out at its start, where an average over a few steps is noise
 
 
 def visited_share(cells: np.ndarray, inside: np.ndarray, total: int) -> np.ndarray:

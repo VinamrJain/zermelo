@@ -56,7 +56,6 @@ def _method(utility: Implementation, *, n_field_samples: int, n_paths_per_field:
         lambda_=0.0,
         candidates="box",
         n_candidates_scored=n_candidates_scored,
-        random_opening_steps=2,  # two uniform moves, leaving eight the rule decides
     )
 
 

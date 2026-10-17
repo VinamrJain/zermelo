@@ -165,7 +165,6 @@ class MethodConfig:
     n_candidates_scored: int | None = MISSING
     """Cap on candidates scored per move (None scores every one)"""
 
-    random_opening_steps: int = MISSING
     """time_steps of uniform random moves taken before the rule starts"""
 
 

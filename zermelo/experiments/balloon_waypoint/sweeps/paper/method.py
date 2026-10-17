@@ -1,6 +1,6 @@
 """The rules the paper compares on still wind, and the settings they run at"""
 
-from zermelo.experiments.balloon_waypoint.registry import ARRIVAL_RADIUS_KM, N_CANDIDATES, OPENING_STEPS, TARGET_CHUNK
+from zermelo.experiments.balloon_waypoint.registry import ARRIVAL_RADIUS_KM, N_CANDIDATES, TARGET_CHUNK
 from zermelo.experiments.balloon_waypoint.schema import MethodConfig
 from zermelo.experiments.balloon_waypoint.setup import Implementation, max_magnitude, posterior_spread, sum_magnitude, value_iteration
 
@@ -38,7 +38,6 @@ def method(
         n_paths_per_field=n_paths_per_field,
         lambda_=lambda_,
         n_candidates_scored=N_CANDIDATES,
-        random_opening_steps=OPENING_STEPS,
     )
 
 

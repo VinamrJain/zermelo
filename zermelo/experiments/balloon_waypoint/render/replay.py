@@ -13,7 +13,6 @@ from zermelo.experiments.balloon_waypoint.metrics.data import (
     channels,
     claimed_speed,
     episode_curves,
-    opening_moves,
     settings,
 )
 from zermelo.problems.balloon.grid import balloon_states
@@ -25,9 +24,6 @@ from zermelo.run.record import Record
 @dataclass(frozen=True)
 class Plan:
     """What the method aimed at, at every snapshot"""
-
-    opening_moves: int
-    """Moves walked before any plan existed: the opening legs times the planner's truncation"""
 
     waypoint: Float[np.ndarray, "snapshots 3"]
     """The state aimed at, as (lat, lon, altitude), NaN while no plan exists"""
@@ -179,10 +175,10 @@ class Replay:
         return low, max(high, low + 1e-12)
 
     def milestones(self) -> Int[np.ndarray, " k"]:
-        """The moves worth looking at: the first, the last, the end of the opening, and every move a new plan took force"""
+        """The moves worth looking at: the first, the last, and every move a new plan took force"""
         marks = [0, self.n_moves]
         if self.plan is not None:
-            marks += [self.plan.opening_moves, *self.plan.replans.tolist()]
+            marks += self.plan.replans.tolist()
         return np.unique(np.clip(np.asarray(marks, int), 0, self.n_moves))
 
     def stills(self, count: int) -> Int[np.ndarray, " count"]:
@@ -244,7 +240,6 @@ def read(path: Path) -> Replay:
         walk = whole[np.asarray(record.agent_state["choice.imagined_path_to_target"])]  # (snapshots, steps, 3)
         from_here = np.concatenate([np.asarray(record.state["position"]), flown[:, None]], -1)[made_at]  # (snapshots, 3)
         plan = Plan(
-            opening_moves=opening_moves(record.config, int(record.reward.shape[0])),
             waypoint=np.where(made[:, None], whole[index], np.nan),
             walk=np.where(made[:, None, None], np.concatenate([from_here[:, None, :], walk], 1), np.nan),
             replans=replans,

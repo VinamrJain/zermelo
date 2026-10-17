@@ -14,7 +14,6 @@ from zermelo.experiments.ambient_waypoint.metrics.data import (
     at_each_snapshot,
     channels,
     episode_curves,
-    opening_moves,
     settings,
 )
 from zermelo.problems.ambient_dynamics import AmbientTransition, PaddedGridDomain, ambient_candidates, ambient_positions
@@ -24,9 +23,6 @@ from zermelo.run.record import Record
 @dataclass(frozen=True)
 class Plan:
     """What the method aimed at, at every snapshot"""
-
-    opening_moves: int
-    """Moves walked before any plan existed: the opening legs times the planner's truncation"""
 
     waypoint: Float[np.ndarray, "snapshots 2"]
     """The cell aimed at, as (y, q), NaN while no plan exists"""
@@ -144,10 +140,10 @@ class Replay:
         return float(np.min(scored)), float(max(np.max(scored), np.min(scored) + 1e-12))
 
     def milestones(self) -> Int[np.ndarray, " k"]:
-        """The moves worth looking at: the first, the last, the end of the opening, and every move a new plan took force"""
+        """The moves worth looking at: the first, the last, and every move a new plan took force"""
         marks = [0, self.n_moves]
         if self.plan is not None:
-            marks += [self.plan.opening_moves, *self.plan.replans.tolist()]
+            marks += self.plan.replans.tolist()
         return np.unique(np.clip(np.asarray(marks, int), 0, self.n_moves))
 
     def stills(self, count: int) -> Int[np.ndarray, " count"]:
@@ -231,7 +227,6 @@ def read(path: Path) -> Replay:
             :, :, 0
         ]  # (snapshots, n_states) the plan's choice at every cell
         plan = Plan(
-            opening_moves=opening_moves(record.config, int(record.reward.shape[0])),
             waypoint=np.where(made[:, None], grid[index], np.nan),
             walk=np.where(made[:, None, None], np.concatenate([position[made_at][:, None, :], walk], 1), np.nan),
             replans=replans,

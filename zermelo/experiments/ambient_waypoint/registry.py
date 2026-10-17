@@ -48,9 +48,6 @@ def matched_belief(world: ProblemConfig) -> BeliefConfig:
 PLANNING_BUDGET = 50
 """`L`: a replan fires every `L` moves, costs `L` backups, and truncates a hitting time at `L` steps"""
 
-OPENING_STEPS = 25
-"""time_steps of uniform random walking taken before the rule starts, the same for every arm"""
-
 HORIZON_LENGTH = 2000
 """`T`: moves an episode makes"""
 

@@ -40,7 +40,6 @@ def _method(utility: Implementation, *, subtract_dataset_utility: bool, n_field_
         lambda_=0.0,
         candidates="box",
         n_candidates_scored=None,
-        random_opening_steps=0,
     )
 
 

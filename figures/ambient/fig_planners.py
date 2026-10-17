@@ -10,7 +10,7 @@ RULES = ("emi", "evi", "mc_ei", "rand_target")
 PANELS = (("average_regret", "average regret"), ("rmse", "RMSE"))
 
 curves, _ = read("ambient_waypoint", {"planners": "paper_planners"})
-curves = curves[curves["x"] >= 0.04 * curves["x"].max()]  # the opening, where an average over a few steps is noise
+curves = curves[curves["x"] >= 0.04 * curves["x"].max()]  # the first moves, where an average over a few steps is noise
 fig, axes = plt.subplots(2, 3, figsize=size(2), sharex=True, sharey="row", constrained_layout=True)
 for top, (row, (metric, words)) in zip((True, False), zip(axes, PANELS)):
     for ax, (planner, name) in zip(row, PLANNERS):

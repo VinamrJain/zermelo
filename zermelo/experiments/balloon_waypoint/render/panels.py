@@ -233,8 +233,6 @@ def track(ax: Axes, replay: Replay, move: int, style: Style) -> None:
     ax.set_yticklabels([f"{km:.1f}" for km in replay.altitude_km])
     ax.set_ylim(-0.5, len(replay.altitude_km) - 0.5)
     ax.set_xlim(0, replay.flown.size)
-    if replay.plan is not None:
-        ax.axvline(replay.plan.opening_moves, ls=":", lw=1.2, color=style.faint, alpha=0.8, zorder=1)
     ax.set_xlabel("move $t$", fontsize=style.panel_title_size, color=style.ink, labelpad=style.axis_name_pad)
     ax.set_ylabel("altitude, km", fontsize=style.panel_title_size, color=style.ink, labelpad=style.axis_name_pad)
     ax.tick_params(labelsize=style.tick_size, colors=style.faint, labelcolor=style.ink)
@@ -364,11 +362,10 @@ def keys(style: Style, *, plan: bool) -> list[Line2D | Patch]:
             label="fastest wind in the volume",
         ),
     ]
-    if plan:  # an arm running no rule has no opening, no waypoint and no route
+    if plan:  # an arm running no rule has no waypoint and no route
         marks += [
             Line2D([], [], color=style.imagined_colour, lw=2.6, ls="--", label="planned route to target"),
             Line2D([], [], color=style.waypoint_colour, marker="X", ls="", mec=style.trail_halo, mew=1.0, ms=13, label="target"),
-            Line2D([], [], color=style.faint, lw=1.2, ls=":", label="end of the shared opening"),
         ]
     marks.append(Patch(facecolor=style.pad_wash, alpha=style.pad_alpha, edgecolor=style.faint, lw=0.8, label="margin, no candidate scored"))
     return marks
@@ -441,8 +438,6 @@ def progress(ax: Axes, replay: Replay, name: str, move: int, style: Style) -> No
     if CURVES[name][1] == "log":
         plain_numbers(ax)
     ax.set_xlim(0, curve.size)
-    if replay.plan is not None:  # the opening, walked alike by every arm
-        ax.axvline(replay.plan.opening_moves, ls=":", lw=1.2, color=style.faint, alpha=0.8, zorder=1)
     ax.set_xlabel("move $t$", fontsize=style.panel_title_size, color=style.ink, labelpad=style.axis_name_pad)
     ax.set_ylabel(CURVES[name][0], fontsize=style.panel_title_size, color=style.ink, labelpad=style.axis_name_pad)
     ax.tick_params(labelsize=style.tick_size, colors=style.faint, labelcolor=style.ink)

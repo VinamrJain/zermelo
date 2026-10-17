@@ -53,7 +53,6 @@ def _method(utility: Implementation, n_field_samples: int, replan_length: int, r
         lambda_=0.0,
         candidates="box",
         n_candidates_scored=None,
-        random_opening_steps=0,
     )
 
 

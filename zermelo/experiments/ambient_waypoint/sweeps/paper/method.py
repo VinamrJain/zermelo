@@ -1,6 +1,5 @@
 """The rules the paper compares on the 2D grid, and the settings they run at"""
 
-from zermelo.experiments.ambient_waypoint.registry import OPENING_STEPS
 from zermelo.experiments.ambient_waypoint.schema import MethodConfig
 from zermelo.experiments.ambient_waypoint.setup import Implementation, max_magnitude, posterior_spread, sum_magnitude, value_iteration
 
@@ -35,7 +34,6 @@ def method(
         n_paths_per_field=n_paths_per_field,
         lambda_=lambda_,
         n_candidates_scored=None,
-        random_opening_steps=OPENING_STEPS,
     )
 
 

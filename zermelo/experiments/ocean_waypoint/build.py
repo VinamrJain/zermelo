@@ -150,7 +150,6 @@ def assemble(cfg: RunConfig) -> Episode:
             context_key="context",
             prior_mean_key="forecast" if cfg.belief.forecast_as_prior_mean else None,
             horizon=cfg.horizon,
-            random_opening_steps=cfg.method.random_opening_steps,
             claim_every=cfg.claim_every,
         )
     # the settings as plain data, carried onto the record

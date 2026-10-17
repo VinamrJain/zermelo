@@ -192,7 +192,6 @@ class Style:
     halo_alpha: float = 0.70
     """Opacity of the dark outline the walk is drawn on"""
 
-    opening_colour: str = "#9fb0c2"
     """The stretch walked before any plan existed"""
 
     imagined_colour: str = "#19d3f3"

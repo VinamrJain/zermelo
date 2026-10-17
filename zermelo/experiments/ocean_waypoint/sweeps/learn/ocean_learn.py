@@ -44,7 +44,6 @@ def _method(utility: Implementation, *, n_paths_per_field: int, lambda_: float) 
         lambda_=lambda_,
         candidates="box",
         n_candidates_scored=None,
-        random_opening_steps=0,
     )
 
 

@@ -7,7 +7,6 @@ from zermelo.experiments.balloon_waypoint.registry import (
     HORIZON_LENGTH,
     N_CANDIDATES,
     N_SEEDS,
-    OPENING_STEPS,
     PLANNING_BUDGET,
     RECORDED,
     RESOURCES,
@@ -41,7 +40,6 @@ def _method(
         n_paths_per_field=n_paths_per_field,
         lambda_=lambda_,
         n_candidates_scored=N_CANDIDATES,
-        random_opening_steps=OPENING_STEPS,
     )
 
 

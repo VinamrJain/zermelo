@@ -21,7 +21,7 @@ ROWS = (
 )
 
 curves, _ = read("ambient_waypoint", {"prior": "paper_prior_mismatch"})
-curves = curves[curves["x"] >= 0.04 * curves["x"].max()]  # the opening, where an average over a few steps is noise
+curves = curves[curves["x"] >= 0.04 * curves["x"].max()]  # the first moves, where an average over a few steps is noise
 fig, axes = plt.subplots(4, 6, figsize=size(4), sharex=True, constrained_layout=True)
 for nth, (row, (metric, words, suffix)) in enumerate(zip(axes, ROWS)):
     for ax, (belief, name) in zip(row, BELIEFS):

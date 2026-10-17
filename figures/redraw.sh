@@ -7,7 +7,7 @@ set -u
 export RESULTS="$(realpath "$1")"
 cd "$(dirname "$0")/.."
 for script in comparison.fig_comparison comparison.fig_travel comparison.fig_main comparison.fig_oracle comparison.fig_tuning comparison.tab_metrics \
-              balloon.fig_resource balloon.fig_cost_weight ambient.fig_opening ambient.fig_fields_paths ambient.fig_planners ambient.fig_prior_mismatch \
+              balloon.fig_resource balloon.fig_cost_weight ambient.fig_fields_paths ambient.fig_planners ambient.fig_prior_mismatch \
               ocean.fig_search ocean.fig_learn ocean.fig_visit; do
   pixi run fig $script 2>&1 | grep "^reading\|^results\|Error\|error"
 done
