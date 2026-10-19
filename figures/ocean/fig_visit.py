@@ -11,8 +11,8 @@ import sys
 from figures.common import BUILD, LABELS, OCEAN_FRAMES, band, look, plt, read, save, size
 
 SWEEP = sys.argv[1] if len(sys.argv) > 1 else "visit"
-RULES = ("etr_l0", "etr_endpoint", "rand_goal", "rand_box")
-ORACLES = {"etr_l0": "oracle_etr_l0"}
+RULES = ("etr", "etr_endpoint", "rand_goal", "rand_box")
+ORACLES = {"etr": "oracle_etr"}
 TABLE = (("steps_to_completion", "steps to completion", 0, "min"), ("targets_visited", "goals visited", 2, "max"))
 
 curves, scalars = read("ocean_waypoint", {date: f"{SWEEP}_{date}" for date in OCEAN_FRAMES})

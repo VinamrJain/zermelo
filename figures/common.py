@@ -35,7 +35,7 @@ LABELS = {
     "emi": "EMI", "evi": "EVI", "eii": "EII", "esi": "ESI", "ei": "EI", "mc_ei": "MC-EI", "ucb": "UCB", "ts": "TS", "max_var": "MaxVar",
     "rand_target": "RandTarget", "rand_act": "RandAct", "oracle_emi": "Oracle-EMI",
     "eti": "ETI", "info": "IG", "direct": "Direct", "rand_wp": "RandTarget", "oracle": "Oracle",
-    "etr_l0": "ETR", "oracle_etr_l0": "Oracle-ETR", "oracle_etr": "Oracle-ETR",
+    "etr": "ETR", "etr_l0": "ETR", "oracle_etr_l0": "Oracle-ETR", "oracle_etr": "Oracle-ETR",
     "etr_endpoint": "ETR-Endpoint", "rand_goal": "RandGoal", "rand_box": "RandBox",
 }  # fmt: skip
 RATES = ("0.25", "0.5", "1", "2")  # lambda of each IG arm, light to dark
@@ -47,8 +47,9 @@ FAMILY_COLOURS = {
     "ETR-Endpoint": "029E73", "RandGoal": "555555", "RandBox": "CA9161",
 }  # hex colour per acquisition family  # fmt: skip
 IG_LOOK = {"0.25": ("#56B4E9", "s"), "0.5": ("#009E73", "D"), "1": ("#D55E00", "o"), "2": ("#B2182B", "P")}  # (colour, marker) per lambda
-OURS = ("emi", "evi", "eii", "esi", "eti", "etr_l0")
+OURS = ("emi", "evi", "eii", "esi", "eti", "etr", "etr_l0")
 MARKERS = {
+    "etr": "s",
     "etr_l0": "s",
     "eti": "o",
     "eii": "o",
@@ -76,12 +77,12 @@ def look(arm: str) -> dict:
     """Colour, line and marker of one arm: ours solid, baselines dashed, the two references unmarked"""
     family = LABELS.get(arm, arm)
     colour = "#" + FAMILY_COLOURS.get(family, "333333")
-    if arm in ("oracle_emi", "oracle", "oracle_etr"):
+    if arm in ("oracle_emi", "oracle"):
         return dict(color="black", ls=(0, (5, 2)), lw=1.0)
     if arm == "rand_act":
         return dict(color=colour, ls=":", lw=1.2)
-    if arm == "oracle_etr_l0":  # its rule's look, dotted
-        return {**look("etr_l0"), "ls": ":"}
+    if arm in ("oracle_etr", "oracle_etr_l0"):  # its rule's look, dotted
+        return {**look("etr"), "ls": ":"}
     if arm.startswith("info_"):  # one colour and marker per lambda
         colour, marker = IG_LOOK[arm.removeprefix("info_")]
         return dict(color=colour, ls="-", marker=marker, ms=3.5, markevery=0.2)
