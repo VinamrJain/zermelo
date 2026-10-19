@@ -190,7 +190,7 @@ def sailboat(ax, lon: float, lat: float, size: float = 17.0) -> None:
 
 
 def sea(ax, run: Path, move: int):
-    """||W|| shaded with its streamlines, land, the goals, the track and the route to the target, the boat and its polar at `move`"""
+    """||W|| shaded with its streamlines, land, the goals, the target, the boat and its polar at `move`"""
     problem = json.loads((run / "config.json").read_text())["problem"]
     held = channels(
         run,
@@ -241,18 +241,7 @@ def sea(ax, run: Path, move: int):
         ax.scatter(
             g_lon, g_lat, marker="*", s=95, color=STAR if seen else "none", edgecolors=STAR if not seen else INK, linewidths=0.9, zorder=6
         )
-    halo(ax.plot, track[: move + 1, 1], track[: move + 1, 0], lw=1.5, color=TRACK, solid_capstyle="round")
-    steps = held["agent_state/choice.imagined_path_to_target"][move]
-    walk = steps[np.r_[True, steps[1:] != steps[:-1]]]  # the walk ends where its index stops changing
-    walk = walk[np.argmin(np.hypot(lat[walk // len(lon)] - track[move, 0], lon[walk % len(lon)] - track[move, 1])) :]  # what is still ahead
     aimed = int(held["agent_state/choice.target"][move])
-    route = until_arrival(
-        np.c_[np.r_[track[move, 0], lat[walk // len(lon)]], np.r_[track[move, 1], lon[walk % len(lon)]]],
-        np.array([lat[aimed // len(lon)], lon[aimed % len(lon)]]),
-        float(problem["arrival_km"]) / KM_PER_DEGREE,
-    )  # (points, 2) as (lat, lon)
-    if len(route) > 1:
-        halo(ax.plot, route[:, 1], route[:, 0], lw=1.3, color=ROUTE, ls=(0, (3, 2)))
     ax.scatter(lon[aimed % len(lon)], lat[aimed // len(lon)], marker="X", s=70, color=TARGET, edgecolors="white", linewidths=0.8, zorder=7)
     sailboat(ax, track[move, 1], track[move, 0])
     ax.set_xlim(*view[:2])
@@ -323,7 +312,7 @@ def main() -> None:
     right = fig.add_axes((0.065 + 2 * tall + 0.075, bottom, 0.995 - (0.065 + 2 * tall + 0.075), height))
     for ax, replay, draw, name, move, words in (
         (left, grid_replay, grid, "RMSE", None, "(a) 2D grid"),
-        (middle, balloon_replay, globe, "wind (m/s)", None, "(b) Balloon in ERA5 winds"),
+        (middle, balloon_replay, globe, "wind (m/s)", None, "(b) Balloon in real winds, Sep 2017"),
         (right, ocean_run, sea, "current (m/s)", 104, "(c) Sailboat in the Gulf Stream"),
     ):
         moved = asked.pop(0)
