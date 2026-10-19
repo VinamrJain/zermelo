@@ -11,21 +11,26 @@ from figures.common import FRAMES, LABELS, plt, read, save, size
 
 LOOKS = {"emi": ("#0072B2", "o"), "mc_ei": ("#E69F00", "D"), "rand_target": ("#3B3B3B", "^")}  # colour and marker, this figure's own
 ROWS = (
-    ("ambient_waypoint", "2D grid", "time step", {"main": "paper_main"}, {"oracle": "paper_oracle"}),
-    ("balloon_waypoint", "balloon", "hours elapsed", {date: f"paper_main_{date}" for date in FRAMES}, {date: f"paper_oracle_{date}" for date in FRAMES}),
+    ("ambient_waypoint", "2D grid", "time step", {"main": "paper_main"}, {"oracle": "paper_oracle"}, ""),
+    ("balloon_waypoint", "balloon", "hours elapsed", {date: f"paper_main_{date}" for date in FRAMES}, {date: f"paper_main_{date}" for date in FRAMES}, "oracle_"),
 )  # fmt: skip
 LEARNED = dict(ls="-", lw=1.6)
 TRUE = dict(ls=(0, (1, 1.2)), lw=1.6, mfc="white", mew=1.1)
 
 fig, axes = plt.subplots(1, 4, figsize=size(1), constrained_layout=True)
-for row, (experiment, name, x_label, learned, true) in enumerate(ROWS):
+for row, (experiment, name, x_label, learned, true, prefix) in enumerate(ROWS):  # prefix: the true-field arm's name before the rule's
     held = {"learned": read(experiment, learned)[0], "true": read(experiment, true)[0]}
     for col, (metric, words) in enumerate((("simple_regret", "simple regret"), ("average_regret", "average regret"))):
         ax = axes[2 * row + col]
         for arm, (colour, marker) in reversed(LOOKS.items()):
             for which, style in (("learned", LEARNED), ("true", TRUE)):
                 curves = held[which]
-                by_x = curves[curves["acquisition"] == arm].groupby("x")[metric].quantile([0.25, 0.5, 0.75]).unstack()
+                by_x = (
+                    curves[curves["acquisition"] == (prefix + arm if which == "true" else arm)]
+                    .groupby("x")[metric]
+                    .quantile([0.25, 0.5, 0.75])
+                    .unstack()
+                )
                 offset = 0.0 if which == "learned" else 0.08  # hollow markers sit between the filled ones
                 ax.plot(by_x.index, by_x[0.5], color=colour, marker=marker, ms=3.8, markevery=(0.08 + offset, 0.22), zorder=3, **style)
                 if arm == "emi" and which == "learned":
