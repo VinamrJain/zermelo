@@ -11,7 +11,7 @@ from zermelo.experiments.ocean_waypoint.registry import (
     field_belief,
 )
 from zermelo.experiments.ocean_waypoint.setup import arm, sweep, value_iteration
-from zermelo.experiments.ocean_waypoint.sweeps.visit.ocean_visit import ETR, N_GOALS, N_SEEDS, WORLD
+from zermelo.experiments.ocean_waypoint.sweeps.method import ETR, N_GOALS, N_SEEDS, WORLD
 
 TUNING_FRAME_HOUR = 216.0
 """2019-06-10 00Z, between the jun04 and jun16 frames"""
