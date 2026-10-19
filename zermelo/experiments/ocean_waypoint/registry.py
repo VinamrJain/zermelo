@@ -93,10 +93,10 @@ SCORED_COMPONENTS = {"ocean_current": OCEAN_CURRENT, "wind": WIND, "both": OCEAN
 """The components of the field a learning episode is scored on and a learning rule counts, by what it is scored on"""
 
 
-PLANNING_BUDGET = 50
+PLANNING_BUDGET = 100
 """`L`: a waypoint is chosen anew after this many moves, and an imagined walk is rolled over at most as many"""
 
-VALUE_ITERATIONS = 2 * PLANNING_BUDGET
+VALUE_ITERATIONS = PLANNING_BUDGET
 """`K`: rounds of value iteration per plan"""
 
 ARRIVAL_RADIUS_KM = 20.0
