@@ -5,8 +5,8 @@ import dataclasses
 from zermelo.experiments.ambient_waypoint.registry import RECORDED
 from zermelo.experiments.ambient_waypoint.schema import MethodConfig, Resources
 from zermelo.experiments.ambient_waypoint.setup import arm, sweep, value_iteration
-from zermelo.experiments.ambient_waypoint.sweeps.paper.method import mc_ei, ours
-from zermelo.experiments.ambient_waypoint.sweeps.smoke.smoke import WORLD, _belief
+from zermelo.experiments.ambient_waypoint.sweeps.method import mc_ei, ours
+from zermelo.experiments.ambient_waypoint.sweeps.smoke import WORLD, _belief
 
 
 def _small(method: MethodConfig) -> MethodConfig:

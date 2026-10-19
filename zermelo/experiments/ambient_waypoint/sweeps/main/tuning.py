@@ -11,7 +11,7 @@ from zermelo.experiments.ambient_waypoint.registry import (
     matched_belief,
 )
 from zermelo.experiments.ambient_waypoint.setup import arm, sweep
-from zermelo.experiments.ambient_waypoint.sweeps.paper.method import TUNING_SEEDS, UTILITIES, ours
+from zermelo.experiments.ambient_waypoint.sweeps.method import TUNING_SEEDS, UTILITIES, ours
 
 sweep(
     "paper_tuning",

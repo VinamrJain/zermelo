@@ -12,7 +12,7 @@ from zermelo.experiments.ambient_waypoint.registry import (
     matched_belief,
 )
 from zermelo.experiments.ambient_waypoint.setup import arm, max_magnitude, posterior_spread, sweep, uniform, upper_confidence
-from zermelo.experiments.ambient_waypoint.sweeps.paper.method import baseline, mc_ei, ours
+from zermelo.experiments.ambient_waypoint.sweeps.method import baseline, mc_ei, ours
 
 BELIEF = matched_belief(AMBIENT1_CONTROL1)
 ORACLE = dataclasses.replace(BELIEF, oracle=True)

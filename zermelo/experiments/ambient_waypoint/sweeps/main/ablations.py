@@ -1,4 +1,4 @@
-"""The appendix's 2D grid studies: the number of drawn fields and paths, a belief that is wrong about the field, and the planner"""
+"""The 2D grid ablations: the number of drawn fields and walks, and a belief that is wrong about the field"""
 
 import dataclasses
 from typing import Any
@@ -13,8 +13,8 @@ from zermelo.experiments.ambient_waypoint.registry import (
     matched_belief,
 )
 from zermelo.experiments.ambient_waypoint.schema import BeliefConfig
-from zermelo.experiments.ambient_waypoint.setup import arm, greedy, max_magnitude, sweep, uniform, value_iteration
-from zermelo.experiments.ambient_waypoint.sweeps.paper.method import PLANNING_BUDGET, baseline, mc_ei, ours
+from zermelo.experiments.ambient_waypoint.setup import arm, max_magnitude, sweep, uniform
+from zermelo.experiments.ambient_waypoint.sweeps.method import baseline, mc_ei, ours
 
 MATCHED = matched_belief(AMBIENT1_CONTROL1)
 (KERNEL,) = MATCHED.kernel_factors
@@ -38,8 +38,6 @@ BELIEFS = {
     **{f"{name}_refit": dataclasses.replace(belief, refit=True) for name, belief in WRONG.items()},
 }
 """The belief every arm of the prior study holds, the last four refitting their kernel numbers as they go"""
-
-PLANNERS = {"value_iteration": value_iteration, "greedy": greedy}
 
 for swept, arms in (
     (
@@ -75,18 +73,6 @@ for swept, arms in (
                 ("ts", baseline(max_magnitude(), 1)),
                 ("rand_target", baseline(uniform(), 0)),
             )
-        ],
-    ),
-    (
-        "paper_planners",
-        [
-            arm(
-                f"{name}_{planner}",
-                dataclasses.replace(method, planner=build(replan_length=PLANNING_BUDGET, radius=0.5, targets_per_solve=None)),
-                MATCHED,
-            )
-            for planner, build in PLANNERS.items()
-            for name, method in (("emi", ours("emi")), ("evi", ours("evi")), ("mc_ei", mc_ei()), ("rand_target", baseline(uniform(), 0)))
         ],
     ),
 ):

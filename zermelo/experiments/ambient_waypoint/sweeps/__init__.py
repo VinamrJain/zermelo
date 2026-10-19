@@ -1,3 +1,3 @@
-"""The headline study, the ablations that calibrate it, and the pipeline checks, registered on import"""
+"""Every sweep, registered on import"""
 
-from zermelo.experiments.ambient_waypoint.sweeps import ablations, core, paper, scale, smoke  # noqa: F401
+from zermelo.experiments.ambient_waypoint.sweeps import appendix, archive, main, smoke  # noqa: F401
