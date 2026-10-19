@@ -5,7 +5,7 @@ import dataclasses
 from zermelo.experiments.balloon_waypoint.registry import RECORDED, TUNING_FRAME, static_error_belief, still
 from zermelo.experiments.balloon_waypoint.schema import MethodConfig, Resources
 from zermelo.experiments.balloon_waypoint.setup import arm, sweep, value_iteration
-from zermelo.experiments.balloon_waypoint.sweeps.paper.method import mc_ei, ours
+from zermelo.experiments.balloon_waypoint.sweeps.method import mc_ei, ours
 
 BELIEF = dataclasses.replace(static_error_belief(), n_features=32)
 

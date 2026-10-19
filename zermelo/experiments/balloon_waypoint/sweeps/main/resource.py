@@ -12,7 +12,7 @@ from zermelo.experiments.balloon_waypoint.registry import (
     still,
 )
 from zermelo.experiments.balloon_waypoint.setup import arm, max_magnitude, posterior_spread, sweep, uniform, upper_confidence
-from zermelo.experiments.balloon_waypoint.sweeps.paper.method import BUDGETED_LAMBDA, N_SEEDS, baseline, mc_ei, ours
+from zermelo.experiments.balloon_waypoint.sweeps.method import BUDGETED_LAMBDA, N_SEEDS, baseline, mc_ei, ours
 
 BELIEF = static_error_belief()
 

@@ -10,7 +10,7 @@ from zermelo.experiments.balloon_waypoint.registry import (
     static_error_belief,
 )
 from zermelo.experiments.balloon_waypoint.setup import arm, max_magnitude, posterior_spread, sum_magnitude, sweep, uniform, upper_confidence
-from zermelo.experiments.balloon_waypoint.sweeps.core.core_cost0 import _baseline, _ours
+from zermelo.experiments.balloon_waypoint.sweeps.archive.core_cost0 import _baseline, _ours
 
 BELIEF = static_error_belief()
 

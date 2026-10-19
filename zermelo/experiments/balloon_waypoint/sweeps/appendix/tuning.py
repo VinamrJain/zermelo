@@ -12,7 +12,7 @@ from zermelo.experiments.balloon_waypoint.registry import (
     still,
 )
 from zermelo.experiments.balloon_waypoint.setup import arm, sweep
-from zermelo.experiments.balloon_waypoint.sweeps.paper.method import N_SEEDS, UTILITIES, ours, rate_name
+from zermelo.experiments.balloon_waypoint.sweeps.method import N_SEEDS, UTILITIES, ours, rate_name
 
 BELIEF = static_error_belief()
 
