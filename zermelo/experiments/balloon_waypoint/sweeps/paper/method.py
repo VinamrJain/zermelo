@@ -16,7 +16,7 @@ LAMBDA = 0.0
 BUDGETED_LAMBDA = 0.5
 """`lambda` each of our rules charges the altitude changes of its walk where the altitude budget binds"""
 
-N_SEEDS = 5
+N_SEEDS = 3
 """Instances every arm is run on at each frame"""
 
 
