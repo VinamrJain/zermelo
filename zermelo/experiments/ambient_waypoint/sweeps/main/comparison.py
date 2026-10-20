@@ -1,4 +1,4 @@
-"""Our rules against the baselines on the 2D grid, and the same rules planning on the true field"""
+"""Our rules against the baselines on the 2D grid, and EMI planning on the true field"""
 
 import dataclasses
 
@@ -25,7 +25,7 @@ sweep(
     claim_every=CLAIM_EVERY_STEPS,
     recorded=RECORDED,
     seeds=range(N_SEEDS),
-    resources=dataclasses.replace(RESOURCES, mem_gb=16, timeout_min=240),
+    resources=dataclasses.replace(RESOURCES, mem_gb=16, timeout_min=60),
     arms=[
         arm("rand_act", None, BELIEF),  # no rule at all: acts uniformly and claims the prior
         arm("rand_target", baseline(uniform(), 0), BELIEF),
@@ -35,22 +35,6 @@ sweep(
         arm("mc_ei", mc_ei(), BELIEF),
         arm("emi", ours("emi"), BELIEF),
         arm("evi", ours("evi"), BELIEF),
-        arm("esi", ours("esi"), BELIEF),
-    ],
-)
-
-sweep(
-    "paper_oracle",
-    problem=AMBIENT1_CONTROL1,
-    horizon=HORIZON_LENGTH,
-    claim_every=CLAIM_EVERY_STEPS,
-    recorded=RECORDED,
-    seeds=range(N_SEEDS),
-    resources=dataclasses.replace(RESOURCES, mem_gb=16, timeout_min=240),
-    arms=[
-        arm("rand_target", baseline(uniform(), 0), ORACLE),
-        arm("mc_ei", mc_ei(), ORACLE),
-        arm("emi", ours("emi"), ORACLE),
-        arm("esi", ours("esi"), ORACLE),
+        arm("oracle_emi", ours("emi"), ORACLE),
     ],
 )
