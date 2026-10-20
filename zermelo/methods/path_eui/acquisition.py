@@ -5,7 +5,7 @@ g(z_h) the states within rho of z_h, c(z, a) >= 0 a step's cost:
 
     u(x)     = (1 / S M) sum over s, m of [ U(d_h + tau-hat^(s,m)(x)) - U(d_h) ],   tau-hat^(s,m)(x) a path under pi(., x) and phi^(s) ~ P(phi | d_h)
     C(x)     = (1 / S M) sum over s, m of sum over t of c(z_t, pi(z_t, x)),          z_t the states of tau-hat^(s,m)(x), z_0 = z_h
-    alpha(x) = (1 - lambda) u~(x) - lambda C~(x),                                    u~, C~ = u, C rescaled to [0, 1]
+    alpha(x) = (1 - lambda) u~(x) - lambda C~(x),                                    u~, C~ = u, C rescaled to [0, 1] over eligible x
     x*       = argmax over x not in g(z_h) of alpha(x),                              ties broken by a fixed rule
 
 A candidate is a state the rule may score, a target one the planner steers to, and x* the target chosen.
@@ -69,7 +69,7 @@ class Acquisition:
     """`U(d_h + tau-hat) - U(d_h)` when True, `U(tau-hat)` when False"""
 
     lambda_: float
-    """`lambda` in [0, 1): the weight of `C` against the rescaled `u`"""
+    """`lambda` in [0, 1): the weight of `C~` against `u~`"""
 
     def choose_target(
         self,
@@ -95,17 +95,15 @@ class Acquisition:
         )
         paths, step_taken_mask = self._imagine_paths(k_paths, transition, fields, policy, candidates_scored, position)
         utility_improvement = self._expected_utility_improvement(k_utility, belief, fields, paths, step_taken_mask, context, candidates)
-        path_cost_rescaled = self._expected_path_cost(mean_kernel, actions, policy, paths, step_taken_mask, position)
+        path_cost = self._expected_path_cost(mean_kernel, actions, policy, paths, step_taken_mask, position)
 
         # x not in g(z_h), i.e. H-hat(z_h, x) > 0; every x if none is
         eligible_mask = (policy.expected_path_length > 0.0) | jnp.all(policy.expected_path_length == 0.0)
 
-        # u~ = (u - min u) / (max u - min u), min and max over eligible x; u~ = 0 if max u = min u
-        u_min = jnp.min(jnp.where(eligible_mask, utility_improvement, jnp.inf))
-        u_max = jnp.max(jnp.where(eligible_mask, utility_improvement, -jnp.inf))
-        u_rescaled = (utility_improvement - u_min) / jnp.where(u_max > u_min, u_max - u_min, jnp.inf)
         # alpha = (1 - lambda) u~ - lambda C~
-        acquisition_value = (1.0 - self.lambda_) * u_rescaled - self.lambda_ * path_cost_rescaled
+        acquisition_value = (1.0 - self.lambda_) * _rescaled(utility_improvement, eligible_mask) - self.lambda_ * _rescaled(
+            path_cost, eligible_mask
+        )
 
         chosen_index = self._argmax_with_tie_break(acquisition_value, policy.expected_path_length, eligible_mask)
         return TargetChoice(
@@ -187,7 +185,7 @@ class Acquisition:
         step_taken_mask: Bool[Array, "n_fields n_paths n_candidates_scored replan_length"],
         position: Int[Array, ""],
     ) -> Float[Array, " n_candidates_scored"]:
-        """`C~(x)`: the cost of the paths to `x`, averaged over fields and paths, rescaled to [0, 1]"""
+        """`C(x)`: the cost of the paths to `x`, averaged over fields and paths"""
         cost_per_action = [c for a in actions if (c := kernel.step_cost(jnp.asarray(a))) is not None]
         if self.n_paths_per_field == 0 or len(cost_per_action) < actions.shape[0]:  # no path walked, or every step free
             return jnp.zeros(paths.shape[2])
@@ -196,8 +194,7 @@ class Acquisition:
         step_start = jnp.concatenate([jnp.broadcast_to(position, (*paths.shape[:-1], 1)), paths[..., :-1]], axis=-1)
         action_taken = index_in_actions(actions, policy.action[step_start, jnp.arange(paths.shape[2])[:, None]].astype(actions.dtype))
         step_cost = jnp.where(step_taken_mask, cost_table[action_taken, step_start], 0.0)  # (S, M, n_candidates_scored, L)
-        # C~ = C / (L c_max), c_max = max over z, a of c(z, a): a path of L costliest steps scores 1
-        return jnp.mean(jnp.sum(step_cost, axis=-1), axis=(0, 1)) / (self.planner.replan_length * jnp.maximum(jnp.max(cost_table), 1e-12))
+        return jnp.mean(jnp.sum(step_cost, axis=-1), axis=(0, 1))
 
     def _argmax_with_tie_break(
         self,
@@ -209,3 +206,12 @@ class Acquisition:
         # B = argmax over eligible x of alpha(x); x* = the first x in B of least H-hat(z_h, x)
         best_mask = eligible_mask & (acquisition_value == jnp.max(jnp.where(eligible_mask, acquisition_value, -jnp.inf)))
         return jnp.argmin(jnp.where(best_mask, expected_path_length, jnp.inf))
+
+
+def _rescaled(
+    values: Float[Array, " n_candidates_scored"], eligible_mask: Bool[Array, " n_candidates_scored"]
+) -> Float[Array, " n_candidates_scored"]:
+    """(v - min v) / (max v - min v), min and max over eligible x; 0 everywhere if max v = min v"""
+    low = jnp.min(jnp.where(eligible_mask, values, jnp.inf))
+    high = jnp.max(jnp.where(eligible_mask, values, -jnp.inf))
+    return (values - low) / jnp.where(high > low, high - low, jnp.inf)
