@@ -39,7 +39,10 @@ BELIEFS = {
 }
 """The belief every arm of the prior study holds, the last four refitting their kernel numbers as they go"""
 
-for swept, arms in (
+COUNTS = (0, 1, 4, 8, 16, 32, 64)
+"""Fields drawn at 16 walks each, then walks per field at 16 fields; 0 fields is the mean field, 0 walks the target alone"""
+
+for swept, arms, seeds, timeout_min in (
     (
         "paper_fields_paths",
         [
@@ -49,17 +52,10 @@ for swept, arms in (
                 MATCHED,
             )
             for name in ("emi", "evi")
-            for fields, paths in (
-                (0, 16),
-                (1, 16),
-                (4, 16),
-                (16, 16),
-                (32, 16),
-                (16, 1),
-                (16, 4),
-                (16, 32),
-            )  # 0 fields choice the mean field
+            for fields, paths in dict.fromkeys([(count, 16) for count in COUNTS] + [(16, count) for count in COUNTS])
         ],
+        range(5),
+        120,
     ),
     (
         "paper_prior_mismatch",
@@ -74,6 +70,8 @@ for swept, arms in (
                 ("rand_target", baseline(uniform(), 0)),
             )
         ],
+        range(N_SEEDS),
+        60,
     ),
 ):
     sweep(
@@ -82,7 +80,7 @@ for swept, arms in (
         horizon=HORIZON_LENGTH,
         claim_every=CLAIM_EVERY_STEPS,
         recorded=RECORDED,
-        seeds=range(N_SEEDS),
-        resources=dataclasses.replace(RESOURCES, mem_gb=16, timeout_min=480),
+        seeds=seeds,
+        resources=dataclasses.replace(RESOURCES, mem_gb=16, timeout_min=timeout_min),
         arms=arms,
     )
