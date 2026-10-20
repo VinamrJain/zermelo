@@ -1,6 +1,6 @@
 """F5: the balloon on still frames as the altitude changes an episode may spend are cut
 
-Columns: final simple regret against the budget, average regret against hours with no altitude budget, altitude changes per target chosen (total over the episode / targets chosen),
+Columns: final simple regret against the budget, simple regret against hours with no altitude budget, altitude changes per target chosen (total over the episode / targets chosen),
 share of targets reached, against the budget. Median and quartile band over frames and seeds.
 `emi_w0` charges nothing; `emi` charges the altitude changes of its walks at lambda 0.5.
 """
@@ -13,7 +13,7 @@ from figures.common import FRAMES, LABELS, launch, look, plt, read, save, size
 BUDGETS = (20, 40, 60, 80, 100, 120, 240)
 PANELS = (
     ("simple_regret", "simple regret"),
-    ("average_regret", "avg. regret, no budget"),
+    ("simple_regret", "simple regret, no budget"),
     ("changes_per_target", "alt. changes per target"),
     ("arrival_share", "targets reached (%)"),
 )
